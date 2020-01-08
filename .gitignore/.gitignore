@@ -1,0 +1,6 @@
+#whitelisting of C projects file
+*
+
+#allowed files
+!*.c
+!*.h
