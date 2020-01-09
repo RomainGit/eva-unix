@@ -4,3 +4,4 @@
 #allowed files
 !*.c
 !*.h
+!makefile
