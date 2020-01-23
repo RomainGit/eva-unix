@@ -114,7 +114,7 @@ void debug_put_info(EVA_context *cntxt);
 ** Macro : RETURN_ERR_MEMORY
 ** Description : handles directory access error
 *********************************************************************/
-#define RETURN_ERR_DIRECTORY(code)	RETURN_ERROR("Droits d'accès incorrects sur un dossier", code)
+#define RETURN_ERR_DIRECTORY	RETURN_ERROR("Droits d'accès incorrects sur un dossier", NULL)
 
 /*********************************************************************
 ** Macro : RETURN_ERR_PARAM

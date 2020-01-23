@@ -260,7 +260,7 @@ int file_adr_dest(					/* return : 0 on success, other on error */
 
 	/* Output adresses to file */
 	f = fopen(fname, "wc");
-	if(!f) RETURN_ERR_DIRECTORY({});
+	if(!f) RETURN_ERR_DIRECTORY;
 	for(i = 0; i < dst->nbrows; i++) fprintf(f, "%s%s", i ? "," : "", dyntab_val(dst, i, 0));
 	fclose(f);
 
@@ -293,7 +293,7 @@ int send_mail(						/* return : 0 on success, other on error */
 
 	/* Create body text file */
 	f = fopen("body.txt", "wc");
-	if(!f) RETURN_ERR_DIRECTORY({});
+	if(!f) RETURN_ERR_DIRECTORY;
 	if(sm->txtbody) fputs(sm->txtbody->data, f);
 
 	/* If HTML mode & object exists : add invisible image for read confirmation */

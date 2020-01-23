@@ -242,9 +242,8 @@ int file_read_import_data(			/* return : 0 on success, other on error */
 
 	/* Find end of forms marker : two consecutive \n */
 	p1 = strstr(fdata, "\n\n");
-	if(!p1) p1 = strstr(fdata, "\r\n\r\n");
-	if(strncmp(fdata, add_sz_str("IdObj\tLabel")) ||
-		!p1 || strncmp(p1 + 4, add_sz_str("IdObj	Field	Value	Type	Num	Line")))
+	if(strncmp(fdata, add_sz_str("IdObj	Label\n")) ||
+		!p1 || strncmp(p1 + 2, add_sz_str("IdObj	Field	Value	Type	Num	Line\n")))
 		RETURN_ERROR("Invalid format for import file", NULL);
 	*p1 = 0;
 
@@ -268,7 +267,7 @@ int chdir_user_doc(				/* return : 0 on success, other on error */
 ){
 	if(chdir_db_doc(cntxt)) STACK_ERROR;
 	MKDIR(dyntab_val(&cntxt->id_user, 0, 0));
-	if(chdir(dyntab_val(&cntxt->id_user, 0, 0))) RETURN_ERR_DIRECTORY({});
+	if(chdir(dyntab_val(&cntxt->id_user, 0, 0))) RETURN_ERR_DIRECTORY;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -283,11 +282,11 @@ int chdir_user_doc(				/* return : 0 on success, other on error */
 int chdir_db_doc(				/* return : 0 on success, other on error */
 	EVA_context *cntxt			/* in : execution context data */
 ){
-	if(chdir(cntxt->rootdir)) RETURN_ERR_DIRECTORY({});
+	if(chdir(cntxt->rootdir)) RETURN_ERR_DIRECTORY;
 	MKDIR(DIRECTORY_DOCS);
-	if(chdir(DIRECTORY_DOCS)) RETURN_ERR_DIRECTORY({});
+	if(chdir(DIRECTORY_DOCS)) RETURN_ERR_DIRECTORY;
 	MKDIR(cntxt->dbname);
-	if(chdir(cntxt->dbname)) RETURN_ERR_DIRECTORY({});
+	if(chdir(cntxt->dbname)) RETURN_ERR_DIRECTORY;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION

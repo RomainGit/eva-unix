@@ -2072,7 +2072,7 @@ int qry_build_flt_select			/* return : 0 on success, other on error */
 
 	/* Build SELECT clause - IdObj member */
 	DYNBUF_ADD_STR(sql, "SELECT " );
-	if(!flt->b_nodistinct) DYNBUF_ADD_STR(sql, "DISTINCT " );
+	if(!flt->b_nodistinct && !flt->groupfn) DYNBUF_ADD_STR(sql, "DISTINCT " );
 	if(flt->b_straightjoin) DYNBUF_ADD_STR(sql, "STRAIGHT_JOIN " );
 	if(flt->selidobj)
 		DYNBUF_ADD3(&groupobj, "", flt->selidobj, 0, NO_CONV, ".IdObj")

@@ -30,7 +30,7 @@
 /**********************************************************************
 ** System dependent includes & macros
 ***********************************************************************/
-#ifdef WIN32
+#if defined _WIN64 || defined _WIN32
 /**********************************************************************
 ** Windows declarations
 ***********************************************************************/
@@ -47,6 +47,7 @@
 #define STRNCMPCASE(cmp1,cmp2, count) _strnicmp(cmp1,cmp2, count)
 #define SLEEP(arg) Sleep(arg)
 #define snprintf _snprintf
+#define DD "\\"
 #else
 /**********************************************************************
 ** UNIX declarations
@@ -65,6 +66,7 @@
 #define STRCMPCASE(cmp1,cmp2) strcasecmp(cmp1,cmp2)
 #define STRNCMPCASE(cmp1,cmp2, count) strncasecmp(cmp1,cmp2, count)
 #define SLEEP(arg) sleep(arg)
+#define DD "/"
 #endif
 
 /* EVA libraries definitions */

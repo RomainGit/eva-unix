@@ -176,9 +176,9 @@ int action_export(					/* return : 0 on success, other on error */
 	DYNBUF_ADD_BUF(&name, fname, NO_CONV);
 	fname->cnt = file_compatible_name(fname->data);
 	DYNBUF_ADD_STR(&fname, ".txt");
-	if(chdir(cntxt->rootdir)) RETURN_ERR_DIRECTORY({});
+	if(chdir(cntxt->rootdir)) RETURN_ERR_DIRECTORY;
 	MKDIR("objlib");
-	if(chdir("objlib")) RETURN_ERR_DIRECTORY({});
+	if(chdir("objlib")) RETURN_ERR_DIRECTORY;
 
 	/* Open output file */
 	f = fopen(fname->data, "w");

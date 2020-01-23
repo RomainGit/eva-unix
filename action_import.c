@@ -143,7 +143,7 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 			b_new = 0;
 		}
 		/* Else : check primary keys - search for existing object */
-		else if(keyfields->nbrows)
+		else if(keyfields && keyfields->nbrows)
 		{
 			/* Initialize filter with AND condition & destination form */
 			qry_build_free(&flt);
@@ -611,7 +611,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	if(!files) return 0;
 
 	/* Read selected files if absent - return if none selected */
-	if(chdir(cntxt->rootdir) || chdir("objlib")) RETURN_ERR_DIRECTORY({});
+	if(chdir(cntxt->rootdir) || chdir("objlib")) RETURN_ERR_DIRECTORY;
 	if(!files->nbrows && cgi_select_files(cntxt, i_ctrl, files)) STACK_ERROR;
 	if (!files->nbrows) RETURN_OK;
 

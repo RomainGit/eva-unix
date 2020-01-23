@@ -165,7 +165,7 @@ int action_create_objects(			/* return : 0 on success, other on error */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 );
 
-#ifdef WIN32
+#ifdef PAYSITE
 /*********************************************************************
 ** Function : action_pay_site
 ** Description : button click handler for PAY_SITE

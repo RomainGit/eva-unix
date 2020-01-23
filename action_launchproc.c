@@ -41,12 +41,13 @@ int office_launchproc(			/* return : 0 on success, other on error */
 
 	/* Prepare executable path */
 	if(exe_name) {
-		snprintf(add_sz_str(exepath), "%s%s\\%s.EXE", exe_path + (*exe_path == '*' ? 1 : 0), *exe_path == '*' ? "" : "\\Office", exe_name);
+		snprintf(add_sz_str(exepath), "%s%s" DD "%s.EXE", exe_path + (*exe_path == '*' ? 1 : 0), *exe_path == '*' ? "" : "" DD "Office", exe_name);
 		if(stat(exepath, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier programme non trouvé : ", exepath, 0));
 	}
 
-	/* Prepare template procedure file path */
-	snprintf(add_sz_str(filename), "%stemplates\\%s", cntxt->rootdir, procname);
+	/* Prepare template procedure file path : look first in templates database subdir */
+	snprintf(add_sz_str(filename), "%stemplates" DD "%s" DD "%s", cntxt->rootdir, cntxt->dbname, procname);
+	if(stat(filename, &fs)) snprintf(add_sz_str(filename), "%stemplates" DD "%s", cntxt->rootdir, procname);
 	if(stat(filename, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier modèle non trouvé : ", procname ? procname : "(null)", 0));
 
 	/* Copy template */
@@ -330,7 +331,7 @@ int result_data(				/* return : 0 on success, other on error */
 				unsigned long incr = numobj - sz_obj, *newobj;
 				if(incr < 100) incr = 100;
 				newobj = mem_realloc(obj, sz_obj * sizeof(*obj), incr * sizeof(*obj));
-				if(!newobj) RETURN_ERR_MEMORY({});
+				if(!newobj) RETURN_ERR_MEMORY;
 				obj = newobj;
 				sz_obj += incr;
 			}
@@ -475,7 +476,7 @@ int result_file(				/* return : 0 on success, other on error */
 								DYNTAB_VAL_SZ(res, 1, 0), &id_obj, "_EVA_REPLACE", 0)) STACK_ERROR;
 
 		/* Set result file in docs directory */
-		snprintf(fpath, sizeof(fpath)-1, "%s" DIRECTORY_DOCS "\\%s\\%s",
+		snprintf(fpath, sizeof(fpath)-1, "%s" DIRECTORY_DOCS DD "%s" DD "%s",
 				cntxt->rootdir, cntxt->dbname, filename);
 	}
 	else if(dyntab_sz(res, 1, 1))
@@ -483,15 +484,13 @@ int result_file(				/* return : 0 on success, other on error */
 		/* No result field : set result file to user directory */
 		snprintf(add_sz_str(filename), "%s", dyntab_val(res, 1, 2));
 		sz = file_compatible_name(filename);
-		snprintf(add_sz_str(fpath), "%s" DIRECTORY_DOCS "\\%s\\%s\\%s",
+		snprintf(add_sz_str(fpath), "%s" DIRECTORY_DOCS DD "%s" DD "%s" DD "%s",
 				cntxt->rootdir, cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0), filename);
 		remove(fpath);
 	}
 
 	/* Move result file to destination directory */
-	if(dyntab_sz(res, 1, 1) &&
-		rename(dyntab_val(res, 1, 1), fpath))
-		RETURN_ERR_DIRECTORY({ERR_PUT_CELL("Error during rename\nsrc:", res, 1, 1); ERR_PUT_TXT("\ndest:", fpath, 0)});
+	if(dyntab_sz(res, 1, 1) && rename(dyntab_val(res, 1, 1), fpath)) RETURN_ERR_DIRECTORY;
 
 	/* Following lines are field values : process each field */
 	for(i = 2; i < res->nbrows; i++)
@@ -596,15 +595,15 @@ int action_launchproc(				/* return : 0 on success, other on error */
 
 	/* Prepare proc directory */
 	snprintf(procid, sizeof(procid)-1, "%lX-%X",	time(NULL), getpid());
-	if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY({});
+	if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY;
 	MKDIR("proc");
-	if(chdir("proc")) RETURN_ERR_DIRECTORY({});
+	if(chdir("proc")) RETURN_ERR_DIRECTORY;
 	MKDIR(procid);
-	if(chdir(procid)) RETURN_ERR_DIRECTORY({});
+	if(chdir(procid)) RETURN_ERR_DIRECTORY;
 
 	/* Create params file call.txt  */
 	f = fopen("call.txt", "wc");
-	if(!f) RETURN_ERR_DIRECTORY({});
+	if(!f) RETURN_ERR_DIRECTORY;
 
 	/* Output general information */
 	fprintf(f, "127.0.0.1\n");
@@ -644,7 +643,7 @@ int action_launchproc(				/* return : 0 on success, other on error */
 
 	/* Read result in res.txt & process errors */
 	if(chdir_user_doc(cntxt)) STACK_ERROR;
-	if(chdir(cntxt->path) || chdir("proc") || chdir(procid)) RETURN_ERR_DIRECTORY({});
+	if(chdir(cntxt->path) || chdir("proc") || chdir(procid)) RETURN_ERR_DIRECTORY;
 
 	/* Handle no result file */
 	if(file_read_tabrc(cntxt, &res, "res.txt") || !res.nbrows)

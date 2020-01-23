@@ -1940,14 +1940,14 @@ int ctrl_export_pivottable(			/* return : 0 on success, other on error */
 
 	/* Output buffer to HTML file */
 	f = fopen(filename, "w");
-	if(!f) RETURN_ERR_DIRECTORY(ERR_PUT_TXT("Export stats : ", filename, 0));
+	if(!f) RETURN_ERR_DIRECTORY;
 	fprintf(f, "<html><body><font face=%s>%s</font></body></html>",
 				ctrl->FONTFACE, export ? export->data : "");
 	fclose(f);
 
 	/* Output parameters file */
 	f = fopen("dumpfmt.txt", "a");
-	if(!f) RETURN_ERR_DIRECTORY(ERR_PUT_TXT("Export stats : dumpfmt.txt", "", 0));
+	if(!f) RETURN_ERR_DIRECTORY;
 	fputs(pv->exportparams->data, f);
 	fputs("\n", f);
 	fclose(f);

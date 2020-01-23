@@ -52,7 +52,7 @@ typedef struct _EVA_planning
 	int b_nextline;					/* output style for overlapping line if set */
 }
 	EVA_planning;
-
+	
 /*********************************************************************
 ** Function : output_planning_cell_color
 ** Description : return planning bg color for a cell
@@ -75,7 +75,7 @@ char *output_planning_cell_color(	/* return : background color */
 ** Description : output empty planning cells
 *********************************************************************/
 #define ERR_FUNCTION "output_planning_emptycells"
-#define ERR_CLEANUP
+#define ERR_CLEANUP 
 int output_planning_emptycells(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	EVA_planning *pl,				/* in : planning data */
@@ -91,7 +91,7 @@ int output_planning_emptycells(		/* return : 0 on success, other on error */
 		DYNBUF_ADD_STR(form->html, "></td>");
 		pl->curcol++;
 	}
-
+	
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -102,7 +102,7 @@ int output_planning_emptycells(		/* return : 0 on success, other on error */
 ** Description : output one planning event
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_output_planning_event"
-#define ERR_CLEANUP
+#define ERR_CLEANUP 
 int ctrl_output_planning_event(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	EVA_planning *pl,				/* in : planning data */
@@ -121,7 +121,7 @@ int ctrl_output_planning_event(		/* return : 0 on success, other on error */
 	if(strncmp(pl->frameend, dbeg, 8) <= 0) RETURN_OK;
 
 	/* Handle overlapping events */
-	res = datetxt_to_age(pl->framebeg, dbeg, &fmt);
+	res = datetxt_to_age(pl->framebeg, dbeg, "D");
 	if(pl->curcol && res < pl->curcol)
 	{
 		M_REALLOC(unsigned long, pl->nextline, pl->nbnext);
@@ -187,7 +187,7 @@ int ctrl_output_planning_event(		/* return : 0 on success, other on error */
 	else
 		DYNBUF_ADD_STR(form->html, "&nbsp;");
 	DYNBUF_ADD_STR(form->html, "</td>");
-
+	
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -315,7 +315,7 @@ int ctrl_output_planning_frame(		/* return : 0 on success, other on error */
 		pl->b_nextline = 0;
 	}
 	DYNBUF_ADD3_INT(form->html, "<tr><td colspan=", cols + 1, " style='border-bottom:solid black 1px'></td></tr>");
-
+	
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -440,7 +440,7 @@ int ctrl_read_planning_data(		/* return : 0 on success, other on error */
 	if(qry_build_flt_select(cntxt, &sql, &empty, &flt, 0, 0)) STACK_ERROR;
 
 	/* Execute query - place result in pl->objlist & sort by row & date */
-	if(qry_exec_filter(cntxt, &flt, sql->data) || sql_get_table(cntxt, &pl->objdates, 0)) STACK_ERROR;
+	if(qry_exec_filter(cntxt, &flt, sql->data) || sql_get_table(cntxt, &pl->objdates, 0)) STACK_ERROR;	
 	if(!pl->objdates.nbrows) RETURN_OK;
 	dyntab_sort(&pl->objdates, qsort_objdates);
 
@@ -488,7 +488,7 @@ int ctrl_read_planning_data(		/* return : 0 on success, other on error */
 	/* Read other display parameters */
 	pl->we_bgcolor = CTRL_ATTR_CELL(WEEKEND_BGCOLOR);
 	pl->today_bgcolor = CTRL_ATTR_CELL(TODAY_BGCOLOR);
-
+	
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -523,10 +523,10 @@ int ctrl_output_planning(			/* return : 0 on success, other on error */
 	{
 		if(i) DYNBUF_ADD3_INT(form->html, "<tr><td height=10 colspan=", pl->nb * (pl->unit == 'M' ? 31 : 1) + 10,"></td></tr>");
 		delay_to_datetxt(pl->framebeg, pl->datebeg, i * pl->nb, pl->unit);
-		if(ctrl_output_planning_frame(cntxt, pl)) STACK_ERROR;
+		if(ctrl_output_planning_frame(cntxt, pl)) STACK_ERROR;	
 	}
 	DYNBUF_ADD_STR(form->html, "</table>");
-
+	
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION

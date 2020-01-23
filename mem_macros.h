@@ -31,7 +31,7 @@
 *********************************************************************/
 #define M_ALLOC(data, sz) {size_t size1 = sz;\
 	data = mem_alloc(size1); \
-	if(size1 && !data) RETURN_ERR_MEMORY({}); }
+	if(size1 && !data) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : C_ALLOC
@@ -39,7 +39,7 @@
 *********************************************************************/
 #define C_ALLOC(data, size, num) {\
 	data = calloc(size, num); \
-	if(!data) RETURN_ERR_MEMORY({}); }
+	if(!data) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : M_REALLOC
@@ -47,7 +47,7 @@
 *********************************************************************/
 #define M_REALLOC(type, dest, nb) { \
 	type *newdest = mem_realloc(dest, sizeof(type)*nb, sizeof(type)*2); \
-	if(!newdest) RETURN_ERR_MEMORY({}); \
+	if(!newdest) RETURN_ERR_MEMORY; \
 	dest = newdest; (nb)++; }
 
 /*********************************************************************

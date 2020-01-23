@@ -45,8 +45,9 @@ int sql_open_session(				/* return : 0 on success, other on error */
 		RETURN_ERROR("Problème d'initialisation du serveur SQL", NULL);
 	}
 
-	/* Connect to MySql server - return on error */
-	if(!mysql_real_connect(cntxt->sql_session, cntxt->srvaddr, SQL_USER, cntxt->dbpwd, cntxt->dbname, MYSQL_PORT, NULL, 0))
+	/* Connect to MySql server using named pipes - return on error */
+	mysql_options(cntxt->sql_session, MYSQL_OPT_NAMED_PIPE, NULL);
+	if(!mysql_real_connect(cntxt->sql_session, cntxt->srvaddr, SQL_USER, cntxt->dbpwd, cntxt->dbname, 0, NULL, 0))
 	{
 		sql_control(cntxt, 0);
 		RETURN_ERROR("Pas de connexion au serveur SQL", NULL);

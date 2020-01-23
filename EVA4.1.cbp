@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="EVA4.1" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="~/EVA/cgi/passaj.cgi" prefix_auto="0" extension_auto="0" />
+				<Option working_dir="~/EVA/cgi/" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="~/EVA/cgi/evasoft.cgi" prefix_auto="0" extension_auto="0" />
+				<Option working_dir="~/EVA/cgi/" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+				<ExtraCommands>
+					<Add after="~/EVA/cgi/update-cgi.sh" />
+				</ExtraCommands>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Linker>
+			<Add library="libmysqlclient.a" />
+			<Add library="libgd.a" />
+			<Add directory="/usr/lib/x86_64-linux-gnu" />
+		</Linker>
+		<Unit filename="action_create.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_email.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_export.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_import.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_launchproc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_misc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_misc.h" />
+		<Unit filename="action_sequence.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_sql_script.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_update.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="action_utils.h" />
+		<Unit filename="cgi_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="cgi_utils.h" />
+		<Unit filename="check_login.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_access.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_attr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_butn.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_butn.h" />
+		<Unit filename="ctrl_cgi.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_cgi.h" />
+		<Unit filename="ctrl_contain.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_contain.h" />
+		<Unit filename="ctrl_exprval.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_exprval.h" />
+		<Unit filename="ctrl_graph.h" />
+		<Unit filename="ctrl_hdlr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_hdlr.h" />
+		<Unit filename="ctrl_image.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_image.h" />
+		<Unit filename="ctrl_input.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input.h" />
+		<Unit filename="ctrl_input_basic.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_basic.h" />
+		<Unit filename="ctrl_input_chkbox.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_color.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_color.h" />
+		<Unit filename="ctrl_input_date.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_date.h" />
+		<Unit filename="ctrl_input_email.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_field.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_fileupload.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_fileupload.h" />
+		<Unit filename="ctrl_input_hour.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_httplink.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_httplink.h" />
+		<Unit filename="ctrl_input_image.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_list.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_list.h" />
+		<Unit filename="ctrl_input_rel.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_input_rel.h" />
+		<Unit filename="ctrl_input_tel.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_misc.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_misc.h" />
+		<Unit filename="ctrl_option.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_option.h" />
+		<Unit filename="ctrl_output_calendar.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_output_catalog.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_output_list.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_output_list.h" />
+		<Unit filename="ctrl_output_planning.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_output_stats.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_title.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_title.h" />
+		<Unit filename="ctrl_tree.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_tree.h" />
+		<Unit filename="ctrl_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ctrl_utils.h" />
+		<Unit filename="date_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="date_utils.h" />
+		<Unit filename="dlg_openedforms.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dlg_openedforms.h" />
+		<Unit filename="dll_adsea01.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dll_fap.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dynbuf.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dynbuf.h" />
+		<Unit filename="dynbuf_sr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dynbuf_sr.h" />
+		<Unit filename="dyntab.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dyntab.h" />
+		<Unit filename="dyntab_field.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dyntab_field.h" />
+		<Unit filename="dyntab_sort.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="dyntab_sort.h" />
+		<Unit filename="err_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="err_utils.h" />
+		<Unit filename="eva.h" />
+		<Unit filename="eva_cgi.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="file_image_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="file_links.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="file_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="file_utils.h" />
+		<Unit filename="findfirst.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="findfirst.h" />
+		<Unit filename="form_html.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_html.h" />
+		<Unit filename="form_io.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_io.h" />
+		<Unit filename="form_mode.h" />
+		<Unit filename="form_mode_list.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_mode_search.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_mode_values.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_save.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_save.h" />
+		<Unit filename="form_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="form_utils.h" />
+		<Unit filename="html_basic.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="html_basic.h" />
+		<Unit filename="mem_macros.h" />
+		<Unit filename="mem_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="mem_utils.h" />
+		<Unit filename="obj_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="obj_utils.h" />
+		<Unit filename="pivottable.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="pivottable.h" />
+		<Unit filename="qry_build.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="qry_build.h" />
+		<Unit filename="qry_build_to_sql.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="qry_obj_cache.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="qry_obj_label.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="qry_obj_label.h" />
+		<Unit filename="qry_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="qry_utils.h" />
+		<Unit filename="sql_dbif.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sql_dbif.h" />
+		<Unit filename="sql_values.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="sql_values.h" />
+		<Unit filename="table_export.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="table_search.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="table_utils.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="table_utils.h" />
+		<Unit filename="value_format.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger>
+				<search_path add="C:\Program Files\CodeBlocks" />
+			</debugger>
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

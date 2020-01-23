@@ -96,7 +96,7 @@ EVA_handlers action_handlers[] =
 		{ "_EVA_SQL_SCRIPT",		NULL,	action_sql_script },
 		{ "_EVA_EMAIL",				NULL,	action_email },
 		{ "_EVA_ACTION_SEQ",		NULL,	action_sequence },
-#ifdef WIN32
+#ifdef PAYSITE
 		{ "_EVA_PAY_SITE",			NULL,	action_pay_site },
 #endif
 		{ NULL,						NULL,	action_default } 
