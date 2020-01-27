@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : qry_utils.c
 ** Description : utility functions for building SQL queries
 **      Author : Alain BOUTE
@@ -26,7 +20,7 @@ int qry_recursive_relation(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	DynTable *res,					/* out : result : list of IdObj */
 	DynTable *srcidobj,				/* in : list of base objects */
-	DynTable *relfields				/* in : list of relation fields (all if NULL) */
+	DynTable *relfields			/* in : list of relation fields (all if NULL) */
 ){
 	DynTable sqlres = {0};
 	DynBuffer *forms = NULL;
@@ -136,9 +130,7 @@ int qry_recursive_relation(			/* return : 0 on success, other on error */
 ** Description : evaluate a field expression based on table 1st col & place result in 1st available col
 *********************************************************************/
 #define ERR_FUNCTION "qry_add_table_col"
-#define ERR_CLEANUP qry_build_free(&flt); \
-					M_FREE(val); \
-					DYNTAB_FREE(data)
+#define ERR_CLEANUP 
 int qry_add_table_col(							/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	DynTable *res,								/* in/out : table to add values to : col 0 contains base IdObj */
@@ -149,38 +141,19 @@ int qry_add_table_col(							/* return : 0 on success, other on error */
 	DynBuffer *val = NULL;
 	QryBuild flt = { 0 };
 	unsigned long i, row = res->nbrows, col = res->nbcols;
-	static DynTable *prevres = NULL;
+	cntxt->sql_cnt = 0;
 
 	/* Prepare column 0 if first column added */
-	if(!row) RETURN_OK;
-	if(!res->cell->IdObj) for(i = 0; i < row; i++) dyntab_cell(res, i, 0)->IdObj = DYNTAB_TOULRC(res, i, 0);
+	if(col == 1) for(i = 0; i < row; i++) dyntab_cell(res, i, 0)->IdObj = DYNTAB_TOULRC(res, i, 0);
 
 	/* Add a column to the table */
 	DYNTAB_SET(res, 0, col, "");
 
-	/* Return if empty expression */
-	if(!expr || !expr_sz) RETURN_OK;
-
 	/* Read column data */
-	if(strchr(expr, '['))
-	{
-		if(prevres != res)
-		{
-			sql_drop_table(cntxt, "TmpTableCol");
-			if(qry_make_idlist(cntxt, res, "TmpTableCol")) STACK_ERROR;
-			prevres = res;
-		}
-		b_err = b_err ||
-			qry_eval_fieldexpr(cntxt, &data, expr, "TmpTableCol", NULL);
-	}
-	else
-	{
-		flt.b_recdata = 1;
-		b_err = b_err ||
-				qry_parse_fieldexpr(cntxt, expr, expr_sz, &flt) ||
-				flt.b_oper ? sql_get_listcol(cntxt, &data, res, &flt, 0) :
-							qry_listobj_field(cntxt, &data, res, expr);
-	}
+	b_err = b_err ||
+			qry_parse_fieldexpr(cntxt, expr, expr_sz, &flt) ||
+			flt.b_oper ? sql_get_listcol(cntxt, &data, res, &flt, 0) :
+						qry_listobj_field(cntxt, &data, res, expr);
 
 	/* Place data in table rows corresponding to IdObj in 1st col of res */
 	if(!b_err && data.nbrows)
@@ -202,8 +175,9 @@ int qry_add_table_col(							/* return : 0 on success, other on error */
 		}
 		if(val && row < res->nbrows) dyntab_add(res, row, col, DYNBUF_VAL_SZ(val), NO_CONV);
 	}
-	else
-		CLEAR_ERROR;
+	qry_build_free(&flt);
+	M_FREE(val);
+	DYNTAB_FREE(data);
 
 	RETURN_OK_CLEANUP;
 }
@@ -244,7 +218,7 @@ int qry_complete_data(		/* return : 0 on success, other on error */
 	{
 		/* Search for values for that field in objdata */
 		DynTableCell *src = dyntab_cell(srcdata, i, 0);
-		unsigned long pos = dyntab_next_field(objdata, src->field, ~0UL, 0, 1, 0);
+		unsigned long pos = dyntab_next_field(objdata, src->field, 0, 1, 0);
 		unsigned long nb = objdata->nbrows;
 
 		/* If value found - continue */
@@ -252,7 +226,7 @@ int qry_complete_data(		/* return : 0 on success, other on error */
 
 		/* Transfer source field values to objdata */
 		pos = i;
-		if(dyntab_filter_field(objdata, 1, srcdata, src->field, ~0UL, &pos)) RETURN_ERR_MEMORY;
+		if(dyntab_filter_field(objdata, 1, srcdata, src->field, 0, 1, &pos)) RETURN_ERR_MEMORY;
 		if(objdata->nbrows > nb) i += objdata->nbrows - nb - 1;
 	}
 
@@ -294,7 +268,7 @@ int qry_debug_table(		/* return : 0 on success, other on error */
 		DYNBUF_ADD(&cntxt->debug_msg, tab->cell[i].field, 0, NO_CONV);
 		if(tab->cell[i].Num > 0) DYNBUF_ADD3_INT(&cntxt->debug_msg, ".", tab->cell[i].Num, "");
 		if(tab->cell[i].Line > 0) DYNBUF_ADD3_INT(&cntxt->debug_msg, ".", tab->cell[i].Line, "");
-		if(tab->cell[i].Lang > 0) DYNBUF_ADD3_INT(&cntxt->debug_msg, ".", tab->cell[i].Lang, "");
+		if(tab->cell[i].Lvl > 0) DYNBUF_ADD3_INT(&cntxt->debug_msg, ".", tab->cell[i].Lvl, "");
 		DYNBUF_ADD3_CELL(&cntxt->debug_msg, "=", tab, i, 0, NO_CONV, "\n");
 		if(i> beg+50 && i < end-50 && end - beg > 200)
 		{
@@ -333,7 +307,7 @@ int qry_values_list(					/* return : 0 on success, other on error */
 	if(!tab) RETURN_OK;
 	if(!tab->nbrows)
 	{
-		if(mode >= 5) DYNBUF_ADD_STR(ret, "''")
+		if(mode == 5) DYNBUF_ADD_STR(ret, "''")
 		else DYNBUF_ADD_STR(ret, "0");
 		RETURN_OK;
 	}
@@ -347,12 +321,7 @@ int qry_values_list(					/* return : 0 on success, other on error */
 		switch(mode)
 		{
 		case 0:	/* List of Ids : Add id to buffer */
-			if(dyntab_from_list(&sqlres, DYNTAB_VAL_SZ(tab, i, 0), ",", 0, 2)) STACK_ERROR;
-			for(j = 0; !j || j < sqlres.nbrows; j++) 
-			{
-				if(j) DYNBUF_ADD_STR(ret, ",");
-				DYNBUF_ADD_INT(ret, DYNTAB_TOULRC(&sqlres, j, 0));
-			}
+			DYNBUF_ADD_INT(ret, DYNTAB_TOULRC(tab, i, 0));
 			break;
 			
 		case 1:	/* List of like / contain values Ids - find id in TVal & add to buffer */
@@ -382,10 +351,6 @@ int qry_values_list(					/* return : 0 on success, other on error */
 
 		case 6:
 			DYNBUF_ADD3_CELL(ret, "'", tab, i, 0, SQL_NO_LIKE_OPS, "'");
-			break;
-
-		case 7:
-			DYNBUF_ADD_CELL(ret, tab, i, 0, NO_CONV);
 			break;
 		}
 	}
@@ -468,7 +433,7 @@ int qry_field_value(		/* return : 0 on success, other on error */
 
 /*********************************************************************
 ** Function : qry_make_idlist
-** Description : transfer a list of ids to a table
+** Description : transfer a list of ids to IdList table
 *********************************************************************/
 #define ERR_FUNCTION "qry_make_idlist"
 #define ERR_CLEANUP M_FREE(sql)
@@ -480,24 +445,21 @@ int qry_make_idlist(				/* return : 0 on success, other on error */
 	DynBuffer *sql = NULL;
 	unsigned long i, nb = 0;
 
-	/* Create table */
-	DYNBUF_ADD3(&sql, "CREATE TEMPORARY TABLE ", table, 0, NO_CONV, " (IdObj INT, Num INT) ENGINE=MEMORY")
+	/* Create table IdList */
+	DYNBUF_ADD3(&sql, "CREATE TEMPORARY TABLE ", table, 0, NO_CONV, " (IdObj INT, Num INT) TYPE=HEAP")
 	if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
 	M_FREE(sql);
 
 	/* Add objects Ids */
 	DYNBUF_ADD3(&sql, "INSERT INTO ", table, 0, NO_CONV, " VALUES ");
 	if(id_list) for(i = 0; i < id_list->nbrows; i++)
+		/* Keep only numeric ids */
+		if(atoi(dyntab_val(id_list, i, 0)) >0)
 	{
-		/* Keep only numeric */
-		unsigned long idobj = DYNTAB_TOULRC(id_list, i, 0);
-		if(idobj)
-		{
-			if(nb) DYNBUF_ADD_STR(&sql, ",");
-			DYNBUF_ADD3_INT(&sql, "(", idobj, "");
-			DYNBUF_ADD3_INT(&sql, ",", i, ")");
-			nb++;
-		}
+		if(nb) DYNBUF_ADD_STR(&sql, ",");
+		DYNBUF_ADD3_CELL(&sql, "(", id_list, i, 0, NO_CONV, "");
+		DYNBUF_ADD3_INT(&sql, ",", i, ")");
+		nb++;
 	}
 	if(nb && sql_exec_query(cntxt, sql->data)) STACK_ERROR;
 
@@ -532,12 +494,12 @@ int qry_get_obj_data(				/* return : 0 on success, other on error */
 		"-- qry_get_obj_data : read data\n"
 		"SELECT DISTINCT TLink.IdObj,TField.TxtValue,\n" \
 			"IF(TVal.TxtValue IS NULL,TLink.IdRelObj,TVal.TxtValue),\n" \
-			"TLink.IdRelObj,TLink.Num,TLink.Line,TLink.Lang,TLink.IdField,TLink.IdValue,TLink.Pkey \n" 
+			"TLink.IdRelObj,TLink.Num,TLink.Line,TLink.Lvl,TLink.IdField,TLink.IdValue,TLink.Pkey \n" 
 		"FROM TLink \n"
 		"INNER JOIN TVal as TField ON TLink.IdField=TField.IdValue \n"
 		"LEFT JOIN TVal ON TLink.IdValue=TVal.IdValue \n");
 	if(where) DYNBUF_ADD3(&sql, "WHERE ", where, 0, NO_CONV, " ");
-	DYNBUF_ADD_STR(&sql, "ORDER BY TLink.IdObj,TField.TxtValue,TLink.Num,TLink.Line,TLink.Lang,TLink.Pkey \n");
+	DYNBUF_ADD_STR(&sql, "ORDER BY TLink.IdObj,TField.TxtValue,TLink.Num,TLink.Line,TLink.Lvl,TLink.Pkey \n");
 
 	/* Exec Query */
 	cntxt->sql_trace = 0;
@@ -556,7 +518,7 @@ int qry_get_obj_data(				/* return : 0 on success, other on error */
 		if(row.sz[3] && row.value[3][0]) cell.b_relation = 1;
 		if(row.sz[4]) cell.Num = strtoul(row.value[4], NULL, 10);
 		if(row.sz[5]) cell.Line = strtoul(row.value[5], NULL, 10);
-		if(row.sz[6]) cell.Lang = strtoul(row.value[6], NULL, 10);
+		if(row.sz[6]) cell.Lvl = strtoul(row.value[6], NULL, 10);
 		if(row.sz[7]) cell.IdField = strtoul(row.value[7], NULL, 10);
 		if(row.sz[8]) cell.IdValue = strtoul(row.value[8], NULL, 10);
 		if(row.sz[9]) cell.Pkey = strtoul(row.value[9], NULL, 10);
@@ -808,24 +770,21 @@ int qry_update_idobj_idfield(		/* return : 0 on success, other on error */
 										1 = add new values - do not check Num nor Line
 										2 = add new values - check Num & Line
 										3 = replace existing values
-										4 = add new values - check Line, not Num
-										5 = remove values - do not check Num nor Line */
+										4 = add new values - check Line, not Num */
 ){
 	unsigned long i, j;
 	DynTable dbval = {0};
 	DynTableCell *val, *valdb;
 
 	/* Read object values for field if check requested */
-	qry_uncache_idobj(cntxt, id_obj);
 	if(mode && qry_obj_idfield(cntxt, &dbval, id_obj, id_field)) STACK_ERROR;
 
 	/* Mark new values */
-	if(mode < 5) for(i = 0; i < values->nbrows; i++)
+	for(i = 0; i < values->nbrows; i++)
 	{
 		val = dyntab_cell(values, i, 0);
-		if(!val->Num) val->Num = 1;
 		val->b_modified = 1;
-		if(mode) for(j = 0; j < dbval.nbrows; j++)
+		if(mode != 3) for(j = 0; j < dbval.nbrows; j++)
 		{
 			valdb = dyntab_cell(&dbval, j, 0);
 			if(!DYNTAB_SAMEVAL_MODE(val, valdb, mode)) continue;
@@ -834,16 +793,17 @@ int qry_update_idobj_idfield(		/* return : 0 on success, other on error */
 		}
 	}
 
-	/* Mark values to remove */
-	if(mode > 1) for(j = 0; j < dbval.nbrows; j++)
+	/* Mark deleted values */
+	for(j = 0; j < dbval.nbrows; j++)
 	{
 		valdb = dyntab_cell(&dbval, j, 0);
-		valdb->b_modified = (char)(mode != 5);
-		for(i = 0; i < values->nbrows; i++)
+		valdb->b_modified = 1;
+		if(mode != 3) for(i = 0; i < values->nbrows; i++)
 		{
 			val = dyntab_cell(values, i, 0);
 			if(!DYNTAB_SAMEVAL_MODE(val, valdb, mode)) continue;
-			valdb->b_modified = (char)(mode == 5);
+			valdb->b_modified = 0;
+			break;
 		}
 	}
 
@@ -878,28 +838,6 @@ int qry_update_idobj_idfield(		/* return : 0 on success, other on error */
 #undef ERR_CLEANUP
 
 /*********************************************************************
-** Function : qry_check_idobj
-** Description : check IdObj exists with formstamp in DB
-*********************************************************************/
-int qry_check_idobj(				/* return : 1 if object exists, 0 else */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long idobj				/* in : object id to check */
-){
- 	char sql[128];
-	DynTable res = { 0 };
-	int b_ex;
-
-	/* Build & exec query for object formstamp */
-	sprintf(sql, "SELECT Pkey FROM TLink WHERE IdObj=%lu AND IdField=%lu AND DateDel IS NULL", idobj, cntxt->val_FORMSTAMP);
-	if(!sql_exec_query(cntxt, sql)) sql_get_table(cntxt, &res, 2);
-
-	/* Return result */
-	b_ex = res.nbrows > 0;
-	DYNTAB_FREE(res);
-	return b_ex;
-}
-
-/*********************************************************************
 ** Function : qry_add_val
 ** Description : add a value in DB
 *********************************************************************/
@@ -915,8 +853,7 @@ int qry_add_val(					/* return : 0 on success, other on error */
 											0 = no check
 											1 = check value & field
 											2 = check value, field, Num & Line
-											3 = check field	- remove other values
-											4 = check field - add if empty */
+											3 = check field	- remove other values */
 	unsigned long *pkey				/* in : record to set value to / create new record if 0
 									  out : Pkey of set record / 0 if not set */
 ){
@@ -976,7 +913,7 @@ int qry_add_val(					/* return : 0 on success, other on error */
 		M_FREE(sql);
 
 		/* Return if record exists */
-		if(sqlres.nbrows && check != 3) 
+		if(sqlres.nbrows && check < 3) 
 		{
 			if(pkey) *pkey = 0;
 			RETURN_OK;
@@ -1119,9 +1056,6 @@ int qry_add_idobj_field_rel(		/* return : 0 on success, other on error */
 	DynTableCell val = {0};
 	char txt[16];
 
-	/* Check parameters */
-	if(!idrelobj) RETURN_OK;
-
 	/* Fill value attributes */
 	val.IdObj = id_obj;
 	val.field = field;
@@ -1243,8 +1177,6 @@ int qry_add_obj_data(				/* return : 0 on success, other on error */
 *********************************************************************/
 #define ERR_FUNCTION "qry_list_data"
 #define ERR_CLEANUP	M_FREE(sql); \
-					DYNTAB_FREE(data); \
-					DYNTAB_FREE(tmp); \
 					qry_build_free(&flt); \
 					cntxt->sql_trace = sql_trace
 int qry_list_data(					/* return : 0 on success, other on error */
@@ -1252,8 +1184,6 @@ int qry_list_data(					/* return : 0 on success, other on error */
 	ObjTableFormat *tbl				/* in : list parameters */
 ){
  	DynBuffer *sql = NULL;
-	DynTable data = {0};
-	DynTable tmp = {0};
 	unsigned long i, j, k, row0;
 	QryBuild flt = { 0 };
 	int sql_trace = cntxt->sql_trace;
@@ -1277,93 +1207,35 @@ int qry_list_data(					/* return : 0 on success, other on error */
 		if(*dyntab_val(&tbl->debug, i, 0) == '1') cntxt->sql_trace = DEBUG_SQL_RES;
 
 		/* Build query for column : check for expression type */
-		if(!strncmp(c->txt, add_sz_str("SELECT ")))
+		if(strchr(c->txt, '['))
 		{
-			/* Handle raw SQL SELECT */
-			unsigned long r = tbl->data.nbrows;
-			if(form_eval_fieldexpr(cntxt, &data, 0, 0, c->txt, c->len, tbl->attr, 0)) STACK_ERROR;
-			if(dyntab_resize(&tbl->data, tbl->data.nbrows + data.nbrows - 1, tbl->data.nbcols - 1)) RETURN_ERR_MEMORY;
-			for(k = 0; k < data.nbrows; k++)
+			/* Handle SQL expression : build table of source objects if applicable */
+			EVA_sql_row row = {0};
+			if(!tbl->objtbl[0])
 			{
-				DynTableCell *s = dyntab_cell(&data, k, 0);
-				DynTableCell *d = dyntab_cell(&tbl->data, r + k, 0);
-				memcpy(d, s, sizeof(d[0]));
-				memset(s, 0, sizeof(d[0]));
-				d->col = i;
+				sprintf(tbl->objtbl, "Tbl%lu", cntxt->sql_cnt);
+				if(qry_make_idlist(cntxt, &tbl->idobj, tbl->objtbl)) STACK_ERROR;
 			}
-		}
-		else if(strchr(c->txt, '['))
-		{
-			/* Handle SQL/relationnal expression */
-			int b_notable = strstr(c->txt, "[$") != 0;
-			M_FREE(sql);
 
-			if(b_notable || *dyntab_val(&tbl->notable, i, 0) == '1')
+			/* Evaluate expression */
+			beg = tbl->data.nbrows;
+			if(qry_eval_sql_fieldexpr(cntxt, "TmpListData", c->txt, tbl->objtbl, NULL) ||
+				sql_exec_query(cntxt, "SELECT * FROM TmpListData")) STACK_ERROR;
+
+			/* Read result & add columns values */
+			do 
 			{
-				/* Evaluate SQL expression without tables - loop on objects */
-				if(qry_eval_sqlexpr_var(cntxt, &sql, c->txt, tbl->attr, NULL)) STACK_ERROR;
-				beg = 0;
-				for(j = 0; j < tbl->idobj.nbrows; j++)
-				{
-					/* Retrieve object data in temp location */
-					unsigned long r = tbl->data.nbrows;
-					unsigned long idobj = DYNTAB_TOULRC(&tbl->idobj, j, 0);
-					while(beg < r && dyntab_cell(&tbl->data, beg, 0)->IdObj != idobj) beg++;
-					DYNTAB_FREE(tmp);
-					for(k = beg; k < r; k++)
-					{
-						DynTableCell *s = dyntab_cell(&tbl->data, k, 0);
-						if(s->IdObj != idobj) break;
-						DYNTAB_SET_CELLP(&tmp, tmp.nbrows, 0, s);
-						dyntab_cell(&tmp, tmp.nbrows - 1, 0)->col = 0;
-					}
-
-					/* Evaluate expression on object & transfer to list data */
-					if(form_eval_fieldexpr(cntxt, &data, 0, idobj, sql->data, sql->cnt, &tmp, 0)) STACK_ERROR;
-					if(dyntab_resize(&tbl->data, tbl->data.nbrows + data.nbrows - 1, tbl->data.nbcols - 1)) RETURN_ERR_MEMORY;
-					for(k = 0; k < data.nbrows; k++)
-					{
-						DynTableCell *s = dyntab_cell(&data, k, 0);
-						DynTableCell *d = dyntab_cell(&tbl->data, r + k, 0);
-						memcpy(d, s, sizeof(d[0]));
-						memset(s, 0, sizeof(d[0]));
-						d->col = i;
-						d->IdObj = idobj;
-					}
-				}
+				if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
+				if(!row.sz || !row.sz[1]) continue;
+				beg = tbl->data.nbrows;
+				if(dyntab_add(&tbl->data, beg, 0, row.value[1], row.sz[1], NO_CONV)) RETURN_ERR_MEMORY;
+				c = dyntab_cell(&tbl->data, beg, 0);
+				if(row.value[0]) c->IdObj = strtoul(row.value[0], NULL, 10);
+				if(row.value[2]) c->Line = strtoul(row.value[2], NULL, 10);
+				c->col = i;
 			}
-			else
-			{
-				/* Evaluate SQL expression with tables */
-				EVA_sql_row row = {0};
-
-				/* Build table of source objects */
-				if(!tbl->objtbl[0])
-				{
-					sprintf(tbl->objtbl, "Tbl%lu", cntxt->sql_cnt);
-					if(qry_make_idlist(cntxt, &tbl->idobj, tbl->objtbl)) STACK_ERROR;
-				}
-
-				/* Evaluate expression */
-				if(qry_eval_sqlexpr_var(cntxt, &sql, c->txt, tbl->attr, tbl->objtbl)) STACK_ERROR;
-				if(qry_eval_sql_fieldexpr(cntxt, "TmpListData", sql ? sql->data : NULL, tbl->objtbl, tbl->attr) ||
-					sql_exec_query(cntxt, "SELECT * FROM TmpListData")) STACK_ERROR;
-
-				/* Read result & add columns values */
-				do 
-				{
-					if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
-					if(!row.sz || !row.sz[1]) continue;
-					beg = tbl->data.nbrows;
-					if(dyntab_add(&tbl->data, beg, 0, row.value[1], row.sz[1], NO_CONV)) RETURN_ERR_MEMORY;
-					c = dyntab_cell(&tbl->data, beg, 0);
-					if(row.value[0]) c->IdObj = strtoul(row.value[0], NULL, 10);
-					if(row.value[2]) c->Line = strtoul(row.value[2], NULL, 10);
-					c->col = i;
-				}
-				while(row.sz);
-				sql_drop_table(cntxt, "TmpListData");
-		}
+			while(row.sz);
+			sql_drop_table(cntxt, "TmpListData");
 		}
 		else
 		{
@@ -1412,46 +1284,29 @@ int qry_list_data(					/* return : 0 on success, other on error */
 ** Description : return values of a SQL query as a table for each column
 *********************************************************************/
 #define ERR_FUNCTION "sql_get_table"
-#define ERR_CLEANUP M_FREE(fields);	\
-					sql_free_result(cntxt);	\
+#define ERR_CLEANUP sql_free_result(cntxt);	\
 					sql_free_row(&row)
 int sql_get_table				/* return : 0 on success, other on error */
 (
 	EVA_context *cntxt,			/* in : execution data */
 	DynTable *tab, 				/* in/out : table to add rows to */
-	int options					/* in : table output format flags :
+	int b_flags					/* in : table output format flags :
 									bit 0 : set first line with field names
-									bit 1 : clear table before processing
-									bit 2 : handle field names columns */
+									bit 1 : clear table before processing */
 ){
 	EVA_sql_row row = {0};
-	unsigned long i, j, irow = (tab && !options) ? tab->nbrows : 0, icol;
-	int *fields = NULL;
-	char *fld[] = { "IdObj", "Pkey", "Num", "Line", "IdValue", "IdField", "IdValObj" };
+	unsigned long i, irow = (tab && !b_flags) ? tab->nbrows : 0;
 
 	if(!cntxt->sql_result || !tab) RETURN_OK;
 
 	/* Initialize table */
-	if(options) dyntab_free(tab);
+	if(b_flags) dyntab_free(tab);
 
 	/* Get first row */
 	if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
 
-	/* Handle fields names if applicable */
-	if(options & 4)
-	{
-		C_ALLOC(fields, sizeof(fields[0]), row.nbcols);
-		for(i = 0; i < row.nbcols; i++)
-			for(j = 0; j < sizeof(fld)/sizeof(fld[0]); j++)
-				if(!strcmp(row.name[i], fld[j]))
-				{ 
-					fields[i] = j + 1;
-					break;
-				}
-	}
-
 	/* Set first line with field names */
-	if(options & 1)
+	if(b_flags & 1)
 	{
 		for(i = 0; i < row.nbcols; i++) 
 			DYNTAB_ADD(tab, 0, i, row.name[i], 0, NO_CONV);
@@ -1461,76 +1316,14 @@ int sql_get_table				/* return : 0 on success, other on error */
 	/* Add result rows to table */
 	while(row.value)
 	{
-		DynTableCell *c = NULL;
-		icol = 0;
 		for(i = 0; i < row.nbcols; i++)
-			if(!i || !fields || !fields[i])
-			{
-				DYNTAB_ADD(tab, irow, icol++, row.value[i], row.sz[i], NO_CONV);
-				if(!i) c = dyntab_cell(tab, irow, 0);
-			}
-			else
-			{
-				unsigned long id = row.value[i] ? strtoul(row.value[i], NULL, 10) : 0;
-				if(id) switch(fields[i])
-				{
-				case 1:	c->IdObj = id; break;
-				case 2:	c->Pkey = id; break;
-				case 3:	c->Num = id; break;
-				case 4:	c->Line = id; break;
-				case 5:	c->IdValue = id; break;
-				case 6:	c->IdField = id; break;
-				case 7:	c->IdValObj = id; break;
-				}
-			}
+			DYNTAB_ADD(tab, irow, i, row.value[i], row.sz[i], NO_CONV);
 		irow++;
 		if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
 	}
 
 	if(cntxt->sql_trace & DEBUG_SQL_RES)
 		err_print_dyntab(&cntxt->debug_msg, tab, 10, NO_CONV);
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : sql_get_buf
-** Description : return values of a SQL query as a list of values
-*********************************************************************/
-#define ERR_FUNCTION "sql_get_buf"
-#define ERR_CLEANUP sql_free_result(cntxt);	\
-					sql_free_row(&row)
-int sql_get_buf					/* return : 0 on success, other on error */
-(
-	EVA_context *cntxt,			/* in : execution data */
-	DynBuffer **res,			/* in/out : values list */
-	int options					/* in : table output format flags :
-									bit 0 : quote values
-									bit 1 : clear res before processing */
-){
-	EVA_sql_row row = {0};
-	unsigned long i;
-
-	if(!cntxt->sql_result || !res) RETURN_OK;
-
-	/* Initialize result buffer */
-	if(options & 2) M_FREE(*res);
-
-	/* Get first row */
-	if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
-
-	/* Add result rows to list */
-	while(row.value)
-	{
-		for(i = 0; i < row.nbcols; i++)
-		{
-			if(*res) DYNBUF_ADD_STR(res, ",");
-			DYNBUF_ADD(res, row.value[i], row.sz[i], NO_CONV);
-		}
-		if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
-	}
-
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -1573,7 +1366,7 @@ int sql_get_listcol(				/* return : 0 on success, other on error */
 	/* Build & exec Query - return on error */
 	if(flt->debug) cntxt->sql_trace = DEBUG_SQL_RES;
 	if(qry_build_flt_select(cntxt, &sql, idlist, flt, 0, 0)) STACK_ERROR;
-	if(qry_exec_filter(cntxt, flt, sql->data)) STACK_ERROR;	
+	SQL_QRY_DEBUG_FLT(flt, sql->data, STACK_ERROR);	
 
 	/* Output to DynTable : add result rows to table */
 	if(res)
@@ -1611,30 +1404,6 @@ int sql_get_listcol(				/* return : 0 on success, other on error */
 
 		qry_debug_table(cntxt, res, irow0, irow);
 	}
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : qry_exec_filter
-** Description : execute query for a filter
-*********************************************************************/
-#define ERR_FUNCTION "qry_exec_filter"
-#define ERR_CLEANUP
-int qry_exec_filter(			/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	QryBuild *flt,					/* in : filter data */
-	char *qry						/* in : SQL query to exec */
-){
-	int sqltrace = cntxt->sql_trace; 
-	if(flt->debug) cntxt->sql_trace = DEBUG_SQL_RES; 
-	if(cntxt->sql_trace & DEBUG_SQL_RES) err_print_filter(&cntxt->debug_msg, flt); 
-	if(sql_exec_query(cntxt, qry)) STACK_ERROR; 
-	if((cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > DEBUG_SQL_SLOW_TH) && !(cntxt->sql_trace & DEBUG_SQL_RES))
-		err_print_filter(&cntxt->debug_msg, flt); 
-	cntxt->sql_trace = sqltrace; 
 
 	RETURN_OK_CLEANUP;
 }

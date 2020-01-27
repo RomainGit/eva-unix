@@ -1,12 +1,6 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : ctrl_input.c
-** Description : general handling functions for all input controls
+** Description : HTML handling functions for input controls
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
@@ -82,12 +76,9 @@ int ctrl_default_value(				/* return : 0 on success, other on error */
 	/* Use default value if applicable */
 	if(!ctrl->val.nbrows)
 	{
-		char *defaultwhen = (ctrl->storage || ctrl->cgival.nbrows) ? CTRL_ATTR_VAL(DEFAULTWHEN) : "_EVA_ALWAYS";
+		char *defaultwhen = CTRL_ATTR_VAL(DEFAULTWHEN);
 		char *defaulttype = CTRL_ATTR_VAL(DEFAULTVALUETYPE);
-
-		/* Check if applicable */
-		if(!strcmp(defaulttype, "_EVA_NONE")) RETURN_OK;
-		CTRL_ATTR(defaultval, DEFAULTVALUE);
+		CTRL_OPTIONAL(defaultval, DEFAULTVALUE);
 		if((defaultval.nbrows || *defaulttype) && (
 			!strcmp(defaultwhen, "_EVA_ALWAYS") ||
 			!strcmp(defaultwhen, "_EVA_OPEN") && !form->ctrl->cgival.nbrows ||
@@ -98,9 +89,9 @@ int ctrl_default_value(				/* return : 0 on success, other on error */
 			{
 				/* Expression : evaluate & set ctrl->val */
 				int sql_trace = cntxt->sql_trace;
-				CTRL_ATTR(listobj, INIT_OBJ);
+				CTRL_OPTIONAL(listobj, INIT_OBJ);
 				if(CTRL_ATTR_CELL(DEBUG_SQL_DEFVAL)) cntxt->sql_trace = DEBUG_SQL_RES;
-				if(ctrl_eval_valtyp(cntxt, ctrl, &ctrl->val, defaulttype, &listobj, &defaultval)) CLEAR_ERROR;
+				if(form_eval_valtype(cntxt, &ctrl->val, defaulttype, &listobj, &defaultval)) CLEAR_ERROR;
 				cntxt->sql_trace = sql_trace;
 			}
 			else
@@ -179,13 +170,16 @@ int ctrl_read_values(				/* return : 0 on success, other on error */
 		ctrl->b_modified |= b_modified;
 	}
 	else
-		/* Read control values from DB if no CGI */
+		/* Read DB values if no CGI */
 		if(!form->b_newobj && 
-			dyntab_filter_field(&ctrl->val, 0, &form->objdata, ctrl->FIELD, ~0UL, NULL)) RETURN_ERR_MEMORY;
+			dyntab_filter_field(&ctrl->val, 0, &form->objdata, ctrl->FIELD, 0, 1, NULL)) RETURN_ERR_MEMORY;
 
 	/* Read DB values if applicable */
 	if(!form->b_newobj && 
-		dyntab_filter_field(&ctrl->dbval, 0, &form->objdata, ctrl->FIELD, ~0UL, NULL)) RETURN_ERR_MEMORY;
+		dyntab_filter_field(&ctrl->dbval, 0, &form->objdata, ctrl->FIELD, 0, 1, NULL)) RETURN_ERR_MEMORY;
+
+	/* Renumber & sort values */
+	ctrl_renumber_values(ctrl, 1);
 
 	/* Handle default values */
 	if((form->nextstep == HtmlEdit || 
@@ -196,7 +190,8 @@ int ctrl_read_values(				/* return : 0 on success, other on error */
 	CTRL_SEC_HDLR(i_ctrl);
 	ctrl = form->ctrl + i_ctrl;
 
-	/* Check values changes */
+	/* Renumber & sort values */
+	ctrl_renumber_values(ctrl, 1);
 	ctrl_check_changes(cntxt, i_ctrl, 1);
 	form->b_modified |= ctrl->b_modified;
  
@@ -352,72 +347,6 @@ void ctrl_dontkeep_cgi_input(
 #undef ERR_CLEANUP
 
 /*********************************************************************
-** Function : ctrl_renumber_values
-** Description : renumber values indexes of a control
-*********************************************************************/
-void ctrl_renumber_values(
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
-){
-	EVA_form *form = cntxt->form;
-	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	unsigned long i, line, maxnum, maxline = 0;
-	DynTable *ctlval = (ctrl->allval.nbrows || ctrl->alldbval.nbrows) ? &ctrl->allval : & ctrl->val;
-	DynTableCell *val;
-	int b_keepold = form->step == CtrlRead || CTRL_ATTR_CELL(MULTIPLE_AUTO_ORDER) || form->Num;
-
-	if(!ctrl || !ctlval->nbrows) return;
-
-	/* Handle duplicate values if applicable */
-	if(strcmp(ctrl->MULTIPLE, "Yes"))
-		for(i = 0; i < ctlval->nbrows; i++)
-			for(line = i + 1; line < ctlval->nbrows; line ++)
-			{
-				DynTableCell *v1 = dyntab_cell(ctlval, i, 0);
-				DynTableCell *v2 = dyntab_cell(ctlval, line, 0);
-				if(v1->Line == v2->Line && !STRCMPNUL(v1->txt, v2->txt))
-					dyntab_del_rows(ctlval, line--, 1);
-			}
-
-	/* Look for maximum line number */
-	for(i = 0; i < ctlval->nbrows; i++)
-	{
-		val = dyntab_cell(ctlval, i, 0);
-		if(val->Line > maxline) maxline = val->Line;
-	}
-
-	/* Process each line */
-	for(line = 0; line <= maxline; line ++)
-	{
-		/* Look for maximum index numbers */
-		maxnum = 0;
-		if(b_keepold) for(i = 0; i < ctlval->nbrows; i++)
-		{
-			val = dyntab_cell(ctlval, i, 0);
-			if(val->Line != line) continue;
-			if(val->Num > maxnum) maxnum = val->Num;
-		}
-
-		/* Renumber values */
-		for(i = 0; i < ctlval->nbrows; i ++) 
-		{
-			val = dyntab_cell(ctlval, i, 0);
-			if(val->Line != line) continue;
-			if(!b_keepold || !val->Num)
-			{
-				maxnum++;
-				val->Num = maxnum;
-			}
-		}
-	}
-
-	/* Sort values on Line / Num */
-	dyntab_sort(ctlval, qsort_ctrlval);
-
-	return;
-}
-
-/*********************************************************************
 ** Function : ctrl_add_input
 ** Description : handles INPUT controls
 *********************************************************************/
@@ -436,7 +365,7 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 	DynBuffer **html = form->html;
 	DynTableCell *field, *val;
 	unsigned long i;
-	int step = form->step, error = 0;
+	int step = form->step;
 
 	/* Unsaved controls are always in edit mode if allowed */
 	if(step == HtmlView && !ctrl->storage && ctrl->access & AccessEdit) form->step = HtmlEdit;
@@ -452,33 +381,27 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 							!strcmp("_EVA_USER_PARAM", storage) ? 0 : 1;
 		}
 
-		/* Read control values & renumber */
+		/* Read control values */
 		if(ctrl_read_values(cntxt, i_ctrl)) STACK_ERROR;
-		ctrl_renumber_values(cntxt, i_ctrl);
 		break;
 
 	case InputCheck:
-		/* Renumber values / handle duplicates */
-		ctrl_renumber_values(cntxt, i_ctrl);
+		/* Ignore if input not stored */
+		if(!ctrl->storage) break;
 
 		/* Filter control values for current line & num index */
 		if(ctrl_filter_values(cntxt, i_ctrl)) STACK_ERROR;
 
-		/* Call control secondary handler */
-		ctrl->error = 0;
-		M_FREE(ctrl->errmsg);
-		CTRL_SEC_HDLR(i_ctrl);
-		error = ctrl->error;
-
-		/* Check error status */
-		if(ctrl_check_error_status(cntxt, ctrl)) STACK_ERROR;
-		ctrl->error |= error;
-		form->error |= ctrl->error;
-
 		/* Check for changes in values */
-		if(!ctrl->storage) ctrl->b_modified = 0;
-		else ctrl_check_changes(cntxt, i_ctrl, 1);
+		ctrl_check_changes(cntxt, i_ctrl, 1);
 		form->b_modified |= ctrl->b_modified;
+
+		/* Check error status if editable */
+		if(ctrl_check_error_status(cntxt, ctrl)) STACK_ERROR;
+
+		/* Call control secondary handler */
+		CTRL_SEC_HDLR(i_ctrl);
+		form->error |= ctrl->error;
 		break;
 
 	case HtmlSaveDlg:
@@ -498,6 +421,9 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 			(ctrl->error & 1 && form->savedlg_outmode & 1) ||
 			(ctrl->b_modified && form->savedlg_outmode & 4)))
 		{
+			/* Background color depends on error level */
+			ctrl->BGCOLOR = (ctrl->error == 2 ? "FFAAAA" : ctrl->error == 1 ? "FFEEDD" : "EEFFEE");
+
 			/* Set output format suitable for dialog */
 			form->step = (ctrl->access & AccessEdit && (ctrl->error || ctrl->b_modified)) ? HtmlEdit : HtmlView;
 			form->b_noctrltree = 1;
@@ -507,37 +433,34 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 			ctrl->BACKGROUND = "";
 			ctrl->FONTCOLOR = "";
 			ctrl->FONTSIZE = "";
-			ctrl->COLSPAN = 0;
-			ctrl->ROWSPAN = 0;
+			ctrl->COLSPAN = "";
+			ctrl->ROWSPAN = "";
 			if(ctrl->LINES > 5) ctrl->LINES = 5;
 			if(ctrl->COLUMNS > 50) ctrl->COLUMNS = 50;
 			if(!ctrl->FONTFACE[0]) ctrl->FONTFACE = "Arial";
-			ctrl->LABELPOS = "_EVA_SameCell";
-			ctrl->LABELBOLD = "";
+			ctrl->LABELPOS = "_EVA_LEFT";
 			ctrl->LABELFONTCOLOR = "";
 			ctrl->LABELFONTSIZE = "";
+			ctrl->LABELALIGN = "right";
+			ctrl->LABELVALIGN = "middle";
 			ctrl->OPTIONBUTTON = "_EVA_ALWAYS";
-			ctrl->CELL_STYLE = "";
-			ctrl->LABEL_STYLE = "";
 
 			/* Output control label & message if applicable */
-			DYNBUF_ADD3(html, 
-				"<td colspan=2><hr></td></tr><tr>"
-				"<td align=right valign=top><font face='", ctrl->FONTFACE, 0, NO_CONV, "'>");
-			if(ctrl_put_label(cntxt, ctrl, "_EVA_SameCell")) STACK_ERROR; 
+			if(ctrl_put_label(cntxt, ctrl, "_EVA_NewColumn")) STACK_ERROR; 
+			DYNBUF_ADD3(html, "<td align=left bgcolor=", ctrl->BGCOLOR, 0, NO_CONV, ">");
+			DYNBUF_ADD3(html, "<font face='", ctrl->FONTFACE, 0, NO_CONV, "'>");
 			if(form->step == HtmlEdit || ctrl->error > 1)
 			{
-				DYNBUF_ADD_STR(form->html, "<br><font size=-1>");
+				DYNBUF_ADD_STR(form->html, "<font size=-1>");
 				if(ctrl->b_modified) DYNBUF_ADD_STR(html, "Champ modifié");
 				if(ctrl->errmsg)
 				{
-					if(form->step != HtmlEdit) DYNBUF_ADD_STR(html, " Vous n'avez pas accès à ce champ en modification");
-					if(ctrl->b_modified || form->step != HtmlEdit) DYNBUF_ADD_STR(html, "<br>");
-					DYNBUF_ADD3_BUF(html, "<font color=#FF0000><b>", ctrl->errmsg, TO_HTML, "</font></b>");
+					if(form->step != HtmlEdit) DYNBUF_ADD_STR(html, " Vous n'avec pas accès à ce champ en modification");
+					if(ctrl->b_modified || form->step != HtmlEdit) DYNBUF_ADD_STR(html, " - ");
+					DYNBUF_ADD3_BUF(html, "<u><b>", ctrl->errmsg, TO_HTML, "</b></u>");
 				}
-				DYNBUF_ADD_STR(html, "</font>\n");
+				DYNBUF_ADD_STR(html, "</font><br>\n");
 			}
-			DYNBUF_ADD3(html, "</td><td valign=top><font face='", ctrl->FONTFACE, 0, NO_CONV, "'>");
 
 			/* If edit mode : handle hidden inputs */
 			if(form->step == HtmlEdit)
@@ -566,10 +489,10 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 				ctrl_dontkeep_cgi_input(cntxt, i_ctrl);
 
 				/* Handle selection mode for relations */
-				if(ctrl->objtbl && ctrl->error && strcmp(ctrl->TYPE, "_EVA_FILEUPLOAD"))
+				if(ctrl->objtbl && ctrl->error)
 					ctrl->objtbl->status = ctrl->val.nbrows ? 
-								ctrl->objtbl->status & ~(TblCtrl_opensearch | TblCtrl_opensel) :
-								ctrl->objtbl->status | TblCtrl_opensearch | TblCtrl_opensel;
+								ctrl->objtbl->status & ~TblCtrl_opensearch :
+								ctrl->objtbl->status | TblCtrl_opensearch;
 			}
 
 			/* Output control */
@@ -577,7 +500,7 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 			CTRL_SEC_HDLR(i_ctrl);
 
 			/* Output help text if applicable */
-			if((form->step == HtmlEdit || ctrl->error > 1) && ctrl->NOTES && *ctrl->NOTES)
+			if(form->step == HtmlEdit || ctrl->error > 1)
 				DYNBUF_ADD3(form->html, "\n<br><font size=-1>", ctrl->NOTES, 0, TO_HTML, "</font>");
 			DYNBUF_ADD_STR(html, "</td>\n</tr><tr>\n");
 
@@ -603,6 +526,7 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 		}
 
 		/* Check for changes against original DB values */
+		ctrl_renumber_values(ctrl, 1);
 		ctrl_check_changes(cntxt, i_ctrl, 0);
 
 		/* Archive old values - set delete time & user */
@@ -628,7 +552,6 @@ int ctrl_add_input(					/* return : 0 on success, other on error */
 			val = dyntab_cell(&ctrl->val, i, 0);
 			val->IdObj = DYNTAB_TOUL(&form->id_obj);
 			val->IdField = field->IdValue;
-			if(val->txt) val->len = strlen(val->txt);
 
 			/* If modified or new : add value in db */
 			if(ctrl->storage == 3) val->b_relation = 1;

@@ -1,12 +1,6 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : ctrl_basic.c
-** Description : handling functions for basic controls
+** Description : HTML handling functions for basic controls
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
@@ -31,7 +25,7 @@ int ctrl_add_option(				/* return : 0 on success, other on error */
 	if(!ctrl->b_selected) RETURN_OK;
 
 	/* Read controls under option */
-	CTRL_ATTR(ctrltree, CTRLTREE);
+	CTRL_OPTIONAL(ctrltree, CTRLTREE);
 
 	switch(form->step)
 	{

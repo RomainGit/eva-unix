@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : mem_utils.c
 ** Description : memory (malloc/free) handling utility functions
 **      Author : Alain BOUTE
@@ -15,12 +9,6 @@
 #include <string.h>
 #include <malloc.h>
 #include <time.h>
-
-#ifdef WIN32
-#define MSIZE(mem) _msize(mem)
-#else
-#define MSIZE(mem) malloc_usable_size(mem)
-#endif
 
 /*********************************************************************
 ** Function : mem_trace
@@ -33,20 +21,20 @@ void mem_trace(
 ){
 	FILE *f;
 	static clock_t t0;
-	char *path = "memtrace.txt";
+	char *path = "D:\\Travail\\ABI\\ApacheWeb\\cgi\\memtrace.txt";
 
 
 	if(type && !mem) return;
 	if(!type)
 	{
-		t0 = clock();
+		t0 = clock(); 
 		f = fopen(path, "wc");
 		fprintf(f, "Clock\tType\tAdress\tSize\n");
 	}
 	else
 	{
 		f = fopen(path,"a");
-		fprintf(f, "%lu\t%s\t0x%lx\t0x%lx\n", clock() - t0, type, (unsigned long)mem, MSIZE(mem));
+		fprintf(f, "%lu\t%s\t0x%lx\t0x%lx\n", clock() - t0, type, mem, _msize(mem));
 	}
 	fclose(f);
 }

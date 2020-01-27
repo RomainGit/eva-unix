@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : ctrl_title.c
 ** Description : handling fonctions for controls of type TITLE
 **      Author : Alain BOUTE
@@ -40,15 +34,10 @@ int ctrl_add_title(					/* return : 0 on success, other on error */
 	DynBuffer *imgsel = NULL;
 	DynBuffer **html = form->html;
 	char *oldlabel = ctrl->LABEL;
-	int b_data = DYNTAB_FIELD_CELL(&form->ctrl->attr, DISPLAYFIELDS) ||
-									CTRL_ATTR_CELL(DISPLAYFIELDS);
-	int b_title = 0;
-
-	/* No output in print mode */
-	if(form->step == HtmlPrint) RETURN_OK;
+	int b_button = 0, b_newobjlabel = 0;
 
 	/* Read control attributes */
-	CTRL_ATTR(ctrltree, CTRLTREE);
+	CTRL_OPTIONAL(ctrltree, CTRLTREE);
 
 	switch(form->step)
 	{
@@ -66,62 +55,53 @@ int ctrl_add_title(					/* return : 0 on success, other on error */
 		ctrl->POSITION = "_EVA_NewColumn";
 		ctrl->NOTES = form->ctrl->NOTES;
 		if(CTRL_ATTR_VAL(TITLE_LABEL)[0] != '1') ctrl->LABEL = form->ctrl->LABEL;
-		if(!ctrl->TABLEBGCOLOR[0]) ctrl->TABLEBGCOLOR = DYNTAB_FIELD_VAL(&cntxt->cnf_data, TITLE_BGCOLOR);
-		if(!ctrl->TABLEBACKGROUND[0]) ctrl->TABLEBACKGROUND = DYNTAB_FIELD_VAL(&cntxt->cnf_data, TITLE_BACKGROUND);
+		if(!ctrl->TABLEBGCOLOR[0]) ctrl->TABLEBGCOLOR = dyntab_field_val(&cntxt->cnf_data, "_EVA_TITLE_BGCOLOR", 0, 1, 0);
+		if(!ctrl->TABLEBACKGROUND[0]) ctrl->TABLEBACKGROUND = dyntab_field_val(&cntxt->cnf_data, "_EVA_TITLE_BACKGROUND", 0, 1, 0);
 
 		/* Build title label & value */
 		if(form->step == FormList || form->step == FormSearch)
 		{
 			/* List or search mode - use form label as value */
  			DYNBUF_ADD_STR(&label, "Liste des fiches");
- 			DYNBUF_ADD(&title, ctrl->LABEL, 0, NO_CONV);
+ 			DYNBUF_ADD(&title, ctrl->LABEL, strlen(ctrl->LABEL), NO_CONV);
 		}
 		else
 		{
+			b_newobjlabel = !dyntab_sz(&form->id_obj, 0, 0) && 
+								(DYNTAB_FIELD_CELL(&form->ctrl->attr, DISPLAYFIELDS) ||
+									CTRL_ATTR_CELL(DISPLAYFIELDS));
 			if(qry_obj_label(cntxt, &label, &notes, NULL, &title, &notes, &img, &imgsel, NULL, 0, NULL, 0))
 				STACK_ERROR;
-			b_title = title != NULL;
-			if(!dyntab_sz(&form->id_obj, 0, 0) && b_data) DYNBUF_ADD_STR(&title, " (Nouvelle fiche)");
+			b_button = img != NULL;
 		}
 
 		/* Handle form title */
 		DYNBUF_ADD_BUF(&form->title, label, NO_CONV);
 		if(label && title) DYNBUF_ADD_STR(&form->title, " - ");
 		DYNBUF_ADD_BUF(&form->title, title, NO_CONV);
+		if(b_newobjlabel) DYNBUF_ADD_STR(&form->title, " (Nouvelle fiche)");
 
 		/* Switch output to html_tiltle & output HTML table header */
 		form->html = &form->html_title;
 		if(ctrl_put_table_header(cntxt, ctrl)) STACK_ERROR;
 
-		/* Output title button */
-		DYNBUF_ADD_STR(form->html, "<td><table align=left cellspacing=0 cellpadding=0 border=0><tr><td valign=top>");
-		if(!img)
-		{
-			DYNBUF_ADD_STR(&img, "_eva_btn_helpbook.gif");
-			DYNBUF_ADD_STR(&imgsel, "_eva_btn_helpbook_s.gif");
-		}
-		if(html_put_open_btn(cntxt, NULL, label, title, notes, img, imgsel, 0, 0, 0, 0, 0)) STACK_ERROR;
-		DYNBUF_ADD_STR(form->html, "</td>");
-
 		/* Output title text */
-		ctrl->LABELPOS = "_EVA_NONE";
-		ctrl->OPTIONBUTTON = "_EVA_NONE";
+		DYNBUF_ADD_STR(form->html, "<td><table align=left cellspacing=0 cellpadding=0 border=0><tr>\n");
+		if(b_button)
+		{
+			DYNBUF_ADD_STR(form->html, "<td>");
+			if(html_put_open_btn(cntxt, form->ctrl->cginame, NULL, 
+				label, title, notes, img, imgsel, add_sz_str("Cliquez pour plus d'informations sur la fiche"), 
+							0, DYNTAB_TOUL(&form->id_obj), 1, 0, 0, 0))
+				STACK_ERROR;
+			DYNBUF_ADD_STR(form->html, "</td>");
+			if(title) ctrl->LABELPOS = "_EVA_NONE";
+			else ctrl->OPTIONBUTTON = "_EVA_NONE";
+			if(b_newobjlabel) DYNBUF_ADD_STR(&title, " (Nouvelle fiche)");
+		}
+		ctrl->LABEL = label ? label->data : "";
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
-		if(b_data && b_title)
-		{
-			DYNBUF_ADD_STR(form->html, "<font size=-2>");
-			DYNBUF_ADD_BUF(form->html, label, TO_HTML);
-			if(label && !strstr(label->data, form->ctrl->LABEL))
-				DYNBUF_ADD3(form->html, " - ", form->ctrl->LABEL, 0, TO_HTML, "");
-			DYNBUF_ADD_STR(form->html, "</font><br>");
-			DYNBUF_ADD_BUF(form->html, title, TO_HTML);
-		}
-		else
-		{
-			DYNBUF_ADD_BUF(form->html, label, TO_HTML);
-			DYNBUF_ADD_STR(form->html, " ");
-			DYNBUF_ADD_BUF(form->html, title, TO_HTML);
-		}
+		DYNBUF_ADD_BUF(form->html, title, TO_HTML);
 		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
 		DYNBUF_ADD_STR(form->html, "</tr></table></td>\n");
 		ctrl->LABEL = oldlabel;

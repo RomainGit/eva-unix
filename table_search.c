@@ -1,14 +1,8 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
-** File : table_search.c
+**form->stepform->stepFile : table_search.c
 ** Description : search functions used for tables & relations
-** Author : Alain BOUTE
-** Created : Aug 21 2003
+**form->step  Author : Alain BOUTE
+**form->step Created : Aug 21 2003
 **********************************************************************/
 
 #include "eva.h"
@@ -128,7 +122,7 @@ int table_add_flt_idlist(				/* return : 0 on success, other on error */
 	unsigned long i_ctrl,				/* in : control index in cntxt->form->ctrl */
 	QryBuild *flt,						/* in : filter nodes to process */
 	int mode							/* in : query mode
-											0 = output to IdList from all
+											0 = output to IdList from all 
 											1 = output to IdList from all - USE LIMIT
 											2 = output to IdListMatch from IdList
 											3 = filter IdList */
@@ -142,26 +136,22 @@ int table_add_flt_idlist(				/* return : 0 on success, other on error */
 	M_FREE(flt->optselect);
 	M_FREE(flt->orderby);
 	M_FREE(sql);
-	if(mode == 3)
-		DYNBUF_ADD_STR(&sql, "CREATE TEMPORARY TABLE IdListMatch ENGINE=MEMORY\n")
-	else
-		DYNBUF_ADD3(&sql, "INSERT INTO ", mode >= 2 ? "IdListMatch" : "IdList", 0, NO_CONV, " (IdObj)\n");
-	if(	qry_build_flt_select(cntxt, &sql, mode >= 2 ? NULL : &empty, flt,
+	DYNBUF_ADD3(&sql, "INSERT INTO ", mode >= 2 ? "IdListMatch" : "IdList", 0, NO_CONV, " (IdObj)\n");
+	if(	qry_build_flt_select(cntxt, &sql, mode >= 2 ? NULL : &empty, flt, 
 								mode == 1 ? tbl->line : 0,
 								mode == 1 ? tbl->lines : 0) ||
 		sql_exec_query(cntxt, sql->data))
 		STACK_ERROR_INFO(err_print_filter(&cntxt->debug_msg, flt));
-	if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > DEBUG_SQL_SLOW_TH) err_print_filter(&cntxt->debug_msg, flt);
+	if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > 0.03) err_print_filter(&cntxt->debug_msg, flt);
 
 	/* Store # of lines in table */
-	tbl->totlines = cntxt->sql_nbrows;
+	tbl->totlines = cntxt->sql_nbrows; 
 
 	/* Rename table if applicable */
 	if(mode == 3 && (
 		sql_exec_query(cntxt, "DROP TABLE IdList") ||
-		sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdList ENGINE=MEMORY SELECT DISTINCT IdObj FROM IdListMatch") ||
-		sql_exec_query(cntxt, "ALTER TABLE IdList ADD INDEX (IdObj)") ||
-		sql_exec_query(cntxt, "DROP TABLE IdListMatch"))) STACK_ERROR;
+		sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdList TYPE=HEAP SELECT DISTINCT IdObj FROM IdListMatch") ||
+		sql_exec_query(cntxt, "ALTER TABLE IdList ADD INDEX (IdObj)"))) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -190,14 +180,14 @@ int table_search_filter(				/* return : 0 on success, other on error */
 	DynBuffer *expr = NULL;
 	DynBuffer *sql = NULL;
 	unsigned long i_col;
-
+	
 	/* Create temporary IdListMatch table */
-	if(sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdListMatch (IdObj INT NOT NULL) ENGINE=MEMORY"))
+	if(sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdListMatch (IdObj INT NOT NULL) TYPE=HEAP"))
 		STACK_ERROR;
 	if(!tbl->srchmode) tbl->srchmode = Contain;
 
 	/* Build query clauses for non trivial field expression of selected search columns */
-	if(tbl->srchwords.nbrows)
+	if(tbl->srchwords.nbrows) 
 		for(i_col = 0; i_col < tbl->field.nbrows; i_col++)
 			if(tbl->srchcol & (1 << i_col))
 	{
@@ -206,22 +196,20 @@ int table_search_filter(				/* return : 0 on success, other on error */
 		if(bracket)
 		{
 			/* Handle SQL expression : check search format */
-			M_FREE(sql);
-			DYNBUF_ADD_STR(&sql, "INSERT INTO IdListMatch (IdObj) SELECT DISTINCT IdObj FROM ValList WHERE ");
+			DYNBUF_ADD3_CELLP(&expr, "(", c, NO_CONV, ")");
 			if(!strcmp(tbl->srchfmt, "_EVA_AGE") || !strncmp(tbl->srchfmt, add_sz_str("_EVA_DATE")))
 			{
-				if(qry_parse_matchmode(cntxt, &sql, "Val", ~0UL, tbl->srchwords.nbrows > 1 ? InBound : Begin, 0, &tbl->srchwords, NULL)) STACK_ERROR;
+				if(qry_parse_matchmode(cntxt, &sql, expr->data, ~0UL, tbl->srchwords.nbrows > 1 ? InBound : Begin, &tbl->srchwords, NULL)) STACK_ERROR;
 			}
 			else
 			{
 				DYNTAB_ADD_CELL(&fields, 0, 0, &tbl->srchwords, i_word, 0);
-				if(qry_parse_matchmode(cntxt, &sql, "Val", ~0UL, tbl->srchmode, 0, &fields, NULL)) STACK_ERROR;
+				if(qry_parse_matchmode(cntxt, &sql, expr->data, ~0UL, tbl->srchmode, &fields, NULL)) STACK_ERROR;
 			}
-			if(sql && c->len)
+			if(sql)
 			{
-				if(qry_eval_sql_fieldexpr(cntxt, "ValList", c->txt, "IdList", NULL)) STACK_ERROR;
-				if(sql_exec_query(cntxt, "ALTER TABLE ValList MODIFY Val TEXT") ||
-					sql_exec_query(cntxt, sql->data)) STACK_ERROR;
+				if(qry_eval_sql_fieldexpr(cntxt, "ValList", sql->data, "IdList", NULL)) STACK_ERROR;
+				if(sql_exec_query(cntxt, "INSERT INTO IdListMatch (IdObj) SELECT DISTINCT IdObj FROM ValList WHERE Val<>''")) STACK_ERROR;
 				sql_drop_table(cntxt, "ValList");
 			}
 		}
@@ -244,14 +232,15 @@ int table_search_filter(				/* return : 0 on success, other on error */
 			{
 				if(!strcmp("_EVA_DOCUMENT", dyntab_val(&tbl->format, i_col, 0)))
 				{
-					if(expr && expr->cnt >= 6 && !strcmp(expr->data + expr->cnt - 6, ".IdObj")) expr->cnt -= 6;
-					DYNBUF_ADD_STR(&expr, "->_EVA_FILE_CLIENT_PATH.Value");
+					if(expr && !strcmp(expr->data, ".IdObj")) expr->cnt = 0;
+					else DYNBUF_ADD_STR(&expr, "->");
+					DYNBUF_ADD_STR(&expr, "_EVA_FILE_CLIENT_PATH.Value");
 				}
 				else if(!strncmp(dyntab_val(&tbl->format, i_col, 0), add_sz_str("_EVA_RELATION")))
 				{
 					DYNBUF_ADD_STR(&expr, "->.Value");
 				}
-				else if(!b_reldotsep)
+				else if(!b_reldotsep) 
 				{
 					DYNBUF_ADD_STR(&expr, ".Value");
 				}
@@ -286,7 +275,7 @@ int table_search_filter(				/* return : 0 on success, other on error */
 
 	/* Replace IdList with IdListMatch */
 	if(sql_exec_query(cntxt, "DROP TABLE IdList") ||
-		sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdList ENGINE=MEMORY SELECT DISTINCT IdObj FROM IdListMatch") ||
+		sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdList TYPE=HEAP SELECT DISTINCT IdObj FROM IdListMatch") ||
 		sql_exec_query(cntxt, "ALTER TABLE IdList ADD INDEX (IdObj)")) STACK_ERROR;
 	tbl->totlines = cntxt->sql_nbrows;
 	sql_drop_table(cntxt, "IdListMatch");
@@ -316,8 +305,11 @@ int table_word_search(					/* return : 0 on success, other on error */
 	int b_outputall = !(tbl->status & TblCtrl_opensearch) || !sz;
 	int sql_trace = cntxt->sql_trace;
 	DynTable data = {0};
-	unsigned long i, j, k;
+	unsigned long i;
 	char *filter_type = CTRL_ATTR_VAL(FILTER_TYPE);
+	unsigned long id_form = DYNTAB_TOUL(&form->id_form);
+	unsigned long id_obj = DYNTAB_TOUL(&form->id_obj);
+	int b_selfilters = 0;
 	char *val;
 	if(tbl->b_ctrl) tbl->attr = &ctrl->attr;
 	if(!tbl->input) tbl->input = "";
@@ -325,12 +317,18 @@ int table_word_search(					/* return : 0 on success, other on error */
 	/* Handle filter debug */
 	if(*DYNTAB_FIELD_VAL(tbl->attr, DEBUG_SQL_FILTER) == '1') cntxt->sql_trace = DEBUG_SQL_RES;
 
-	/* Build selected objects table from base filters if applicable */
-	if(!tbl->from_idlist)
+	if(tbl->from_idlist)
 	{
 		/* Create temporary results list table */
-		if(sql_exec_query(cntxt,
-			"CREATE TEMPORARY TABLE IdList (IdObj INT NOT NULL, PRIMARY KEY (IdObj)) ENGINE=MEMORY"))
+		if(sql_exec_query(cntxt, 
+			"CREATE TEMPORARY TABLE IdListMatch (IdObj INT NOT NULL, PRIMARY KEY (IdObj)) TYPE=HEAP"))
+			STACK_ERROR;
+	}
+	else
+	{
+		/* Create temporary results list table */
+		if(sql_exec_query(cntxt, 
+			"CREATE TEMPORARY TABLE IdList (IdObj INT NOT NULL, PRIMARY KEY (IdObj)) TYPE=HEAP"))
 			STACK_ERROR;
 
 		/* Search mode with insufficient input : return with empty list */
@@ -346,38 +344,22 @@ int table_word_search(					/* return : 0 on success, other on error */
 		}
 
 		/* Process extra filters list */
-		for(i = 0; i < tbl->altfilter.nbrows; i++)
-		{
-			char *typ = dyntab_val(&tbl->typfilter, i, 0);
-			if(!strcmp(typ, "_EVA_ALTFILTER_FILTER"))
+		for(i = 0; i < tbl->altfilter.nbrows; i++) 
+			if(!strcmp(dyntab_val(&tbl->typfilter, i, 0), "_EVA_ALTFILTER_FILTER"))
 			{
 				/* Filter selected on condition : read & eval condition */
 				DynTableCell *c = dyntab_cell(&tbl->condfilter, i, 0);
 				if(!c || !c->txt || !c->len) continue;
-				if(ctrl_eval_fieldexpr(cntxt, ctrl, &data, c->txt)) CLEAR_ERROR_CONT;
+				if(form_eval_fieldexpr(cntxt, &data, id_form, id_obj, c->txt, c->len, NULL, 0)) CLEAR_ERROR_CONT;
 
-				/* Matched condition : set col attribute of tbl->typfilter */
+				/* Matched condition : set col attribute of tbl->condfilter */
 				val = dyntab_val(&data, 0, 0);
-				if(*val && strcmp("0", val) && STRCMPCASE("NULL", val))
-					dyntab_cell(&tbl->typfilter, i, 0)->col = 1;
-			}
-			else if(*typ)
-			{
-				/* Filter when selected user group : check */
-				int b_found = 0;
-				for(k = 0; !b_found && k < tbl->groupfilter.nbcols; k++)
+				if(*val && strcmp("0", val) && stricmp("NULL", val)) 
 				{
-					DynTableCell *c = dyntab_cell(&tbl->groupfilter, i, k);
-					if(c && c->len)
-						for(j = 0; !b_found && j < cntxt->user_groups.nbrows; j++)
-							b_found = !dyntab_txt_cmp(c->txt, c->len, &cntxt->user_groups, j, 0);
+					b_selfilters = 1;
+					c->col = 1;
 				}
-
-				/* Matched condition : set col attribute of tbl->typfilter */
-				if(b_found ^ !strcmp(typ, "_EVA_NOTGROUP"))
-					dyntab_cell(&tbl->typfilter, i, 0)->col = 1;
 			}
-		}
 
 		/* Add table main filter */
 		flt.srcjoin = 0;
@@ -386,9 +368,9 @@ int table_word_search(					/* return : 0 on success, other on error */
 		if((!data.nbrows || *filter_type && strcmp(filter_type, "_EVA_FILTER_FORM")) &&
 			qry_parse_filter_nodes(cntxt, &flt, tbl->attr)) STACK_ERROR;
 	}
-
+	
 	/* Add user selected filters */
-	for(i = 0; i < tbl->selfilter.nbrows; i++)
+	for(i = 0; i < tbl->selfilter.nbrows; i++) 
 	{
 		flt.srcjoin = 0;
 		if(qry_obj_idfield(cntxt, &data, DYNTAB_TOULRC(&tbl->selfilter, i, 0), 0) ||
@@ -396,9 +378,9 @@ int table_word_search(					/* return : 0 on success, other on error */
 	}
 
 	/* Add matched condition filters */
-	if(!tbl->from_idlist) for(i = 0; i < tbl->typfilter.nbrows; i++)
+	if(!tbl->from_idlist) for(i = 0; i < tbl->condfilter.nbrows; i++) 
 	{
-		DynTableCell *c = dyntab_cell(&tbl->typfilter, i, 0);
+		DynTableCell *c = dyntab_cell(&tbl->condfilter, i, 0);
 		if(!c->col) continue;
 		flt.srcjoin = 0;
 		if(qry_obj_idfield(cntxt, &data, DYNTAB_TOULRC(&tbl->altfilter, i, 0), 0) ||
@@ -408,11 +390,11 @@ int table_word_search(					/* return : 0 on success, other on error */
 	/* Fill IdList with initial filter results */
 	if(qry_build_clauses(cntxt, &flt, 1) ||
 		table_add_flt_idlist(cntxt, i_ctrl, &flt, tbl->from_idlist ? 3 : 0)) STACK_ERROR;
-	tbl->totlines0 = tbl->totlines;
+	tbl->totlines0 = tbl->totlines; 
 
 	/* Search inactive or no input : return with full list */
 	if(b_outputall) RETURN_OK;
-
+	
 	/* Process search string depending on column format */
 	DYNTAB_FREE(data);
 	DYNTAB_FREE(tbl->srchwords);
@@ -468,8 +450,8 @@ int table_word_search(					/* return : 0 on success, other on error */
 	{
 		/* Split words in search string */
 		unsigned long i;
-		if(dyntab_from_list(&tbl->srchwords, tbl->input, strlen(tbl->input), " ", 0, 0))
-			RETURN_ERR_MEMORY;
+		if(dyntab_from_list(&tbl->srchwords, tbl->input, strlen(tbl->input), " ", 0, 0)) 
+			RETURN_ERR_MEMORY; 
 
 		/* Build match list for each word */
 		for(i = 0; i < tbl->srchwords.nbrows; i++)

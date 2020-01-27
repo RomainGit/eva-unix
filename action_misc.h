@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : action_misc.h
 ** Description : handling fonctions for misceleanous actions
 **      Author : Alain BOUTE
@@ -55,7 +49,8 @@ int action_openform(				/* return : 0 on success, other on error */
 ** Description : button click handler for CLOSEALL
 *********************************************************************/
 int action_closeall(				/* return : 0 on success, other on error */
-	EVA_context *cntxt				/* in/out : execution context data */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long i_ctrl						/* in : control index in cntxt->form->ctrl */
 );
 
 /*********************************************************************
@@ -65,24 +60,6 @@ int action_closeall(				/* return : 0 on success, other on error */
 int action_export(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,			/* in/out : execution context data */
 	unsigned long i_ctrl		/* in : control index in cntxt->form->ctrl */
-);
-
-/*********************************************************************
-** Function : taskplan_sequence
-** Description : handler for scheduled actions
-*********************************************************************/
-int taskplan_sequence(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	char *task						/* in : task type (DayTask / HourTask) */
-);
-
-/*********************************************************************
-** Function : action_sequence
-** Description : button click handler for ACTION_SEQ
-*********************************************************************/
-int action_sequence(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 );
 
 /*********************************************************************
@@ -113,15 +90,6 @@ int action_sql_script(			/* return : 0 on success, other on error */
 );
 
 /*********************************************************************
-** Function : action_email
-** Description : button click handler for EMAIL
-*********************************************************************/
-int action_email(					/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
-);
-
-/*********************************************************************
 ** Function : action_end_session
 ** Description : button click handler for END_SESSION
 *********************************************************************/
@@ -135,7 +103,8 @@ int action_end_session(			/* return : 0 on success, other on error */
 ** Description : button click handler for DELETE
 *********************************************************************/
 int action_delete(				/* return : 0 on success, other on error */
-	EVA_context *cntxt			/* in/out : execution context data */
+	EVA_context *cntxt,			/* in/out : execution context data */
+	unsigned long i_ctrl		/* in : control index in cntxt->form->ctrl */
 );
 
 /*********************************************************************
@@ -164,14 +133,3 @@ int action_create_objects(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 );
-
-#ifdef PAYSITE
-/*********************************************************************
-** Function : action_pay_site
-** Description : button click handler for PAY_SITE
-*********************************************************************/
-int action_pay_site(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
-);
-#endif

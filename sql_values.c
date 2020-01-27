@@ -1,12 +1,6 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : sql_values.c
-** Description : TVal values table handling functions
+** Description : values handling functions for EVA DB schema
 **      Author : Alain BOUTE
 **     Created : Aug 15 2001
 *********************************************************************/
@@ -38,10 +32,10 @@ int sql_id_values(			/* return : 0 on success, other on error */
 	DYNTAB_ADD(&value, 0, 0, val, sz_val, NO_CONV);
 
 	/* Search in values table */
-	DYNBUF_ADD3(&sql,
-		"-- sql_id_values : [", val, sz_val > 30 ? 30 : sz_val, EXPORT_TABRC, "]\n"
+	DYNBUF_ADD3(&sql, 
+		"-- sql_id_values : [", val, sz_val, EXPORT_TABRC, "]\n"
 		"SELECT IdValue, TxtValue FROM TVal AS TVal0 WHERE ");
-	if(qry_parse_matchmode(cntxt, &sql, "TxtValue", 0, matchmode, 0, &value, NULL))
+	if(qry_parse_matchmode(cntxt, &sql, "TxtValue", 0, matchmode, &value, NULL))
 		STACK_ERROR;
 	if(limit)
 		DYNBUF_ADD3_INT(&sql, " LIMIT ", limit, "");
@@ -67,42 +61,14 @@ int sql_id_value(			/* return : 0 on success, other on error */
 	DynTable sqlres = { 0 };
 	unsigned long i;
 
-	/* Initialize & check params */
-	if(!id || !cntxt) RETURN_OK;
-	*id = 0;
-	if(!val || !*val || !sz_val) RETURN_OK;
-
-	/* Handle value cache if value fits in cache */
-	if(sz_val < sizeof(cntxt->vc[0].val))
-	{
-		struct ValCache *vc;
-		char v[sizeof(vc->val)] = {0};
-		strncpy(v, val, sz_val);
-		vc = bsearch(v, cntxt->vc, cntxt->vc_nb, sizeof(cntxt->vc[0]), (int(*) (const void*,const void*)) strcmp);
-		if(vc)
-		{
-			/* Return if value found in cache */
-			*id = vc->id;
-			RETURN_OK;
-		}
-	}
-
 	/* Search value in values table */
+	*id = 0;
 	if(sql_id_values(cntxt , &sqlres, val, sz_val, Exact, 0)) STACK_ERROR;
 
 	/* Search for exact value in results */
 	for(i = 0; !*id && i < sqlres.nbrows; i++)
 		if(!dyntab_txt_cmp(val, sz_val, &sqlres, i, 1))
 			*id = DYNTAB_TOULRC(&sqlres, i, 0);
-
-	/* Insert value in cache if applicable */
-	if(*id && sz_val < sizeof(cntxt->vc[0].val) && cntxt->vc_nb < sizeof(cntxt->vc)/sizeof(cntxt->vc[0]))
-	{
-		struct ValCache *vc = cntxt->vc + cntxt->vc_nb++;
-		strncpy(vc->val, val, sz_val);
-		vc->id = *id;
-		qsort(cntxt->vc, cntxt->vc_nb, sizeof(cntxt->vc[0]), (int(*) (const void*,const void*)) strcmp);
-	}
 
 	RETURN_OK_CLEANUP;
 }
@@ -142,7 +108,7 @@ int sql_add_value(			/* return : 0 on success, other on error */
  	DynBuffer *sql = NULL;
 
 	/* Check params */
-	if(!id) RETURN_ERR_PARAM({});
+	if(!id) RETURN_ERR_PARAM(1);
 	*id = 0;
 	if(!val || !*val || !sz_val) RETURN_OK;
 
@@ -151,23 +117,24 @@ int sql_add_value(			/* return : 0 on success, other on error */
 	if(*id) RETURN_OK;
 
 	/* Create new value if needed */
+	if(!*id)
 	{
 		/* Get the next available IdValue */
-		if(sql_exec_query(cntxt ,
+		if(sql_exec_query(cntxt , 
 			"-- sql_add_value : Get the next available IdValue\n"
-			"SELECT Max(IdValue)+1 FROM TVal") ||
+			"SELECT Max(IdValue)+1 FROM TVal") || 
 			sql_get_table(cntxt, &sqlres, 0)) STACK_ERROR;
 		*id = sqlres.nbrows ? DYNTAB_TOUL(&sqlres) : 1;
 
 		/* Insert New value in values table */
-		DYNBUF_ADD3_INT(&sql,
+		DYNBUF_ADD3_INT(&sql, 
 			"-- sql_add_value : Insert New value in values table\n"
 			"INSERT INTO TVal (IdValue, TxtValue) VALUES (", *id, ", ");
 		DYNBUF_ADD3(&sql, "'", val, sz_val, SQL_NO_QUOTE, "')");
 		if(sql_exec_query(cntxt , sql->data)) STACK_ERROR;
 	}
-
-	//if(sql_id_value(cntxt, val, sz_val, id)) STACK_ERROR;
+	
+	if(sql_id_value(cntxt, val, sz_val, id)) STACK_ERROR;
 	if(!*id) RETURN_ERROR("Impossible de créer une nouvelle valeur", ERR_PUT_TXT("val=", val, sz_val));
 
 	RETURN_OK_CLEANUP;

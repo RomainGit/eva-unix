@@ -1,55 +1,10 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : qry_build.c
 ** Description : functions for building SQL queries from filters and field expressions
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
 
-
-/*********************************************************************
-** Function : qry_cache_idobj_field
-** Description : read a single object data
-*********************************************************************/
-#define qry_cache_idobj(res, idobj) qry_cache_idobj_field(cntxt, res, idobj, NULL, 3)
-int qry_cache_idobj_field(			/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *res,					/* out : result : object data */
-	unsigned long idobj,			/* in : object Id */
-	char *field,					/* in : field values to read - read all fields if NULL */
-	int mode						/* in : bit mask
-										bit 0 : copy data if not 0
-										bit 1 : free res if not 0 */
-);
-
-/*********************************************************************
-** Function : qry_uncache_idobj
-** Description : remove object data from cache
-*********************************************************************/
-void qry_uncache_idobj(
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long idobj				/* in : object Id to remove from cache */
-);
-
-/*********************************************************************
-** Function : qry_cache_objlist_field
-** Description : read multiple objects data
-*********************************************************************/
-#define qry_cache_objlist(res, idobj) qry_cache_objlist_field(cntxt, res, idobj, NULL, 3)
-int qry_cache_objlist_field(		/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *res,					/* out : result : object data */
-	DynTable *idobj,				/* in : objects Id list */
-	char *field,					/* in : field values to read - read all fields if NULL */
-	int mode						/* in : bit mask
-										bit 0 : copy data if not 0
-										bit 1 : free res if not 0 */
-);
 
 /*********************************************************************
 ** Function : qry_eval_sqlexpr_var
@@ -59,31 +14,7 @@ int qry_eval_sqlexpr_var(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	DynBuffer **sqlexpr,				/* out : SQL expression with variables evaluated */
 	char *expr,							/* in : SQL expression to process */
-	DynTable *vardata,					/* in : variables definition data */
-	char *srctbl						/* in : source table name (for #SRCTBL symbol) */
-);
-
-
-/*********************************************************************
-** Function : qry_eval_var_expr_table
-** Description : replace variables with their values in a table of expressions
-*********************************************************************/
-int qry_eval_var_expr_table(		/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *varexpr,				/* in/out : table of expressions */
-	DynTable *var_data				/* in : object data with variable definitions */
-);
-
-/*********************************************************************
-** Function : qry_eval_fieldexpr
-** Description : read result of qry_eval_sql_fieldexpr in a DynTable
-*********************************************************************/
-int qry_eval_fieldexpr(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *res,					/* out : result values in col 0 */
-	char *expr,						/* in : SQL expression to evaluate */
-	char *srctbl,					/* in : source table name - IdObj column contains objects Ids */
-	DynTable *vardata				/* in : variables definitions */
+	DynTable *vardata					/* in : variables definition data */
 );
 
 /*********************************************************************
@@ -201,7 +132,6 @@ int qry_parse_matchmode(		/* return : 0 on success, other on error */
 	char *member,				/* in : table member to compare */
 	unsigned long join,			/* in : join number */
 	MatchMode match,			/* in : match operator to parse */
-	MatchType mtyp,				/* in : match value type */
 	DynTable *values,			/* in : values to compare */
 	int *b_valjoin				/* in : do not optimize if NULL
 								  out : (if not NULL) 0 if no join used */
@@ -271,38 +201,6 @@ int qry_filter_objects(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	DynTable *res,					/* out : result - objects selected by filter */
 	QryBuild *flt					/* in : filter with nodes set */
-);
-
-/*********************************************************************
-** Function : qry_filter_listobj
-** Description : execute query from filter nodes - output to dynbuf
-*********************************************************************/
-int qry_filter_listobj(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynBuffer **res,				/* out : result - comma separated list of selected objects */
-	QryBuild *flt					/* in : filter with nodes set */
-);
-/*********************************************************************
-** Function : qry_to_listobj
-** Description : execute query from filter list - output to dynbuf
-*********************************************************************/
-int qry_to_listobj(					/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynBuffer **res,				/* out : result - comma separated list of selected objects */
-	DynTable *forms,				/* in : list of accepted formstamps combined with OR */
-	DynTable *filters				/* in : list of filters (IdObj) combined with AND */   
-);
-
-/*********************************************************************
-** Function : qry_filter_table
-** Description : execute query from filter nodes - output to SQL table
-*********************************************************************/
-int qry_filter_table(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	char *res,						/* out : result - SQL table name */
-	QryBuild *flt,					/* in : filter with nodes set */
-	int options						/* in : bit mask
-										bit 0 : INSERT if set, CREATE else */
 );
 
 /*********************************************************************

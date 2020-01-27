@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : eva.h
 ** Description : header for EVA cgi interface
 **      Author : Alain BOUTE
@@ -13,6 +7,7 @@
 
 /* Standard C includes */
 #define STRICT
+#include <io.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,53 +15,17 @@
 #include <string.h>
 #include <malloc.h>
 #include <ctype.h>
+#include <direct.h>
 #include <math.h>
+#include <process.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/timeb.h>
 
 
-/**********************************************************************
-** System dependent includes & macros
-***********************************************************************/
-#if defined _WIN64 || defined _WIN32
-/**********************************************************************
-** Windows declarations
-***********************************************************************/
-/* VC6 - Disable warning message C4115 in rpcasync.h : '_RPC_ASYNC_STATE' : named type definition in parentheses */
-#pragma warning( disable : 4115 )
-#include <io.h>
-#include <stdlib.h>
-#include <direct.h>
-#include <process.h>
-#include <windows.h>
-#include <winsock.h>
-#define MKDIR(rep) mkdir(rep)
-#define STRCMPCASE(cmp1,cmp2) stricmp(cmp1,cmp2)
-#define STRNCMPCASE(cmp1,cmp2, count) _strnicmp(cmp1,cmp2, count)
-#define SLEEP(arg) Sleep(arg)
+#ifdef WIN32
 #define snprintf _snprintf
-#define DD "\\"
-#else
-/**********************************************************************
-** UNIX declarations
-***********************************************************************/
-/* gcc - Disable warning message 1787|warning: suggest parentheses around ‘&&’ within ‘||’ [-Wparentheses]| */
-#pragma GCC diagnostic ignored "-Wparentheses"
-/* gcc - Disable warning message 459|warning: enumeration value ‘FormSave’ not handled in switch [-Wswitch]| */
-#pragma GCC diagnostic ignored "-Wswitch"
-/* gcc - Disable warning message 181|warning: the address of ‘filename’ will always evaluate as ‘true’ [-Waddress]| */
-#pragma GCC diagnostic ignored "-Waddress"
-#include <unistd.h>
-#include <dirent.h>
-#include <sys/io.h>
-#define _MAX_PATH PATH_MAX
-#define MKDIR(rep) mkdir(rep,0774)
-#define STRCMPCASE(cmp1,cmp2) strcasecmp(cmp1,cmp2)
-#define STRNCMPCASE(cmp1,cmp2, count) strncasecmp(cmp1,cmp2, count)
-#define SLEEP(arg) sleep(arg)
-#define DD "/"
 #endif
 
 /* EVA libraries definitions */
@@ -93,7 +52,6 @@ typedef struct _FormsCache {
 	DynTable inlabel; 			/* use value for label */
 	DynTable pfx;				/* prefix value with label */
 	DynTable separ;				/* values separator */
-	DynTable dnotes;			/* values separator */
 
 	/* Object icon */
 	DynTable img;				/* normal image */
@@ -105,53 +63,41 @@ typedef struct _FormsCache {
 
 /*********************************************************************
 ** Typedef : MatchMode
-** Description : compare operators for DB records
+** Description : compare operators for IdValue, IdObj, IdRelObj members
 *********************************************************************/
 typedef enum _MatchMode
 {
-		NoMatch=0,			/* No matching condition (always match) */
-		ObjList,			/* IdObj IN (value1, value2, ...) */
-		NotObjList,			/* IdObj NOT IN (value1, value2, ...) */
-		RelList,			/* IdRelObj IN (value1, value2, ...) */
-		NotRelList,			/* IdRelObj NOT IN (value1, value2, ...) */
-		Different,			/* IdValue NOT IN (value1, value2, ...) */
-		Exact,				/* IdValue IN (value1, value2, ...) */
-		IdValList,			/* IdValue IN (value1, value2, ...) - no value check */
-		NotIdValList,		/* IdValue NOT IN (value1, value2, ...) - no value check */
-		Like,				/* (TxtVal LIKE 'value1') OR (TxtVal LIKE 'value2') ... */
-		NotLike,			/* (TxtVal NOT LIKE 'value1') AND (TxtVal NOT LIKE 'value2') ... */
-		Contain,			/* (TxtVal LIKE '%value1%') OR (TxtVal LIKE '%value2%') ... */
-		NotContain,			/* (TxtVal NOT LIKE '%value1%') AND (TxtVal NOT LIKE '%value2%') ... */
-		Begin,				/* (TxtVal LIKE 'value1%') OR (TxtVal LIKE 'value2%') ... */
-		NotBegin,			/* (TxtVal NOT LIKE 'value1%') AND (TxtVal NOT LIKE 'value2%') ... */
-		Larger,				/* TxTVal > value */
-		LargerEqual,		/* TxTVal >= value */
-		Smaller,			/* TxTVal < value */
-		SmallerEqual,		/* TxTVal <= value */
-		InBound,			/* TxTVal >= value1 AND TxtVal <= value2 */
-		NotInBound,			/* TxTVal < value1 AND TxtVal > value2 */
+	NoMatch=0,			/* No matching condition */
+	ObjList,			/* IdObj IN (value1, value2, ...) */
+	NotObjList,			/* IdObj NOT IN (value1, value2, ...) */
+	RelList,			/* IdRelObj IN (value1, value2, ...) */
+	NotRelList,			/* IdRelObj NOT IN (value1, value2, ...) */
+	Different,			/* IdValue NOT IN (value1, value2, ...) */
+	Exact,				/* IdValue IN (value1, value2, ...) */
+	IdValList,			/* IdValue IN (value1, value2, ...) - no value check */
+	NotIdValList,		/* IdValue NOT IN (value1, value2, ...) - no value check */
+	Like,				/* (TxtVal LIKE 'value1') OR (TxtVal LIKE 'value2') ... */
+	NotLike,			/* (TxtVal NOT LIKE 'value1') AND (TxtVal NOT LIKE 'value2') ... */
+	Contain,			/* (TxtVal LIKE '%value1%') OR (TxtVal LIKE '%value2%') ... */
+	NotContain,			/* (TxtVal NOT LIKE '%value1%') AND (TxtVal NOT LIKE '%value2%') ... */
+	Begin,				/* (TxtVal LIKE 'value1%') OR (TxtVal LIKE 'value2%') ... */
+	NotBegin,			/* (TxtVal NOT LIKE 'value1%') AND (TxtVal NOT LIKE 'value2%') ... */
+	Larger,				/* TxTVal > value */
+	LargerEqual,		/* TxTVal >= value */
+	Smaller,			/* TxTVal < value */
+	SmallerEqual,		/* TxTVal <= value */
+	InBound,			/* TxTVal >= value1 AND TxtVal <= value2 */
+	NotInBound,			/* TxTVal < value1 AND TxtVal > value2 */
+	NumInBound,			/* TxTVal >= value1 AND TxtVal <= value2 - numerical comparison */
+	NumNotInBound		/* TxTVal < value1 AND TxtVal > value2 - numerical comparison */
 }
 	MatchMode;
-
-
-/*********************************************************************
-** Typedef : MatchType
-** Description : compare type for DB records
-*********************************************************************/
-typedef enum _MatchType
-{
-		MatchText=0,		/* Standard text comparison */
-		MatchNoCase,		/* Case insensitive text comparison */
-		MatchNoCaseAcc,		/* Case & accents insensitive text comparison */
-		MatchNum			/* Numerical comparison */
-}
-	MatchType;
 
 /*********************************************************************
 ** Typedef : RelationMode
 ** Description : relation mode for query functions
 *********************************************************************/
-typedef enum _RelationMode
+typedef enum _RelationMode 
 {
 	RelNone=0,			/* TLink.IdObj = TLink1.IdObj */
 	RelDirect,			/* TLink.IdRelObj = TLink1.IdObj */
@@ -165,13 +111,10 @@ typedef enum _RelationMode
 ** Typedef : FieldModifier
 ** Description : modifier type for field expressions
 *********************************************************************/
-typedef enum _FieldModifier
+typedef enum _FieldModifier 
 {
 	F_None=0,
-		F_Pkey,
 		F_Obj,
-		F_IdField,
-		F_IdValue,
 		F_Field,
 		F_Value,
 		F_RelObj,
@@ -189,23 +132,22 @@ typedef enum _FieldModifier
 ** Description : used to build SQL queries for filters
 *********************************************************************/
 typedef struct _QryBuilNode
-{
-	DynTable field;				/* fields name */
-	FieldModifier modif;		/* field modifier */
-	MatchMode match;			/* comparison operator */
-	MatchType mtype;			/* comparison type */
-	DynTable value;				/* values to compare */
-	RelationMode rel;			/* relation operator */
+{				   		
+	DynTable field;				/* fields name */	
+	FieldModifier modif;		/* field modifier */	
+	MatchMode match;			/* comparison operator */	
+	DynTable value;				/* values to compare */	
+	RelationMode rel;			/* relation operator */	
 	unsigned long srcjoin;		/* source join node index */
 	unsigned long curjoin;		/* join # used for this node */
 	char datemin[16];			/* minimum date of validity for records */
 	char datemax[16];			/* maximum date of validity for records */
-	DynTable idobjmatch;		/* add where clause IdObj IN(idobjmatch) if given */
-	DynBuffer *whocr;			/* IdWhoCr condition */
-	DynBuffer *whodel;			/* IdWhoDel condition */
-	DynBuffer *cond;			/* extra node condition */
+	DynTable idobjmatch;		/* add where clause IdObj IN(idobjmatch) if given */	
+	DynBuffer *whocr;			/* IdWhoCr condition */	
+	DynBuffer *whodel;			/* IdWhoDel condition */	
+	DynBuffer *cond;			/* extra node condition */	
 	int b_joinval;				/* use join on TVal if not 0 */
-	int b_joinfld;				/* use join on TField if not 0 */
+	int b_joinfld;			/* use join on TField if not 0 */
 }
 	QryBuilNode;
 
@@ -236,7 +178,7 @@ typedef struct _QryBuild {
 	char *selidobj;				/* use this expression instead of TLink0.IdObj in select clause */
 	int debug;					/* output SQL query in cntxt->debug_msg if not 0 */
 	int b_recdata;				/* read detailed data (IdRelObj, Field, Num, Line, ...) for records if not 0 */
-	int b_single_last_field;	/* squeeze fields other than first on last field node if set (for sort purposes) */
+	int b_single_last_field;	/* squeeze fields other than fist on last field node if set (for sort purposes) */
 }
 	QryBuild;
 
@@ -254,6 +196,7 @@ typedef struct _ObjData {
 	char *value;				/* value text */
 	unsigned long Num;			/* value index to handle multiple values */
 	unsigned long Line;			/* value index to handle table rows & list options level */
+	unsigned long Lvl;			/* value index to handle list options level */
 	unsigned long Lang;			/* language code to handle multiple language values */
 	unsigned long IdCtrl;		/* object identifier of creator control in TLink */
 	unsigned long IdForm;		/* object identifier of creator form in TLink */
@@ -283,7 +226,7 @@ typedef struct _CGIData {
 	char *subfield;				/* subcontrol field name (for control extra inputs) */
 	unsigned long Num;			/* value index to handle multiple values */
 	unsigned long Line;			/* value index to handle table rows */
-	unsigned long Lang;			/* language code to handle multiple language values */
+	unsigned long Lvl;			/* value index to handle list options level */
 	unsigned long i_old;		/* index in cntxt->cgi of input holding previous value */
 
 	/* Processing data */
@@ -296,11 +239,12 @@ typedef struct _CGIData {
 ** Description : access rights definition
 *********************************************************************/
 #define AccessNone		0x0
-#define AccessView		0x1
-#define AccessEdit		0x2
+#define AccessRead		0x10
+#define AccessWrite		0x20
 #define AccessCreate	0x4
 #define AccessDelete	0x8
-#define AccessAll		(AccessView | AccessEdit | AccessCreate | AccessDelete)
+#define AccessView		0x1
+#define AccessEdit		0x2
 
 /*********************************************************************
 ** Typedef : TableFormat
@@ -309,13 +253,11 @@ typedef struct _CGIData {
 typedef struct _ObjTableFormat {
 	/* Data source */
 	DynTable *attr;				/* source for all table attributes read in the structure */
-	DynTable tattr;				/* inner storage for table attributes */
 	int b_ctrl;					/* use controls attributes if not 0 */
 	int from_idlist;			/* objects list is based on table IdList if not 0 */
 
 	/* Status data */
 	int status;					/* functions status */
-	int b_no_status;			/* do not output status if set */
 	unsigned long line;			/* first displayed line */
 	unsigned long lines;		/* page size */
 	unsigned long totlines0;	/* total # of lines after base filter */
@@ -345,26 +287,21 @@ typedef struct _ObjTableFormat {
 	DynTable altfilter;			/* extra filters for table */
 	DynTable typfilter;			/* selection type for extra filters */
 	DynTable condfilter;		/* selection condition for extra filters */
-	DynTable groupfilter;		/* user group for extra filters */
 	DynTable selfilter;			/* extra filters for user selection (col0=id, col1=label) */
 
 	/* Columns format */
 	DynTable label;				/* columns labels */
 	DynTable field; 			/* columns contents (field expression) */
 	DynTable format; 			/* value format */
+	DynTable notes;				/* column notes */
 	DynTable fontsize;			/* column font size */
 	DynTable align;				/* column horizonttal alignment */
 	DynTable bold;				/* column is bold */
 	DynTable underline;			/* column is underlined */
 	DynTable strip;				/* value strip length */
+	DynTable place;				/* column placement */
 	DynTable distinctval;		/* output distinct values */
-	DynTable lblstyle;			/* CSS style for label cell */
-	DynTable celstyle;			/* CSS style for value cells */
-	DynTable notes;				/* column notes */
 	DynTable debug;				/* debug status */
-	DynTable notable;			/* optimise column evaluation if set */
-	DynTable lblunit;			/* label to display after value (typically for number units) */
-	unsigned long colbrk;		/* index of first column to output inline */
 }
 	ObjTableFormat;
 
@@ -387,10 +324,9 @@ typedef struct _EVA_ctrl
 	DynTable cgival;			/* control values from CGI data */
 	DynTable allval;			/* holds all control values when val is filtered */
 	DynTable alldbval;			/* holds all control values from database when val is filtered */
-	DynTable varsvalues;		/* values of control variables (for optimisation purpose) */
+	DynTable childdata;			/* control children object data */
 	int access;					/* current access mode : bit combination of AccessNone, AccesssRead, ... */
-	int access0;				/* access mode checked after CtrlRead step */
-	int accesschkd;				/* access mode after CtrlRead step */
+	int access0;				/* access mode after CtrlRead step */
 	int b_selected;				/* for options : 1 if selected */
 	int b_modified;				/* for input : 1 if user has changed the control values */
 	int outmode;				/* for input : 0 if not output, HtmlEdit/HtmlView else */
@@ -404,7 +340,7 @@ typedef struct _EVA_ctrl
 	char dateref[16];			/* reference date for date inputs */
 	char ageref[16];			/* reference date for age inputs */
 	int b_cgicleared;			/* set if CGI input where cleared during read step (restored if save dialog on that control) */
-
+	
 	/* Control common attributes values */
 	char *CONTROL;
 	char *TYPE;
@@ -417,15 +353,13 @@ typedef struct _EVA_ctrl
 	char *VALIGN;
 	char *WIDTH;
 	char *HEIGHT;
-	char *NOBR;
 	char *BGCOLOR;
 	char *BACKGROUND;
-	unsigned long COLSPAN;
-	unsigned long ROWSPAN;
+	char *COLSPAN;
+	char *ROWSPAN;
 	char *OPTIONBUTTON;
 	char *ALLOWEMPTY;
 	char *MULTIPLE;
-	char *LABEL_NOSEL;
 	char *FONTFACE;
 	char *FONTSIZE;
 	char *FONTCOLOR;
@@ -449,15 +383,10 @@ typedef struct _EVA_ctrl
 	unsigned long LABELCOLSPAN;
 	unsigned long LABELROWSPAN;
 	char *TABLEWIDTH;
-	char *TABLEHEIGHT;
 	char *TABLERULES;
 	char *TABLEBGCOLOR;
 	char *TABLEBACKGROUND;
 	unsigned long BORDER;
-	char *CTRL_STYLE;
-	char *CELL_STYLE;
-	char *LABEL_STYLE;
-	char *TABLE_STYLE;
 }
 	EVA_ctrl;
 
@@ -468,16 +397,16 @@ typedef struct _EVA_ctrl
 typedef enum
 {
 	CtrlRead,		/* Read control values from CGI or DB */
-	FormSave,		/* Save control values to DB */
+	FormSave,		/* Save control values to DB */ 
 	InputCheck,		/* Control values check : set ctrl->error and ctrl->errmsg on warning or error */
 	HtmlSaveDlg,	/* Save dialog input mode */
-	HtmlEdit,		/* Standard form input mode */
+	HtmlEdit,		/* Standard form input mode */ 
 	HtmlStepEdit,	/* Single step input mode (not implemented yet) */
-	HtmlView,		/* View mode */
-	HtmlPrint,		/* Print mode */
-	FormList,
-	FormSearch,
-	FormStats,
+	HtmlView,		/* View mode */ 
+	HtmlPrint,		/* Print mode */ 
+	FormList, 
+	FormSearch, 
+	FormStats, 
 	FormValues		/* Values detail & history mode */
 }
 	EVA_execmode;
@@ -489,8 +418,8 @@ typedef enum
 typedef struct _EVA_form
 {
 	EVA_ctrl *ctrl;				/* current form controls */
-	unsigned long nb_ctrl;		/* # of elements in ctrl */
-	unsigned long i_ctrl;		/* current control index */
+	unsigned long nb_ctrl;		/* # of used elements in ctrl */
+	unsigned long sz_ctrl;		/* # of elements in ctrl */
 	DynTable id_form;			/* form object Id */
 	DynTable id_obj;			/* current object Id */
 	DynTable objdata;			/* current object data read from database */
@@ -500,18 +429,15 @@ typedef struct _EVA_form
 	/* Status data */
 	DynBuffer *title;			/* form title */
 	DynTable call_data;			/* caller data */
-	unsigned long *tabs;		/* tabs list (i_ctrl) */
-	unsigned long nb_tabs;		/* # of items in tabs */
-	unsigned long seltab;		/* selected tab control (index in form->ctrl) */
-	unsigned long opttabid;		/* optimized tab control (IdObj) */
+	unsigned long nb_tabs;		/* # of tab controls in form */
+	DynTable seltab;			/* current tab object Id */
+	unsigned long i_seltab;		/* selected tab index in ctrl */
 	unsigned long i_ctrl_clic;	/* control index of the clicked button */
 	int b_modified;				/* for input : 1 if user has changed the control values */
 	int error;					/* for input : bit1=warning, bit2=error */
 	int has_data;				/* for input : not 0 if form holds data */
 	int b_reload;				/* 1 if form should be reloaded before displayed */
-	int b_dontfree;				/* 1 if form must not be free-ed */
-	DynTable varsvalues;		/* values of form variables (for optimisation purpose) */
-
+	
 	/* Control processsing data */
 	EVA_execmode prevstep;		/* previous output format */
 	EVA_execmode nextstep;		/* scheduled output format */
@@ -526,12 +452,13 @@ typedef struct _EVA_form
 	DynBuffer *html_top;		/* HTML code for top controls */
 	DynBuffer *html_tabs;		/* HTML code for tab buttons */
 	DynBuffer *html_tab;		/* HTML code for tab controls */
-	DynBuffer *html_menu;		/* HTML code for menu controls */
+	DynBuffer *html_bot;		/* HTML code for bottom controls */
 	DynBuffer **html;			/* current buffer to output to */
 
 	/* Multiple values processing data */
 	unsigned long Num;			/* value index to handle multiple values */
 	unsigned long Line;			/* value index to handle table rows */
+	unsigned long Lvl;			/* value index to handle list options level */
 }
 	EVA_form;
 
@@ -590,11 +517,8 @@ typedef struct _PivotTableField
 	unsigned long nbdistval;				/* # of distinct values in datatable */
 	unsigned long nbsrcobj;					/* # of distinct objects in srctable */
 
-	unsigned long maxlabels;				/* maximum # of labels */
-	char *basefmt;							/* field display format */
+	unsigned long maxlabels;					/* maximum # of labels */
 	char *dispfmt;							/* field display format */
-	char *graphtyp;							/* chart type */
-	DynTable graphfile;						/* file for personalized chart */
 	char *dispunit;							/* field display unit */
 	char *timeway;							/* date mode for calendar first display */
 	char dateref[16];						/* reference date for age calculation */
@@ -604,7 +528,6 @@ typedef struct _PivotTableField
 	DynTable slices;						/* field slices width / limits */
 	DynTable sr_src;						/* search strings for values substitution */
 	DynTable sr_dest;						/* replace strings for values substitution */
-	DynTable sr_pos;						/* labels position for sorting */
 	DynTable optsrc;						/* list inputs to use options for search / replace */
 	size_t ltrunc;							/* left truncation : # of chars */
 	size_t rtrunc;							/* right truncation : # of chars */
@@ -614,8 +537,8 @@ typedef struct _PivotTableField
 	int b_sortdesc;							/* reverse sort if not 0 */
 	DynTable emptyval;						/* value to use for empty label */
 	int b_showemptyval;						/* show empty values if not 0 */
-	int b_shownomatch;						/* show labels with no values if not 0 */
-	unsigned long stackcols_limit;			/* max # of chars before column labels are output stacked */
+	int b_shownomatch;						/* show values not matching other (row / col) table if not 0 */
+	unsigned long stackcols_limit;					/* max # of chars before column labels are output stacked */
 	int b_stackcols;						/* output stacked columns labels */
 	char *clicmode;							/* action to take upon values click */
 	unsigned long objlist;					/* object id of list control used upon values click */
@@ -628,20 +551,15 @@ typedef struct _PivotTableField
 	char *vmax;								/* values maximum */
 	size_t sz_vmax;							/* size of values maximum */
 	DynBuffer *where;						/* WHERE clause for cross values table */
-	double resmin;							/* minimum result value (total) */
-	double resmax;							/* maximum result value (total) */
-	char *graph_pos;						/* graph position */
-	char *graph_color;						/* graph color */
-	unsigned long graph_size;				/* graph main dimension (pixels) */
-}
+} 
 	PivotTableField;
 
 /*********************************************************************
 ** Typedef : PivotTable
 ** Description : pivot table parameters & results
 *********************************************************************/
-#define MAX_PVT_DATAFIELDS	20
-#define MAX_PVT_ROWFIELDS	30
+#define MAX_PVT_DATAFIELDS	5
+#define MAX_PVT_ROWFIELDS	20
 #define MAX_PVT_COLFIELDS	5
 typedef struct _PivotTable
 {
@@ -659,7 +577,6 @@ typedef struct _PivotTable
 	DynTable rowcol_relfield;				/* relation field between row & col */
 	char *clicmode;							/* action to take upon values click */
  	unsigned long objlist;					/* object id of list control used upon values click */
-	DynTable dynnotes;						/* dynamic labels (calc-ed values controls IdObj) */
  	unsigned long tblnotes;					/* contents of pivot table notes - switches listed below */
 #define TblNote_note				0x1
 #define TblNote_rownote				0x2
@@ -672,7 +589,6 @@ typedef struct _PivotTable
 #define TblNote_datadetail			0x80
 #define TblNote_alldetail			0xF0
 #define TblNote_dynamic				0x100
-#define TblNote_minimal				0xF000
 
 	char objtable[32];						/* table holding base object Ids */
 	char *basetable;						/* base table for pivot table calculation */
@@ -704,7 +620,7 @@ typedef struct _PivotTable
 	DynBuffer *group;						/* GROUP clause for cross values table */
 	char *rowcolclic;						/* row & column index of clicked cell */
 	int b_empty;							/* no data selected if not 0 */
-}
+} 
 	PivotTable;
 
 /*********************************************************************
@@ -719,6 +635,7 @@ typedef struct _EVA_context
 	DynTable alt_form;			/* id of the alternate form (displayed under main form) */
 	DynTable alt_obj;			/* id of the current object in alternate form */
  	EVA_form *form;				/* current form data */
+	unsigned long i_ctrl;		/* current processed control */
  	DynBuffer *focus1;			/* CGI name of 1st control to set focus on */
  	DynBuffer *focus2;			/* CGI name of 2nd control to set focus on */
  	DynBuffer *focus3;			/* CGI name of 3rd control to set focus on */
@@ -730,28 +647,18 @@ typedef struct _EVA_context
 
 	/* Session handling data */
 	DynTable session;			/* id of the current session */
-	DynTable sess_data;			/* data of the current session */
 	DynTable id_cnf;			/* id of the server configuration object */
-	DynTable cnf_data;			/* server configuration data from DB [#SRVCNF] object */
-	DynTable cnf_server;		/* server configuration data from file serverconfig.txt */
-	int b_identified;			/* 1 if user is identified with a valid account */
-	int b_login_pwd;			/* 1 if user has entered valid login / pwd on this page */
+	DynTable cnf_data;			/* service configuration data */
+	DynTable cnf_server;		/* server configuration data */
 	DynTable id_user;			/* id of the logged in user */
 	DynTable user_data;			/* object data of the logged in user */
-	DynTable user_groups;		/* user groups of the logged in user */
-	DynTable pagetitle;			/* selected page title text */
-	DynTable pagebottom;		/* selected page bottom display mode */
-	DynTable pagebtctrl;		/* selected page bottom control */
 	DynTable menubar;			/* selected menu bar form */
-	DynTable homepage;			/* selected home page form */
-	DynTable imgpath;			/* skins folders sequence to search for images */
+	DynTable homepage;			/* selected home page */
+	char *imgpath;				/* path to search first for images */
+	size_t imgpath_sz;			/* imgpath string length */
+	int b_user_ok;				/* 1 if user is identified */
 	enum { OptBtn_None, OptBtn_Help, OptBtn_OpenSame, OptBtn_OpenBottom }
 		opt_btn_mode;			/* defines how option button is handled */
-	DynTable viewforms;			/* allowed forms for option button */
-	int b_admin;				/* set when current user is administrator */
-	int b_noipcheck;			/* set when IP changes must not be checked */
-	DynTable mail_admin;		/* administrator email */
-	unsigned long id_public;	/* id of public user account */
 
 	/* CGI data */
 	DynBuffer *input;			/* CGI input data */
@@ -763,40 +670,23 @@ typedef struct _EVA_context
 	int cgiencodemultipart;		/* 1 if multipart encoding is needed for next page (input of type file) */
 	int imgwait;				/* 1 if JavaScript wait image must be used */
 	int jsenabled;				/* 1 if JavaScript is enabled */
-	int jsHTMLEditor;			/* include code for textareas HTML editor */
-	int jsCalendarInput;		/* include code for calendar input */
-	int jsColorInput;			/* include code for color input */
+	int jsfunc;					/* 1 if JavaScript funtions must be output */
 
 	/* System call data */
 	int argc;					/* args count */
 	char **argv;				/* args values */
 	char **envp;				/* environment values */
 	char timestamp[16];			/* timestamp for db changes */
-	time_t tcur;				/* timestamp in unix format */
-	char *rootdir;				/* server root directory */
 	char *path;					/* executable path (from argv[0]) */
 	char *user_ip;				/* user remote IP adress */
-	char *qrystr;				/* QUERY_STRING env var */
-	char *requri;				/* REQUEST_URI env var */
-	char *srvname;				/* SERVER_NAME env var */
 	char *user_agent;			/* user navigator identification */
-	int b_pda;					/* terminal has small screen */
-	int b_task;					/* daily / hourly task processing */
 
 	/* HTML buffers */
 	int b_header;				/* HTML header has been output if not 0 */
 	int b_bodyheader;			/* <body> header has been output if not 0 */
 	int b_formheader;			/* <form> header has been output if not 0 */
 	int b_menubar;				/* menubar has been output if not 0 */
-	int b_terminate;			/* Handle partial page output (bitmask for dialogs) :
-									bit 0 : no current form
-									bit 1 : no menubar
-									bit 2 : no main form
-									bit 3 : no alt form
-									bit 4 : no page trailer
-									bit 5 : unused
-									bit 6 : no hidden inputs
-								*/
+	int b_terminate;			/* no more forms to output (for dialogs) */
 	DynBuffer *title;			/* page title */
 	DynBuffer *html;			/* main HTML output data */
 	DynBuffer *html1;			/* secondary HTML output data (end of page) */
@@ -805,19 +695,17 @@ typedef struct _EVA_context
 	DynBuffer *endjs;			/* JavaScript code output at end of page */
 
 	/* SQL session handling */
-	char *dbname;				/* SQL database to use */
-	char *dbpwd;				/* SQL database password */
+	char *dbname;				/* SQL database to select */
 	char *srvaddr;				/* SQL server address to select */
 	void *sql_session;			/* SQL engine dependent data */
 	DynBuffer *sql_qry;			/* last SQL query */
-	DynBuffer *id_wks;			/* workstation unique Id (cookie value) */
-	unsigned long objwks;		/* workstation object Id */
 	void *sql_result;			/* last SQL query : results buffer */
 	double sql_restime;			/* last SQL query : exec time in ms */
 	unsigned long sql_nbrows;	/* last SQL query : number of affected rows */
 	int sql_trace;				/* SQL trace mode */
 	unsigned long sql_cnt;		/* SQL queries count */
-
+	unsigned long nbfulljoin;	/* SQL full join search queries count (bad use of indexes) */
+																   
 	/* Debug & error status */
 	int debug;					/* debug mode for trace output */
 	DynBuffer *debug_msg;		/* debug messages */
@@ -838,32 +726,14 @@ typedef struct _EVA_context
 	unsigned long log_clkform;	/* Clicked button form */
 	DynBuffer *log_srchtxt;		/* Searched text in tables */
 
-	/* Form objects cache */
-	struct ObjCache {
-		unsigned long id;
-		DynTable data;
-	}
-		oc[4096];
-	unsigned long oc_nb;
-
 	/* Constants cache */
-	struct ValCache
-	{
-		char val[128];			/* cached value */
-		unsigned long id;		/* value id */
-	}
-		vc[2048];
-	unsigned long vc_nb;		/* # of used entries in vc */
 	unsigned long val_FORMSTAMP;
-	unsigned long val_TYPE;
-	unsigned long val_FIELD;
 	DynTable objdata_FORMLIST_FILTER;
 	DynTable daylong;			/* long day labels (for date output) */
 	DynTable dayshort;			/* short day labels (for date output) */
 	DynTable monthlong;			/* long month labels (for date output) */
 	DynTable monthshort;		/* short month labels (for date output) */
 	EVA_ctrl srvfmt;			/* server display formats default */
-	DynTable varsvalues;		/* values of global variables (for optimisation purpose) */
 }
 	EVA_context;
 extern EVA_context *Cntxt;
@@ -879,12 +749,12 @@ typedef struct _EVA_sql_row
 	char **name;				/* columns names */
 	char **value;				/* columns values */
 	size_t *sz;					/* columns values length */
-}
+} 
 	EVA_sql_row;
 
 
 /*********************************************************************
-** Macro : WAIT_TXTSCALE
+** Macro : TO_HEX
 ** Description : progress scale for HTML real time display
 */
 #define WAIT_TXTSCALE	"0%   10%   20%   30%   40%   50%   60%   70%   80%   90%   100%\n" \
@@ -892,7 +762,7 @@ typedef struct _EVA_sql_row
 
 /*********************************************************************
 ** Macro : TO_HEX
-** Description : convert hexadecimal char (0-9,A-F) to int
+** Description : convertit un caractere hexa (0-9,A-F) en entier
 */
 #define TO_HEX(_c) ( \
 		( (_c) >= '0' && (_c) <= '9' ) ? (_c)-'0' : \
@@ -909,27 +779,12 @@ typedef struct _EVA_sql_row
 				while((len) && strchr(" \n\t\r", (txt)[(len) - 1])) (len)--; }
 
 /*********************************************************************
-** Constants : LOCASE_ACCENT ...
-** Description : strings for handling accents
-*/
-#define LOCASE_ACCENT "àáâãäåæçéèêëìíîïòóôõöùúûü"
-#define UPCASE_ACCENT "ÀÁÂÃÄÅÆÇÉÈÊËÌÍÎÏÒÓÔÕÖÙÚÛÜ"
-#define LOCASE_NO_ACC "aaaaaaeceeeeiiiiooooouuuu"
-#define UPCASE_NO_ACC "AAAAAAECEEEEIIIIOOOOOUUUU"
-
-/*********************************************************************
 ** Constants : DIRECTORY_...
 ** Description : server directories names constants
 */
 #define DIRECTORY_DOCS "docs"
 #define DIRECTORY_IMG "img"
 #define DIRECTORY_CGI "cgi"
-
-/*********************************************************************
-** Macro : MAX
-** Description : numeric maximum
-*/
-#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
 /*********************************************************************
 ** Constants : DEBUG_...
@@ -947,32 +802,27 @@ typedef struct _EVA_sql_row
 #define DEBUG_FILTER		0x200
 
 /*********************************************************************
-** Constant : DEBUG_SQL_SLOW_TH
-** Description : duration treshold for slow queries
-*/
-#define DEBUG_SQL_SLOW_TH	0.1
-
-/*********************************************************************
 ** Macro : IDVAL(string)
 ** Description : return IdValue for a given string
 */
 #define IDVAL(str) get_id_value(cntxt, add_sz_str(str))
-#define IDVALUE(str) get_id_value(cntxt, add_sz_str("_EVA_"#str))
-#define DEF_VAL(str) unsigned long val_##str = IDVAL(#str)
 
 /*********************************************************************
 ** Constants : OBJ_...
 ** Description : IdObj for frequently used objects (for optimization purpose)
 */
-#define OBJ_FORM_CONTROL		10UL
+#define OBJ_FORM_CONTROL		10
+#define OBJ_FORM_FILERES		"25717"
+#define OBJ_FORM_SESSION		2446
 
 /*********************************************************************
 ** Macro : CHECK_HTML_STATUS
 ** Description : set html output buffer & return if null
 *********************************************************************/
-#define CHECK_HTML_STATUS 	DynBuffer **html = cntxt ? cntxt->form ? cntxt->form->html : NULL : NULL; if(!html) return 0
+#define CHECK_HTML_STATUS 	DynBuffer **html = cntxt->form->html; if(!html) return 0
 
 
+/* Definition modules includes */
 #include "err_utils.h"
 #include "mem_macros.h"
 #include "dyntab_field.h"
@@ -995,6 +845,7 @@ typedef struct _EVA_sql_row
 #include "ctrl_input_httplink.h"
 #include "ctrl_input_color.h"
 #include "ctrl_input.h"
+#include "ctrl_graph.h"
 #include "ctrl_contain.h"
 #include "ctrl_title.h"
 #include "ctrl_output_list.h"

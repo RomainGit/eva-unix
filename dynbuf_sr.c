@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : dynbuf_sr.c
 ** Description : constants definitions for search & replace functions
 **      Author : Alain BOUTE
@@ -32,24 +26,12 @@
 ** Macro : HTML_CR_SR_TABLE
 ** Description : replace TAB & RC with HTML equivalents
 *********************************************************************/
-#define HTML_CR_SR_TABLE	{ add_sz_str("\r\n"), add_sz_str("<br>") },  \
-							{ add_sz_str("\r"), add_sz_str("<br>") },  \
-							{ add_sz_str("\n"), add_sz_str("<br>") },  \
+#define HTML_CR_SR_TABLE	{ add_sz_str("\n"), add_sz_str("<br>\n") },  \
 							{ add_sz_str("\t"), add_sz_str("&nbsp;&nbsp;&nbsp;&nbsp;") }
 
 /*********************************************************************
-** Macro : FRMA_SR_TABLE
-** Description : replace masons triangle with HTML equivalent
-*********************************************************************/
-#define FRMA_SR_TABLE		{ add_sz_str(".;"), add_sz_str("&#8756;") },  \
-							{ add_sz_str(".:"), add_sz_str("&#8756;") },  \
-							{ add_sz_str(";."), add_sz_str("&#8756;") },  \
-							{ add_sz_str(":."), add_sz_str("&#8756;") },  \
-							{ add_sz_str(".°."), add_sz_str("&#8756;") }
-
-/*********************************************************************
-** Macro : QUOTE_SR_TABLE
-** Description : replace quote with HTML equivalent
+** Macro : HTMLQUOTE_SR_TABLE
+** Description : replace double quote with HTML equivalent
 *********************************************************************/
 #define QUOTE_SR_TABLE		{ add_sz_str("'"), add_sz_str("&#39;") }
 
@@ -57,13 +39,7 @@
 ** Constant : plain_to_html
 ** Description : minimal conversion table between plain text & HTML
 *********************************************************************/
-ReplaceTable plain_to_html[] = { XML_SR_TABLE, HTML_CR_SR_TABLE, FRMA_SR_TABLE, {NULL} };
-
-/*********************************************************************
-** Constant : no_tab_cr
-** Description : replace TAB/CR with spaces
-*********************************************************************/
-ReplaceTable no_tab_cr[] = { NOTABCR_SR_TABLE, {NULL} };
+ReplaceTable plain_to_html[] = { XML_SR_TABLE, HTML_CR_SR_TABLE, {NULL} };
 
 /*********************************************************************
 ** Constant : plain_to_xml
@@ -72,21 +48,20 @@ ReplaceTable no_tab_cr[] = { NOTABCR_SR_TABLE, {NULL} };
 ReplaceTable plain_to_xml[] = { XML_SR_TABLE, {NULL} };
 
 /*********************************************************************
-** Constant : html_tooltip
-** Description : conversion table for tooltip strings
+** Constant : html_no_quote
+** Description : conversion table for XML with double quotes
 *********************************************************************/
-ReplaceTable html_tooltip[] = { QUOTE_SR_TABLE, FRMA_SR_TABLE, {NULL} };
+ReplaceTable html_no_quote[] = { XML_SR_TABLE, QUOTE_SR_TABLE, {NULL} };
 
 /*********************************************************************
-** Constant : no_quote
-** Description : conversion table for HTML quotes
+** Constant : html_no_quote_tootip
+** Description : conversion table for XML with double quotes
 *********************************************************************/
 ReplaceTable no_quote[] = {  QUOTE_SR_TABLE, {NULL} };
-ReplaceTable no_par[] = {  XML_SR_TABLE, QUOTE_SR_TABLE, { add_sz_str("§"), add_sz_str("?") }, {NULL} };
 
 /*********************************************************************
 ** Constant : javascript_string
-** Description : conversion table for javascript strings
+** Description : conversion table for javascipt strings
 *********************************************************************/
 ReplaceTable javascript_string[] = { 
 							{ add_sz_str("\r"), add_sz_str("\\r") },  
@@ -94,17 +69,6 @@ ReplaceTable javascript_string[] = {
 							{ add_sz_str("\t"), add_sz_str("\\t") },
 							{ add_sz_str("\""), add_sz_str("\\\'\\\'") },
 							{ add_sz_str("'"), add_sz_str("\\'") },
-							FRMA_SR_TABLE, {NULL} };
-
-/*********************************************************************
-** Constant : syscmd_string
-** Description : conversion table for double quoted system comnands
-*********************************************************************/
-ReplaceTable syscmd_string[] = { 
-							{ add_sz_str("\r"), add_sz_str(" ") },  
-							{ add_sz_str("\n"), add_sz_str(" ") },  
-							{ add_sz_str("\t"), add_sz_str(" ") },
-							{ add_sz_str("\""), add_sz_str("'") },
 							{NULL} };
 
 /*********************************************************************

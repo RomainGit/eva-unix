@@ -1,5 +1,8 @@
 #whitelisting of C projects file
 *
+Debug
+bin
+obj
 
 #allowed files
 !*.c

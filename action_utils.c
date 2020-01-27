@@ -1,12 +1,6 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : action_utils.c
-** Description : utility fonctions for buttons & action handlers
+** Description : utility fonctions for action handlers
 **      Author : Alain BOUTE
 **     Created : July 1 2003
 *********************************************************************/
@@ -14,11 +8,44 @@
 #include "eva.h"
 
 /*********************************************************************
+** Function : get_image_file
+** Description : find the file path & size given the filename
+*********************************************************************/
+char *get_image_file(					/* return : image file path (alloc-ed memory), NULL if not found */
+	EVA_context *cntxt,					/* in/out : execution context data */
+	char *img,	 						/* in : image file name */
+	int *width, int *height				/* out : image size */
+){
+	struct stat fs = {0};
+	size_t sz = (img && *img) ? strlen(img) : 0;
+	char *path;
+
+	/* Initialize size & check params (no quotes in filenames) */
+	if(width) *width = 0;
+	if(height) *height = 0;
+	if(!sz || strpbrk(img, "'\"")) return NULL;
+
+	/* Look for image file in cntxt->imgpath */
+	path = mem_alloc(cntxt->imgpath_sz + sz + 32);
+	sprintf(path, "../img/%s/%s", cntxt->imgpath, img);
+	if(stat(path, &fs))
+	{
+		/* Look for image file in root path - return if not found */
+		sprintf(path, "../img/%s", img);
+	}
+
+	/* TODO - Get image size */
+
+	return path;
+}
+
+/*********************************************************************
 ** Function : form_get_field_values
 ** Description : read field values for an object (search in CGI & form data)
 *********************************************************************/
 #define ERR_FUNCTION "form_get_field_values"
-#define ERR_CLEANUP DYNTAB_FREE(fields)
+#define ERR_CLEANUP DYNTAB_FREE(fields); \
+					DYNTAB_FREE(values)
 int form_get_field_values(						/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	DynTable *res,								/* out : copied values */
@@ -26,41 +53,17 @@ int form_get_field_values(						/* return : 0 on success, other on error */
 	unsigned long idform,						/* in : source form id (use current form if 0 and idobj = 0) */
 	unsigned long idobj							/* in : source object id (use current obj if 0 and idform = 0) */
 ){
-	DynTable fields = {0};
-
-	/* Check params & prepare fields list */
-	if(!fieldlist || !*fieldlist) return 0;
-	if(dyntab_from_list(&fields, fieldlist, strlen(fieldlist), ",", 0, 0)) RETURN_ERR_MEMORY;
-
-	/* Call root function */
-	if(form_get_fields_values(cntxt, res, &fields, idform, idobj)) STACK_ERROR;
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : form_get_fields_values
-** Description : read field values for an object (search in CGI & form data)
-*********************************************************************/
-#define ERR_FUNCTION "form_get_fields_values"
-#define ERR_CLEANUP DYNTAB_FREE(values)
-int form_get_fields_values(						/* return : 0 on success, other on error */
-	EVA_context *cntxt,							/* in/out : execution context data */
-	DynTable *res,								/* out : copied values */
-	DynTable *fields,							/* in : fields to search for */
-	unsigned long idform,						/* in : source form id (use current form if 0 and idobj = 0) */
-	unsigned long idobj							/* in : source object id (use current obj if 0 and idform = 0) */
-){
 	EVA_form *form = cntxt->form;
-	DynTable values = {0};
 	unsigned long i = form ? form->nb_ctrl : 0, j, k;
+	DynTable fields = {0};
+	DynTable values = {0};
 	unsigned long curform = form ? DYNTAB_TOUL(&form->id_form) : 0;
 	unsigned long curobj = form ? DYNTAB_TOUL(&form->id_obj) : 0;
 
 	/* Check params & prepare fields list */
 	if(res) dyntab_free(res); else return 0;
+	if(!fieldlist || !*fieldlist) return 0;
+	if(dyntab_from_list(&fields, fieldlist, strlen(fieldlist), ",", 0, 0)) RETURN_ERR_MEMORY;
 	if(!idobj && !idform)
 	{
 		idobj = curobj;
@@ -68,10 +71,10 @@ int form_get_fields_values(						/* return : 0 on success, other on error */
 	}
 	
 	/* For each field */
-	for(k = 0; k < fields->nbrows; k++)
+	for(k = 0; k < fields.nbrows; k++)
 	{
 		/* If working on current form : use control values first */
-		char *field = dyntab_val(fields, k, 0);
+		char *field = dyntab_val(&fields, k, 0);
 		if(form && idform == curform && idobj == curobj)
 		{
 			/* Search for first control with same field that has values */
@@ -110,20 +113,18 @@ int form_get_fields_values(						/* return : 0 on success, other on error */
 *********************************************************************/
 #define ERR_FUNCTION "cgi_set_field_values"
 #define ERR_CLEANUP DYNTAB_FREE(cgival); \
-					M_FREE(name); \
-					M_FREE(dstfld)
+					M_FREE(name)
 int cgi_set_field_values(						/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	unsigned long idform,						/* in : destination form id */
 	unsigned long idobj,						/* in : destination object id */
-	char *dstfield, size_t dstfield_sz,			/* in : destination field */
+	char *destfield, size_t destfield_sz,		/* in : destination field */
 	DynTable *values,							/* in : source values */
 	char *setmode,								/* in : set mode (replace, add, ...) */
 	int b_old									/* in : also set corresponding old CGI input value if non zero */
 ){
 	DynTable cgival = { 0 };
 	DynBuffer *name = NULL;
-	DynBuffer *dstfld = NULL;
 	unsigned long i, j;
 	EVA_form *form = cntxt->form;
 	unsigned long num = 0, line = 0;
@@ -131,10 +132,9 @@ int cgi_set_field_values(						/* return : 0 on success, other on error */
 	unsigned long curobj = form ? DYNTAB_TOUL(&form->id_obj) : 0;
 
 	/* Read current CGI or DB values of destination field */
-	DYNBUF_ADD(&dstfld, dstfield, dstfield_sz, NO_CONV);
 	if(!setmode) setmode = "";
-	if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL, idform, idobj, dstfld->data, "", 0, 0) ||
-		!cgival.nbrows && qry_obj_field(cntxt, &cgival, idobj, dstfld->data)) STACK_ERROR;
+	if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL, idform, idobj, destfield, "", 0, 0) ||
+		!cgival.nbrows && qry_obj_field(cntxt, &cgival, idobj, destfield)) STACK_ERROR;
 
 	/* Return if nothing to do */
 	if(cgival.nbrows ? !strcmp("_EVA_ADD_IFEMPTY", setmode) : !strcmp("_EVA_REMOVE", setmode)) RETURN_OK;
@@ -158,7 +158,7 @@ int cgi_set_field_values(						/* return : 0 on success, other on error */
 		else
 		{
 			if(!val->i_cgi && (
-				cgi_build_name(cntxt, &name, 'D', 0, idform, idobj, dstfield, dstfield_sz, NULL, 0, val->Num, val->Line, 0) ||
+				cgi_build_name(cntxt, &name, 'D', 0, idform, idobj, destfield, destfield_sz, NULL, 0, val->Num, val->Line, 0) ||
 				(b_old ? cgi_add_inputold : cgi_add_input)(cntxt, NULL, DYNBUF_VAL_SZ(name), val->txt, val->len)))
 				STACK_ERROR;
 			if(num < val->Num) num = val->Num;
@@ -168,17 +168,17 @@ int cgi_set_field_values(						/* return : 0 on success, other on error */
 
 	/* Add apropriate values */
 	if(strcmp("_EVA_REMOVE", setmode)) 
-		for(i = 0; !i || i < values->nbrows; i++)
+		for(i = 0; i < values->nbrows; i++)
 		{
 			/* Fake CGI input with proper name & indexes */
 			DynTableCell *c = dyntab_cell(values, i, 0);
-			if(c && c->Num <= 1 && !c->Line)
+			if(!c->Num && !c->Line)
 			{
 				if(line) line++; else num++;
 				c->Num = num;
 				c->Line = line;
 			}
-			if(cgi_build_name(cntxt, &name, 'D', 0, idform, idobj, dstfield, dstfield_sz, NULL, 0, c ? c->Num : 1, c ? c->Line : 0, 0) ||
+			if(cgi_build_name(cntxt, &name, 'D', 0, idform, idobj, destfield, destfield_sz, NULL, 0, c->Num, c->Line, 0) ||
 				(b_old ? cgi_add_inputold : cgi_add_input)(cntxt, NULL, DYNBUF_VAL_SZ(name), DYNTAB_VAL_SZ(values, i, 0)))
 				STACK_ERROR;
 		}
@@ -191,13 +191,13 @@ int cgi_set_field_values(						/* return : 0 on success, other on error */
 		for(i = 0; i < form->nb_ctrl; i++)
 		{
 			val = form->ctrl[i].allval.nbrows ? &form->ctrl[i].allval : &form->ctrl[i].val;
-			if(!strcmp(form->ctrl[i].FIELD, dstfld->data) && (val->nbrows || form->ctrl[i].b_modified)) break;
+			if(!strcmp(form->ctrl[i].FIELD, destfield) && (val->nbrows || form->ctrl[i].b_modified)) break;
 		}
 		if(i < form->nb_ctrl) 
 		{
 			/* Control found : transfer values to control */
 			dyntab_free(&form->ctrl[i].allval);
-			if(cgi_filter_values(cntxt, &form->ctrl[i].val, 'D', ~0UL, idform, idobj, dstfld->data, "", 0, 0)) STACK_ERROR;
+			if(cgi_filter_values(cntxt, &form->ctrl[i].val, 'D', ~0UL, idform, idobj, destfield, "", 0, 0)) STACK_ERROR;
 			form->ctrl[i].b_modified = 1;
 		}
 	}
@@ -229,50 +229,26 @@ int form_set_values(							/* return : 0 on success, other on error */
 ){
 	DynTable values = {0};
 	int b_old = !idobj;
-	
-	/* Handle expression on destination object */
-	if(!strcmp(srctype, "_EVA_DESTOBJ"))
-	{
-		if(form_eval_fieldexpr(cntxt, &values, idform, idobj, DYNTAB_VAL_SZ(srcval, 0, 0), NULL, 0)) STACK_ERROR;
-	}
-	else
-	{
-		if(form_eval_valtype(cntxt, &values, srctype, srcobj, srcval)) STACK_ERROR;
-	}
 
-	/* Set values */
-	if(cgi_set_field_values(cntxt, idform, idobj, destfield, destfield_sz, &values, setmode, b_old)) STACK_ERROR;
+	/* Evaluate as field expression  & set values */
+	if(form_eval_valtype(cntxt, &values, srctype, srcobj, srcval) ||
+		cgi_set_field_values(cntxt, idform, idobj, destfield, destfield_sz, &values, setmode, b_old)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
 #undef ERR_CLEANUP
 
-/*********************************************************************
-** Function : ctrl_eval_fieldexpr
-** Description : evaluate a field expression in a control
-*********************************************************************/
-#define ERR_FUNCTION "ctrl_eval_fieldexpr"
-#define ERR_CLEANUP M_FREE(buf)
-int ctrl_eval_fieldexpr(						/* return : 0 on success, other on error */
-	EVA_context *cntxt,							/* in/out : execution context data */
-	EVA_ctrl *ctrl,								/* in : control to process */
-	DynTable *res,								/* out : resulting values - always freed before processing */
-	char *expr									/* in : field expression to evaluate in control */
-){
-	EVA_form *form = cntxt->form;
-	DynBuffer *buf = NULL;
-	if(qry_eval_sqlexpr_var(cntxt, &buf, expr, &ctrl->attr, NULL)) STACK_ERROR;
-	if(form_eval_fieldexpr(cntxt, res, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj),
-										DYNBUF_VAL_SZ(buf), NULL, 0)) STACK_ERROR;
-
-	RETURN_OK_CLEANUP;
+char *mystrdup(char *src, size_t sz)
+{
+	char *r = malloc(sz + 2); 
+	if(r) 
+	{
+		memset(r, 0, sz + 1);
+		if(src) memcpy(r, src, sz);
+	}
+	return r;
 }
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-int TarifFAP(EVA_context *cntxt, DynTable *res, unsigned long idobj, char *func);
-
 /*********************************************************************
 ** Function : form_eval_fieldexpr
 ** Description : evaluate a field expression in current form context
@@ -285,8 +261,7 @@ int TarifFAP(EVA_context *cntxt, DynTable *res, unsigned long idobj, char *func)
 					M_FREE(pfield); \
 					M_FREE(expr); \
 					M_FREE(srchfield); \
-					M_FREE(fieldexpr); \
-					M_FREE(_groupfn)
+					M_FREE(fieldexpr)
 int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	DynTable *res,								/* out : resulting values - always freed before processing */
@@ -318,48 +293,46 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 		size_t beg;
 		size_t end;
 	} p[50] = {0};
-	int b_expr;
-	char *_groupfn = NULL;
-	char *groupfn = NULL;
+	int b_group = 0, b_expr;
 	unsigned long i, j, nbp = 0;
 
 	/* Check params - return if applicable */
 	if(res) dyntab_free(res); else RETURN_OK;
-	if(!idform && !idobj)
-	{
-		idform = DYNTAB_TOUL(&cntxt->form->id_form);
-		idobj = DYNTAB_TOUL(&cntxt->form->id_obj);
-	}
 	if(!field || !*field || !field_sz || (!idform && !idobj)) RETURN_OK;
-
-	/* Handle raw SELECT statement */
-	if(!strncmp(field, add_sz_str("SELECT ")))
-	{
-		if(qry_eval_sqlexpr_var(cntxt, &expr, field, NULL, NULL) ||
-			sql_exec_query(cntxt, expr->data) ||
-			sql_get_table(cntxt, res, 4)) CLEAR_ERROR;
-		RETURN_OK;
-	}
-
-	/* Handle forced SQL, string litterals & numbers */
-	if(*field == '=') { field++; field_sz--; b_expr = 1; }
-	else b_expr = *field == '\'' || isdigit(*field) || bracket;
+	b_expr = *field == '=';
+	if(b_expr) { field++; field_sz--; }
 	if(!field || !*field || !field_sz) RETURN_OK;
 
 	/* Handle grouping */
 	fieldgrp = field;
 	fieldgrp_sz = field_sz;
-	if(!b_expr && paropn)
+	if(!strncmp(field, add_sz_str("SUM(")))
 	{
-		size_t sz = paropn - field;
-		M_STRDUP(_groupfn, field, sz);
-		groupfn = _groupfn;
-		fieldgrp += sz + 1;
-		fieldgrp_sz -= sz + 2;
+		b_group = 1;
+		fieldgrp += 4;
+		fieldgrp_sz -= 5;
+	}
+	else if(!strncmp(field, add_sz_str("COUNT(")))
+	{
+		b_group = 2;
+		fieldgrp += 6;
+		fieldgrp_sz -= 7;
+	}
+	else if(!strncmp(field, add_sz_str("MAX(")))
+	{
+		b_group = 3;
+		fieldgrp += 4;
+		fieldgrp_sz -= 5;
+	}
+	else if(!strncmp(field, add_sz_str("MIN(")))
+	{
+		b_group = 4;
+		fieldgrp += 4;
+		fieldgrp_sz -= 5;
 	}
 
 	/* Handle brackets or expression : mixed SQL / fields expression */
-	if(b_expr)
+	if(bracket || b_expr)
 	{
 		/* Process field expressions & collect results in restbl */
 		unsigned long line = 0, num = 0;
@@ -373,21 +346,11 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 			p[nbp].end = end - fieldgrp;
 			if(!end) RETURN_OK;
 			M_STRDUP(fieldexpr, bracket + 1, sz);
-
-			/* Handle functions reference */
-#ifndef _EVA_DLL
-			if(!strncmp(fieldexpr, add_sz_str("$TarifFap")))
-			{
-				if(TarifFAP(cntxt, res, idobj, fieldexpr + 9)) CLEAR_ERROR;
-			}
-			else
-#endif
-				/* Normal case : evaluate bracket contents */
-				if(form_eval_fieldexpr(cntxt, res, idform, idobj, fieldexpr, sz, data, beg)) STACK_ERROR;
+			if(form_eval_fieldexpr(cntxt, res, idform, idobj, fieldexpr, sz, data, beg)) STACK_ERROR;
 			M_FREE(fieldexpr);
 
-			/* Copy values to restbl */
-			for(i = 0; !i || i < res->nbrows; i++) 
+			/* Default : keep all values */
+			for(i = 0; i < (res->nbrows ? res->nbrows : 1); i++) 
 			{
 				c = dyntab_cell(res, i, 0);
 				DYNTAB_ADD_CELLP(&restbl, i, nbp, c);
@@ -404,11 +367,6 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 				c->row = num0;
 				c->col = line0;
 			}
-			else
-			{
-				c->row = 0;
-				c->col = 0;
-			}
 
 			if(line < c->col) line = c->col;
 			if(num < c->row) num = c->row;
@@ -420,10 +378,9 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 		/* If a set of values was evaluated */
 		if(restbl.nbrows)
 		{
-			/* Exec SQL query for each line / num set of values */
+			/* Exec SQL query for each line / num of values */
 			unsigned long L, N;
-			for(L = line ? (restbl.nbcols == 1 && restbl.nbrows == 1) ? dyntab_cell(&restbl,0,0)->Line : 1 : 0;
-					!L || line && L <= line; L++) 
+			for(L = line ? 1 : 0; !L || line && L <= line; L++) 
 				for(N = 1; (line || !num) ? N < 2 : N <= num; N++)
 			{
 				/* Prepare query build */
@@ -443,8 +400,8 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 					for(i = 0; i < restbl.nbrows; i++)
 					{
 						DynTableCell *c = dyntab_cell(&restbl, i, j);
-						if(((line ? !c->Line || c->Line == L :
-								!num || c->Num == N || c0->i_cgi <= 1 && c->Num <= 1) &&
+						if(restbl.nbcols == 1 && restbl.nbrows == 1 ||
+							((line ? !c->Line || c->Line == L : c->Num == N || c0->i_cgi <= 1 && c->Num <= 1) &&
 							c->txt && c->txt[0] && c->len))
 						{
 							if(!b_empty) DYNBUF_ADD_STR(&expr, ",");
@@ -486,11 +443,11 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 		else
 		{
 			DYNBUF_ADD3(&expr, "SELECT ", fieldgrp, fieldgrp_sz, NO_CONV, "");
-			if(sql_exec_query(cntxt, expr->data) || sql_get_table(cntxt, res, 6)) STACK_ERROR;
+			if(sql_exec_query(cntxt, expr->data) || sql_get_table(cntxt, res, 2)) STACK_ERROR;
 		}
 	}
 	/* Handle trivial case : simple field */
-	else if(!relop && !dotsep && (!paropn || groupfn))
+	else if(!relop && !dotsep && (!paropn || b_group))
 	{
 		if(data)
 		{
@@ -498,7 +455,7 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 			for(i = 0; i < restbl.nbrows; i++)
 			{
 				j = beg;
-				if(dyntab_filter_field(res, 0, data, dyntab_val(&restbl, i, 0), ~0UL, &j)) RETURN_ERR_MEMORY;
+				if(dyntab_filter_field(res, 0, data, dyntab_val(&restbl, i, 0), 0, 1, &j)) RETURN_ERR_MEMORY;
 			}
 		}
 		else
@@ -508,9 +465,8 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 		}
 	}
 	/* Handle first field if it may be read from CGI or data */
-	else if(cntxt->nb_cgi && relop > fieldgrp && (!dotsep || relop && dotsep > relop) && (!paropn || groupfn))
+	else if(cntxt->nb_cgi && relop > fieldgrp && (!dotsep || relop && dotsep > relop) && (!paropn || b_group))
 	{
-		/* Read first field values */
 		size_t sz = fieldgrp_sz - (relop - fieldgrp) - (relop == reldir ? 2 : 0);
 		size_t sz1 = relop - fieldgrp;
 		M_STRDUP(srchfield, fieldgrp, sz1);
@@ -521,22 +477,17 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 			for(i = 0; i < restbl.nbrows; i++)
 			{
 				j = beg;
-				if(dyntab_filter_field(&id_obj, 0, data, dyntab_val(&restbl, i, 0), ~0UL, &j)) RETURN_ERR_MEMORY;
+				if(dyntab_filter_field(&id_obj, 0, data, dyntab_val(&restbl, i, 0), 0, 1, &j)) RETURN_ERR_MEMORY;
 			}
 		}
 		else
 			if(form_get_field_values(cntxt, &id_obj, srchfield, idform, idobj)) STACK_ERROR;
-		
-		/* Evaluate expression on first field value */
-		flt.b_recdata = 1;
 		if(dyntab_sz(&id_obj, 0, 0) && (
 				qry_parse_fieldexpr(cntxt, fieldexpr, sz, &flt) ||
 				sql_get_listcol(cntxt, res, &id_obj, &flt, 0))) STACK_ERROR;
 
-		/* Set indexes for values - TODO : this should be explained better in documentation 
-											it allows some interesting table calculations but is some how obscure */
-		if(dyntab_sz(&id_obj, 0, 0) && id_obj.nbrows > 1)
-			for(i = 0; i < res->nbrows; i++)
+		/* Set indexes for values */
+		for(i = 0; i < res->nbrows; i++)
 		{
 			DynTableCell *c = dyntab_cell(res, i, 0);
 			for(j = 0; j < id_obj.nbrows; j++)
@@ -552,32 +503,63 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 	/* Other cases : read from DB if object exists */
 	else if(idobj)
 	{
-		groupfn = NULL;
+		b_group = 0;
 		DYNTAB_ADD_INT(&id_obj, 0, 0, idobj);
-		flt.b_recdata = 1;
 		if(qry_parse_fieldexpr(cntxt, field, field_sz, &flt) ||
 			sql_get_listcol(cntxt, res, &id_obj, &flt, 0)) STACK_ERROR;
 	}
 	
 	/* Handle grouping */
-	if(groupfn)
+	if(b_group == 1)
 	{
-		/* Handle MAX / MIN auto number mode */
-		if(*groupfn == 'M')
+		/* SUM */
+		double cnt = 0;
+		unsigned long i;
+		char txt[64];
+		for(i = 0; i < res->nbrows; i++)
+			cnt += atof(dyntab_val(res, i, 0));
+		sprintf(txt, "%lg", cnt);
+		dyntab_free(res);
+		DYNTAB_ADD(res, 0, 0, txt, 0, NO_CONV);
+	}
+	else if(b_group == 2)
+	{
+		/* COUNT */
+		unsigned long cnt = res->nbrows;
+		dyntab_free(res);
+		DYNTAB_ADD_INT(res, 0, 0, cnt);
+	}
+	else if(b_group == 3 || b_group == 4)
+	{
+		/* MAX / MIN */
+		unsigned long i, kn = 0, kt =0;
+		int b_num = 1;
+		double num = 0;
+		char *txt = NULL;
+		for(i = 0; i < res->nbrows; i++)
 		{
-			/* Number mode if all values are full numbers and not date */
-			int b_num = 1;
-			for(i = 0; i < res->nbrows && b_num; i++)
+			char *t = dyntab_val(res, i, 0), *c = t;
+			double n = atof(t);
+			while(*c && b_num) { b_num &= *c >= '0' && *c <= '9' || *c == '.'; c++; }
+			if(i)
 			{
-				char *e, *t = dyntab_val(res, i, 0);
-				double n = strtod(t, &e);
-				b_num = !*e && (n <= 10000 || datetxt_invalid(t));
+				if(b_group == 3 ? num < n : num > n) { kn = i; num = n; }
+				if(b_group == 3 ? (strcmp(txt, t) < 0) : (strcmp(txt, t) > 0)) { kt = i; txt = t; }
 			}
-			if(b_num) groupfn = groupfn[1] == 'I' ? "NMIN" : "NMAX";
+			else
+			{
+				txt = t;
+				num = n;
+			}
 		}
-
-		/* Group with selected function */
-		if(dyntab_group(res, groupfn)) CLEAR_ERROR;;
+		if(!b_num) kn = kt;
+		if(kn) DYNTAB_SET_CELL(res, 0, 0, res, kn, 0);
+		if(res->cell)
+		{
+			res->cell->Num = 0;
+			res->cell->Line = 0;
+		}
+		res->nbrows = 1;
 	}
 
 	RETURN_OK_CLEANUP;
@@ -600,7 +582,7 @@ int qry_parse_valtype(							/* return : 0 on success, other on error */
 	*id_obj = 0;
 
 	/* Set base object & form depending on source type */
-	if(!strcmp("_EVA_MAIN_FORM", srctype))
+	if(		!strcmp("_EVA_MAIN_FORM", srctype))
 	{
 		*id_obj = &cntxt->id_form;
 	}
@@ -622,19 +604,11 @@ int qry_parse_valtype(							/* return : 0 on success, other on error */
 	{
 		*id_obj = &cntxt->id_cnf;
 	}
-	else if(!strcmp("_EVA_CURRENTSESSION", srctype)) 
-	{
-		*id_obj = &cntxt->session;
-	}
 	else if(!strcmp("_EVA_USERID", srctype) ||
 			!strcmp("_EVA_CURRENTUSER", srctype) ||
 			!strcmp("_EVA_CURRENT_USER", srctype)) 
 	{
 		*id_obj = &cntxt->id_user;
-	}
-	else if(!strcmp("_EVA_CURRENTFORM", srctype)) 
-	{
-		*id_obj = &cntxt->form->id_form;
 	}
 	else if(!strcmp("_EVA_CURRENT", srctype) ||
 			!strcmp("_EVA_CURRENTOBJ", srctype) ||
@@ -658,7 +632,9 @@ int qry_parse_valtype(							/* return : 0 on success, other on error */
 ** Description : evaluate a value type / expression pair
 *********************************************************************/
 #define ERR_FUNCTION "form_eval_valtype"
-#define ERR_CLEANUP
+#define ERR_CLEANUP DYNTAB_FREE(selobj); \
+					DYNTAB_FREE(values); \
+					qry_build_free(&flt)
 int form_eval_valtype(							/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	DynTable *res,								/* out : resulting values */
@@ -666,83 +642,23 @@ int form_eval_valtype(							/* return : 0 on success, other on error */
 	DynTable *listobj,							/* in : objects id for srctype=LISTOBJ or srctype=FILTER */
 	DynTable *srcval							/* in : source values / field expression */
 ){
-	if(ctrl_eval_valtyp(cntxt, NULL, res, srctype, listobj, srcval)) STACK_ERROR;
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : ctrl_eval_valtyp
-** Description : evaluate a value type / expression pair
-*********************************************************************/
-#define ERR_FUNCTION "ctrl_eval_valtyp"
-#define ERR_CLEANUP DYNTAB_FREE(selobj); \
-					DYNTAB_FREE(fields); \
-					DYNTAB_FREE(values); \
-					M_FREE(buf); \
-					qry_build_free(&flt)
-int ctrl_eval_valtyp(							/* return : 0 on success, other on error */
-	EVA_context *cntxt,							/* in/out : execution context data */
-	EVA_ctrl *ctrl,								/* in : control to process */
-	DynTable *res,								/* out : resulting values */
-	char *srctype,								/* in : value type */
-	DynTable *listobj,							/* in : objects id for srctype IN (LISTOBJ,FILTER,CALC) */
-	DynTable *srcval							/* in : source values / field expression */
-){
 	DynTable *id_form = NULL;
 	DynTable *id_obj = NULL;
 	DynTable selobj = {0};
-	DynTable fields = {0};
 	DynTable values = {0};
-	DynBuffer *buf = NULL;
 	QryBuild flt = {0};
 
 	/* Check params */
-	dyntab_free(res);
+	if(!res) RETURN_ERR_PARAM(NULL);
 	if(!srctype || !strcmp(srctype, "_EVA_VALUE")) srctype = "";
+	dyntab_free(res);
 
 	/* Set base object & form depending on source type */
 	if(!strcmp(srctype, "_EVA_SRC_FILTER") ||
 		!strcmp(srctype, "_EVA_FILTER"))
 	{
-		/* Source = filter : read matching objects - return empty result if none */
 		if(qry_add_filter_forms(cntxt, &flt, NULL, listobj) ||
 			qry_filter_objects(cntxt, &selobj, &flt)) STACK_ERROR;
-		if(!selobj.nbrows) RETURN_OK;
-		id_obj = &selobj;
-
-		/* Sort objects if applicable */
-		if(ctrl) CTRL_ATTR(fields, SORT_VALUE);
-		if(fields.nbrows)
-		{
-			char *sortmode = CTRL_ATTR_VAL(SORT_MODE);
-			unsigned long idsort = DYNTAB_TOUL(&fields);
-			if(qry_obj_field(cntxt, &values, idsort, "_EVA_CONTROL") ||
-				qry_obj_field(cntxt, &values, idsort, 
-					!strcmp(dyntab_val(&values, 0, 0), "_EVA_INPUT") ? "_EVA_FIELD" : "_EVA_SRCFIELD") ||
-				qry_add_table_col(cntxt, id_obj, DYNTAB_VAL_SZ(&values, 0, 0))) CLEAR_ERROR; 
-			else
-				dyntab_sort(id_obj, !strcmp(sortmode, "_EVA_NUMASC") ? qsort_col1f :
-									!strcmp(sortmode, "_EVA_NUMDESC") ? qsort_col1fdesc :
-									!strcmp(sortmode, "_EVA_TXTDESC") ? qsort_col1desc :qsort_col1);
-		}
-	}
-	else if(!strcmp(srctype, "_EVA_EXPRVAL"))
-	{
-		unsigned long i;
-		EVA_ctrl exprval = {0};
-		if(qry_cache_idobj(&exprval.attr, DYNTAB_TOUL(listobj)) ||
-			ctrl_read_baseobj(cntxt, &exprval.attr) ||
-			ctrl_output_exprval(cntxt, &exprval, 3)) CLEAR_ERROR;
-		for(i = 0; i < exprval.val.nbrows; i++) if(dyntab_sz(&exprval.val, i, 0))
-			DYNTAB_ADD_CELL(res, res->nbrows, 0, &exprval.val, i, 0);
-		RETURN_OK;
-	}
-	else if(!strcmp(srctype, "_EVA_SRC_CTRL"))
-	{
-		if(qry_listobj_field(cntxt, &fields, listobj, "_EVA_FIELD") ||
-			form_get_fields_values(cntxt, &selobj, &fields, 0, 0)) STACK_ERROR;
 		id_obj = &selobj;
 	}
 	else
@@ -754,41 +670,23 @@ int ctrl_eval_valtyp(							/* return : 0 on success, other on error */
 		/* Copy fixed values to result */
 		unsigned long i;
 		if(srcval) for(i = 0; i < srcval->nbrows; i++)
-		{
 			DYNTAB_ADD_CELL(res, i, 0, srcval, i, 0);
-			dyntab_cell(res, i, 0)->Num = 1;
-			dyntab_cell(res, i, 0)->Line = 0;
-		}
 	}
 	else if(!dyntab_sz(srcval, 0, 0))
 	{
 		/* Copy object id to result */
 		unsigned long i;
 		for(i = 0; i < id_obj->nbrows; i++)
-		{
-			DYNTAB_ADD_CELL(res, i, 0, id_obj, i, 0);
-			dyntab_cell(res, i, 0)->b_relation = 1;
-		}
+			DYNTAB_ADD_CELL(res, i, 0, id_obj, i, 0)
 	}
-	else if(srcval && srcval->nbrows)
+	else if(srcval)
 	{
 		/* Evaluate each expression & add to result */
 		unsigned long i, j, k, idform = id_form ? DYNTAB_TOUL(id_form) : 0;
 		for(k = 0; !k || k < id_obj->nbrows; k++) for(i = 0; i < srcval->nbrows; i++)
 		{
-			char *expr = dyntab_val(srcval, i, 0);
-			size_t sz = dyntab_sz(srcval, i, 0);
-			M_FREE(buf);
-			DYNBUF_ADD_STR(&buf, "=");
-			if(qry_eval_sqlexpr_var(cntxt, &buf, expr, ctrl ? &ctrl->attr : NULL, NULL)) STACK_ERROR;
-			if(strcmp(buf->data + 1, expr))
-			{
-				j = !strchr(buf->data, '[') ? 0 : 1;
-				expr = buf->data + j;
-				sz = buf->cnt - j;
-				if(!sz) expr = "";
-			}
-			if(form_eval_fieldexpr(cntxt, &values, idform, DYNTAB_TOULRC(id_obj, k, 0), expr, sz, NULL, 0)) STACK_ERROR;
+			if(form_eval_fieldexpr(cntxt, &values, idform, DYNTAB_TOULRC(id_obj, k, 0),
+					DYNTAB_VAL_SZ(srcval, i, 0), NULL, 0)) STACK_ERROR;
 			for(j = 0; j < values.nbrows; j++) if(dyntab_sz(&values, j, 0))
 				DYNTAB_ADD_CELL(res, res->nbrows, 0, &values, j, 0);
 		}

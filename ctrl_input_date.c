@@ -1,12 +1,6 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : ctrl_input_date.c
-** Description : handling functions for DATE input controls
+** Description : HTML handling functions for DATE input controls
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
@@ -36,17 +30,17 @@ int ctrl_read_date(			/* return : 0 on success, other on error */
 	char age_unit = *CTRL_ATTR_VAL(AGE_UNIT);
 	char *btn = CGI_CLICK_BTN_SUBFIELD;
 	if(!age_unit) age_unit = 'Y';
-	sz1 = !age_input ? 14 : age_unit == 'Y'? 4 : 8;
+	sz1 = !age_input ? 14 : age_unit == 'Y'? 4 : age_unit == 'M' ? 6 : 8;
 
 	/* Handle reference date in age input */
 	if(!strcmp(date_checktype, "_EVA_FIELD"))
 	{
 		DynTableCell *c = CTRL_ATTR_CELL(DATEREF_FIELD);
-		if(c && ctrl_eval_fieldexpr(cntxt, ctrl, &cgival, c->txt)) STACK_ERROR;
+		if(c && form_eval_fieldexpr(cntxt, &cgival, 0, idobj, c->txt, c->len, NULL, 0)) STACK_ERROR;
 	}
 	else if(!strcmp(date_checktype, "_EVA_DateCr"))
 	{
-		if(idobj && ctrl_eval_fieldexpr(cntxt, ctrl, &cgival, "MIN(_EVA_FORMSTAMP.DateCr)")) STACK_ERROR;
+		if(idobj && form_eval_fieldexpr(cntxt, &cgival, 0, idobj, add_sz_str("MIN(_EVA_FORMSTAMP.DateCr)"), NULL, 0)) STACK_ERROR;
 	}
 	if(cgival.nbrows) strncpy(ctrl->dateref, dyntab_val(&cgival, 0, 0), 14);
 	if(!ctrl->dateref[0]) strncpy(ctrl->dateref, cntxt->timestamp, 14);
@@ -154,7 +148,9 @@ int ctrl_editview_date(			/* return : 0 on success, other on error */
 	char age_unit = *CTRL_ATTR_VAL(AGE_UNIT);
 	char *age_label = CTRL_ATTR_VAL(AGE_LABEL);
 	int b_duration = *CTRL_ATTR_VAL(DURATION);
+	size_t sz1;
 	if(!age_unit) age_unit = 'Y';
+	sz1 = age_unit == 'Y'? 4 : age_unit == 'M' ? 6 : 8;
 	if(!*age_label) age_label = b_duration ? "Durée" : "Age";
 
 	/* Clear existing age inputs */
@@ -164,12 +160,9 @@ int ctrl_editview_date(			/* return : 0 on success, other on error */
 	if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
 	if(*input_age && form->step == HtmlEdit) DYNBUF_ADD_STR(form->html, "<table noborder><tr><td>");
 
-	/* Handle empty value in view mode */
-	if(form->step != HtmlEdit && !ctrl->val.nbrows && *ctrl->LABEL_NOSEL) DYNBUF_ADD(form->html, ctrl->LABEL_NOSEL, 0, TO_HTML);
-
 	/* Add HTML code for each value */
-	k = ctrl->val.nbrows + ((form->step == HtmlEdit && b_multiple && dyntab_sz(&ctrl->val, ctrl->val.nbrows - 1, 0)) ? 1 : 0);
-	for(i = 0; !i || i < k; i++)
+	k = ctrl->val.nbrows + ((form->step == HtmlEdit && (b_multiple && dyntab_sz(&ctrl->val, ctrl->val.nbrows - 1, 0) || !ctrl->val.nbrows)) ? 1 : 0);
+	for(i = 0; i < k; i++)
 	{
 		char date[64] = {0};
 		DynTableCell *c = dyntab_cell(&ctrl->val, i, 0);
@@ -251,21 +244,8 @@ int ctrl_editview_date(			/* return : 0 on success, other on error */
 				ctrl->COLUMNS = strlen(d);
 			}
 
-			/* Add date input or value */
-			if(cntxt->form->step == HtmlEdit)
-			{
-				CTRL_CGINAMEVAL(&name, i);
-				if(put_html_text_input(cntxt, 
-						DYNBUF_VAL_SZ(name),
-						date, strlen(date),
-						0, *CTRL_ATTR_VAL(JSCALENDAR) ? 4 : 0, 1,
-						ctrl->COLUMNS,
-						atoi(CTRL_ATTR_VAL(MAXLENGTH))) ||
-					ctrl_put_hidden_old(cntxt, ctrl, i, name, date, strlen(date)))
-				STACK_ERROR;
-			}
-			else
-				DYNBUF_ADD(cntxt->form->html, date, strlen(date), TO_HTML)
+			/* Add text input */
+			if(ctrl_add_text_value(cntxt, ctrl, i, date, strlen(date), NULL)) STACK_ERROR;
 
 			/* Add age button / text as applicable */
 			if(*input_age && (form->step == HtmlEdit || !*fmt))
@@ -302,13 +282,14 @@ int ctrl_editview_date(			/* return : 0 on success, other on error */
 ** Description : read user input values for controls of type DATE
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_add_date"
-#define ERR_CLEANUP
+#define ERR_CLEANUP	DYNTAB_FREE(data)
 int ctrl_add_date(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
+	DynTable data = {0};
 	unsigned long i;
 
 	switch(form->step)
@@ -322,13 +303,11 @@ int ctrl_add_date(					/* return : 0 on success, other on error */
 		for(i = 0; i < ctrl->val.nbrows; i++)
 		{
 			/* Get min & max alowed date values */
-			char val[16] = {0};
-			char datemin[16] = {0}, datemax[32] = {0}, *daymin, *daymax;
+			char *val = dyntab_val(&ctrl->val, i, 0);
+			char datemin[32] = {0}, datemax[32] = {0}, *daymin, *daymax;
 			char datebuf[32];
 			char *date_checktype = CTRL_ATTR_VAL(DATE_CHECKTYPE);
-			strncpy(val, dyntab_val(&ctrl->val, i, 0), sizeof(val)-1);
 			if(!*val) continue;
-			full_datetxt(val);
 
 			/* Check date is valid */
 			if(*val && datetxt_invalid(val))
@@ -355,16 +334,21 @@ int ctrl_add_date(					/* return : 0 on success, other on error */
 				/* Add given days to reference date */
 				if(*daymin) delay_to_datetxt(datemin, ctrl->dateref, atoi(daymin), fmt);
 				if(*daymax) delay_to_datetxt(datemax, ctrl->dateref, atoi(daymax), fmt);
-				datemin[8] = 0;
-				datemax[8] = 0;
 			}
 
-			/* Set min / max default values */
+			/* Swap min / max if applicable */
+			if(strcmp(datemin, datemax) > 0)
+			{
+				char tmp[sizeof(datemin)];
+				strcpy(tmp, datemin);;
+				strcpy(datemin, datemax);
+				strcpy(datemax, tmp);
+			}
 			if(!*datemin) strcpy(datemin, "0100");
 			if(!*datemax) strcpy(datemax, "99991231");
 
 			/* Check input value validity & min / max */
-			if(*datemin && strncmp(datemin, val, strlen(datemin)) > 0 || *datemax && strncmp(datemax, val, strlen(datemax)) < 0)
+			if(*datemin && strcmp(datemin, val) > 0 || *datemax && strcmp(datemax, val) < 0)
 			{
 				ctrl->error = 2;
 				if(ctrl->errmsg) DYNBUF_ADD_STR(&ctrl->errmsg, "\n");

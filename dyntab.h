@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : dyntab.h
 ** Description : dynamic tables structure definitions & macros
 **      Author : Alain BOUTE
@@ -35,6 +29,7 @@ typedef struct _DynTableCell
 	unsigned long IdValue;		/* value identifier in TVal (cell holds a value stored in TVal) */
 	unsigned long Num;			/* value index to handle multiple values */
 	unsigned long Line;			/* value index to handle table rows & list options level */
+	unsigned long Lvl;			/* value index to handle list options level */
 	unsigned long Lang;			/* language code to handle multiple language values */
 	unsigned long i_cgi;		/* index in cntxt->cgi (cell holds CGI data) */
 
@@ -51,7 +46,7 @@ typedef struct _DynTableCell
 		Ct_coltotlbl,
 		Ct_rowname,
 		Ct_colname
-	}
+	} 
 		ctype;					/* cell value type for tables formating */
 	unsigned long col;			/* index of table column (cell holds a table value) */
 	unsigned long row;			/* index of table row (cell holds a table value) */
@@ -65,9 +60,9 @@ typedef struct _DynTableCell
 typedef struct _DynTable
 {
 	unsigned long nbrows;		/* # of used rows in the table */
-	unsigned long szrows;		/* # of alloc-ed rows in the table */
+	unsigned long szrows;		/* # of alloc-ed rows in the table */		
 	unsigned long nbcols;		/* # of used columns in the table */
-	unsigned long szcols;		/* # of alloc-ed columns in the table */
+	unsigned long szcols;		/* # of alloc-ed columns in the table */		
 	DynTableCell *cell;			/* cells values */
 }
 	DynTable;
@@ -177,7 +172,7 @@ int dyntab_add				/* return : 0 on success, other on error */
 	unsigned long col,		/* in : column index */
 	char *txt, size_t len,	/* in : text to add to table */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int srmode				/* in : search & replace direction (1=direct, 0=none, -1=reverse) */
+	int sz_sr				/* in : # of elements in sr */
 );
 
 /*********************************************************************
@@ -238,7 +233,7 @@ int dyntab_to_dynbuf		/* return : 0 on success, other on error */
 	char *cs, size_t sz_cs,	/* in : column separator */
 	char *rs, size_t sz_rs,	/* in : row separator */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int srmode				/* in : search & replace direction (1=direct, 0=none, -1=reverse) */
+	int sz_sr				/* in : # of elements in sr */
 );
 
 /*********************************************************************
@@ -269,6 +264,16 @@ int dyntab_cmp			/* return : comparison result : -1 / 0 / 1 */
 );
 
 /*********************************************************************
+** Function : dyntab_del_numline
+** Description : delete rows with given Num/Line indexes in a table
+*********************************************************************/
+void dyntab_del_numline(
+	DynTable *tab,			/* in/out : table to delete in */
+	unsigned long num,		/* in : num index */
+	unsigned long line		/* in : line index */
+);
+
+/*********************************************************************
 ** Function : dyntab_del_rows
 ** Description : delete rows in a table
 *********************************************************************/
@@ -276,16 +281,6 @@ void dyntab_del_rows(
 	DynTable *tab,					/* in : DynTable pointer */
 	unsigned long row,				/* in : 1st row to delete */
 	unsigned long nbrows			/* in : # of rows to delete */
-);
-
-/*********************************************************************
-** Function : dyntab_ins_rows
-** Description : insert rows in a table
-*********************************************************************/
-int dyntab_ins_rows(				/* return : 0 on success, other on error */
-	DynTable *tab,					/* in : DynTable pointer */
-	unsigned long row,				/* in : insert before this row */
-	unsigned long nbrows			/* in : # of rows to insert */
 );
 
 /*********************************************************************
@@ -383,8 +378,7 @@ int dyntab_ins_rows(				/* return : 0 on success, other on error */
 ** Description : add a DynBuffer content in a DynTable structure
 *********************************************************************/
 #define DYNTAB_ADD_BUF(tab, row, col, buf) \
-	{ if((buf) && (buf)->cnt) DYNTAB_ADD(tab, row, col, (buf)->data, (buf)->cnt, NO_CONV) \
-	  else DYNTAB_ADD(tab, row, col, NULL, 0, NO_CONV) }
+	{ if((buf) && (buf)->cnt) DYNTAB_ADD(tab, row, col, (buf)->data, (buf)->cnt, NO_CONV) }
 
 /*********************************************************************
 ** Macro : DYNTAB_ADD_INT
@@ -393,7 +387,7 @@ int dyntab_ins_rows(				/* return : 0 on success, other on error */
 #define DYNTAB_ADD_INT(tab, row, col, nb) \
 { \
 	char _tmp[32] = {0}; \
-	snprintf(_tmp, sizeof(_tmp), "%ld", (long int)(nb)); \
+	itoa(nb, _tmp, 10); \
 	DYNTAB_ADD(tab, row, col, _tmp, 0, NO_CONV); \
 }
 
@@ -415,11 +409,11 @@ int dyntab_ins_rows(				/* return : 0 on success, other on error */
 					!STRCMPNUL(val->txt, dbval->txt))
 
 /*********************************************************************
-** Macro : DYNTAB_SAMEVAL_MODE
+** Macro : DYNTAB_SAMEVAL
 ** Description : return 1 if two cells hold identical values with comparison mode
 *********************************************************************/
 #define DYNTAB_SAMEVAL_MODE(val, dbval, mode) ( \
 					val->len == dbval->len && \
-					(mode == 1 || mode == 4 || mode == 5 || val->Num == dbval->Num) && \
-					(mode == 1 || mode == 5 || val->Line == dbval->Line) && \
+					(mode == 1 || mode == 4 || val->Num == dbval->Num) && \
+					(mode == 1 || val->Line == dbval->Line) && \
 					!STRCMPNUL(val->txt, dbval->txt))

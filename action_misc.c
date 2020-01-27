@@ -1,12 +1,6 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : action_misc.c
-** Description : handling fonctions for misceleanous buttons & actions
+** Description : handling fonctions for misceleanous actions
 **      Author : Alain BOUTE
 **     Created : March 27 2002
 *********************************************************************/
@@ -25,9 +19,7 @@
 					DYNTAB_FREE(srcobj); \
 					DYNTAB_FREE(srcval); \
 					DYNTAB_FREE(setmode); \
-					DYNTAB_FREE(lineobj); \
-					DYNTAB_FREE(debug); \
-					M_FREE(expr)
+					DYNTAB_FREE(lineobj)
 int action_openform(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
@@ -43,13 +35,11 @@ int action_openform(				/* return : 0 on success, other on error */
 	DynTable setmode = { 0 };
 	DynTable lineobj = { 0 };
 	DynTable lineval = { 0 };
-	DynTable debug = { 0 };
-	DynBuffer *expr = NULL;
 	char *formtype = CTRL_ATTR_VAL(OPENFORM_TYPE);
 	char *objtype = CTRL_ATTR_VAL(OPENOBJ_TYPE);
 	char *altform = CTRL_ATTR_VAL(ALTFORM);
 	unsigned long i, j;
-	int loc = 0, b_edit, openmode = atoi(CTRL_ATTR_VAL(OPEN_MODE));
+	int loc = 0;
 
 	/* Handle save before */
 	int b_done = 0;
@@ -61,49 +51,35 @@ int action_openform(				/* return : 0 on success, other on error */
 	/* Select opened form */
 	if(!strcmp("_EVA_CURRENT", formtype))
 	{
-		char *srcfield = CTRL_ATTR_VAL(SRCFIELD);
-		if(*srcfield)
-		{
-			if(ctrl_eval_fieldexpr(cntxt, ctrl, &id_form, srcfield)) CLEAR_ERROR;
-		}
-		else
-			DYNTAB_ADD_CELL(&id_form, 0, 0, &form->id_obj, 0, 0);
+		DYNTAB_ADD_CELL(&id_form, 0, 0, &form->id_obj, 0, 0);
 	}
 	else
 	{
-		CTRL_ATTR(id_form, OPENFORM);
+		CTRL_OPTIONAL(id_form, OPENFORM);
 	}
 
 	/* Select opened object */
 	if(*objtype)
 	{
-		CTRL_ATTR(srcval, OPENFIELD);
-		CTRL_ATTR(srcobj, LISTOBJ);
-		if(ctrl_eval_valtyp(cntxt, ctrl, &id_obj, objtype, &srcobj, &srcval)) CLEAR_ERROR;
+		CTRL_OPTIONAL(srcval, OPENFIELD);
+		CTRL_OPTIONAL(srcobj, LISTOBJ);
+		if(form_eval_valtype(cntxt, &id_obj, objtype, &srcobj, &srcval)) CLEAR_ERROR;
 		if(id_obj.nbrows > 1) id_obj.nbrows = 1;
-		if(!DYNTAB_TOUL(&id_obj)) DYNTAB_FREE(id_obj);
 	}
 
-	/* Return if no form for object */
+	/* Return if no form nor object */
 	if(!dyntab_sz(&id_obj, 0, 0) && !dyntab_sz(&id_form, 0, 0)) RETURN_OK;
 
-	/* Set default form if none specified */
-	if(!id_form.nbrows && qry_obj_field(cntxt, &id_form, DYNTAB_TOUL(&id_obj), "_EVA_FORMSTAMP")) STACK_ERROR;
-
 	/* Set initial values */
-	CTRL_ATTR_TAB(destfield, DESTFIELD);
-	b_edit = destfield.nbrows > 0;
-	CTRL_ATTR_TAB(srctype, SRCTYPE);
-	CTRL_ATTR_TAB(srcobj, SRCLISTOBJ);
-	CTRL_ATTR_TAB(srcval, SRCFIELD);
-	CTRL_ATTR_TAB(setmode, SET_MODE);
-	CTRL_ATTR_TAB(debug, DEBUG_SQL_EXPR);
+	CTRL_READ_ATTR_TAB(destfield, DESTFIELD);
+	CTRL_READ_ATTR_TAB(srctype, SRCTYPE);
+	CTRL_READ_ATTR_TAB(srcobj, SRCLISTOBJ);
+	CTRL_READ_ATTR_TAB(srcval, SRCFIELD);
+	CTRL_READ_ATTR_TAB(setmode, SET_MODE);
 	for(i = 0; i < destfield.nbrows; i++)
 		if(dyntab_sz(&destfield, i, 0))
 		{
 			DynTableCell *c;
-			int sql_trace = cntxt->sql_trace;
-			dyntab_free(&lineobj);
 			for(j = 0; j < srcobj.nbcols; j++) if(dyntab_sz(&srcobj, i, j))
 			{
 				unsigned long row = lineobj.nbrows;
@@ -112,11 +88,11 @@ int action_openform(				/* return : 0 on success, other on error */
 				c->Num = 0;
 				c->Line = 0;
 			}
-			M_FREE(expr);
-			if(qry_eval_sqlexpr_var(cntxt, &expr, dyntab_val(&srcval, i, 0), &ctrl->attr, NULL)) STACK_ERROR;
-			DYNTAB_ADD_BUF(&lineval, 0, 0, expr);
-			if(*dyntab_val(&debug, i, 0)) cntxt->sql_trace = DEBUG_SQL_RES;
-			if(form_set_values(cntxt,
+			DYNTAB_SET_CELL(&lineval, 0, 0, &srcval, i, 0);
+			c = dyntab_cell(&lineval, 0, 0);
+			c->Num = 0;
+			c->Line = 0;
+			if(form_set_values(cntxt,	
 					DYNTAB_TOUL(&id_form),
 					DYNTAB_TOUL(&id_obj),
 					DYNTAB_VAL_SZ(&destfield, i, 0),
@@ -125,40 +101,14 @@ int action_openform(				/* return : 0 on success, other on error */
 					&lineval,
 					dyntab_val(&setmode, i, 0)))
 				CLEAR_ERROR;
-			cntxt->sql_trace = sql_trace;
 		}
-
-	/* Transfer fields from current object */
-	CTRL_ATTR_TAB(destfield, COPY_FIELDS);
-	for(i = 0; i < destfield.nbrows; i++)
-	{
-		unsigned long idfield = DYNTAB_TOULRC(&destfield, i, 0);
-		if(qry_cache_idobj(&lineobj, idfield) || ctrl_read_baseobj(cntxt,  &lineobj)) STACK_ERROR;
-		DYNTAB_FIELD(&srcval, &lineobj, FIELD);
-		if(form_set_values(cntxt,
-				DYNTAB_TOUL(&id_form),
-				DYNTAB_TOUL(&id_obj),
-				DYNTAB_VAL_SZ(&srcval, 0, 0),
-				"_EVA_CURRENTOBJ",
-				NULL,
-				&srcval,
-				"_EVA_REPLACE"))
-			CLEAR_ERROR;
-	}
 
 	/* Select form location */
 	if(!strcmp("_EVA_BOTTOM", altform)) loc = 2;
 	else if(!strcmp("_EVA_TOP", altform)) loc = 1;
-	else if(!strcmp("_EVA_REUSE", altform)) loc = 3;
 
-	/* Open form with given object */
-	if(form_load_from_ctrl(cntxt, &id_form, &id_obj, loc, 0)) STACK_ERROR;
-
-	/* Set edit mode if enougth rights & data modified */
-	form = cntxt->form;
-	if(openmode)  form->nextstep = openmode == 3 ? HtmlPrint :
-									(openmode == 1 && (form->ctrl->access & AccessEdit)) ? HtmlEdit : HtmlView;
-	else if((b_edit || openmode == 1) && form->ctrl->access & AccessEdit) form->nextstep = HtmlEdit;
+	/* Open form with new object */
+	if(form_load_from_ctrl(cntxt, &id_form, &id_obj, loc, i_ctrl)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -170,7 +120,7 @@ int action_openform(				/* return : 0 on success, other on error */
 ** Description : button click handler for PRINT, SAVE, CLOSE, EDIT, ...
 *********************************************************************/
 #define ERR_FUNCTION "action_formbuttons"
-#define ERR_CLEANUP
+#define ERR_CLEANUP	
 int action_formbuttons(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
@@ -181,29 +131,17 @@ int action_formbuttons(				/* return : 0 on success, other on error */
 	char *confirm = CTRL_ATTR_VAL(CONFIRM);
 	int buttons = 0, mode = 0;
 
-	/* Handle close button on unchanged object */
-	if(!strcmp(action, "_EVA_CLOSEALL"))
+	/* Handle close button on unchanged new object */
+	if(!dyntab_sz(&form->id_obj, 0, 0) && !form->b_modified && !strcmp(action, "_EVA_CLOSE"))
 	{
-		if(action_closeall(cntxt)) STACK_ERROR;
+		if(form_close_nosave(cntxt, DYNTAB_TOUL(&form->id_form), 0, &form->call_data)) STACK_ERROR;
 		RETURN_OK;
 	}
-	else if(!strcmp(action, "_EVA_DELETE"))
-	{
-		if(action_delete(cntxt)) STACK_ERROR;
-		RETURN_OK;
-	}
-	else if(!strcmp(action, "_EVA_CLOSE") && (
-		(!dyntab_sz(&form->id_obj, 0, 0) && !form->b_modified) ||
-		form->prevstep == HtmlView))
-	{
-		if(form_close_nosave(cntxt, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), &form->call_data)) STACK_ERROR;
-		RETURN_OK;
-	}
-
+	
 	/* Handle button action */
 #define DEFACTION(t, b, m)	if(!strcmp(action, "_EVA_"#t)) { buttons = b; mode = m; }
 		 DEFACTION(SAVE, BUTN_SAVE_BACK, 0)
-	else DEFACTION(CLOSE, BUTN_CLOSE, 0)
+	else DEFACTION(CLOSE, strcmp(confirm, "_EVA_CONFIRMNONE") ? BUTN_CLOSE : BUTN_SAVE_CLOSE, 0)
 	else DEFACTION(SAVECLOSE, BUTN_SAVE_CLOSE, 0)
 	else DEFACTION(PRINTMODE, (form->prevstep == HtmlPrint ? 0 : BUTN_SAVE_NEXT),
 							(form->prevstep == HtmlPrint ? HtmlView : HtmlPrint))
@@ -220,19 +158,175 @@ int action_formbuttons(				/* return : 0 on success, other on error */
 	if(buttons)
 	{
 		int btn = buttons;
-		if(form_save_dialog(cntxt, i_ctrl, confirm, buttons | BUTN_SAVE_CLOSE | BUTN_CLOSE | BUTN_RESTORE, &btn))
+		if(form_save_dialog(cntxt, i_ctrl, confirm, buttons | BUTN_SAVE_CLOSE | BUTN_CLOSE | BUTN_RESTORE, &btn)) 
 			STACK_ERROR;
 
 		/* Set form mode if dialog succeded */
-		if(btn == buttons && mode && form)
-		{
-			form->nextstep = mode;
-		}
+		if(btn == buttons && mode && form) form->nextstep = mode;
 	}
-	else
-	{
+	else 
 		form->nextstep = mode;
+	
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Function : action_export
+** Description : button click handler for EXPORT
+*********************************************************************/
+#define ERR_FUNCTION "action_export"
+#define ERR_CLEANUP	DYNTAB_FREE(sqlres); \
+					M_FREE(forms); \
+					M_FREE(qry); \
+					M_FREE(formname); \
+					M_FREE(objname); \
+					M_FREE(name); \
+					M_FREE(fname); \
+					if(f) fclose(f)
+int action_export(					/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
+){
+	EVA_form *form = cntxt->form;
+	DynTable sqlres = {0};
+	DynBuffer *forms = NULL;
+	DynBuffer *qry = NULL;
+	DynBuffer *formname = NULL;
+	DynBuffer *objname = NULL;
+	DynBuffer *name = NULL;
+	DynBuffer *fname = NULL;
+	DynBuffer **html;
+	unsigned long level = 0, nb_cur = 1, nb_prev = 0, idobj;
+	char sql[2048];
+	FILE *f = NULL;
+
+	/* TODO : handle export params (objects selection, output mode, ...) */
+	i_ctrl = 0;
+
+	/* Export current object in triplets format */
+	idobj = atoi(dyntab_val(&form->id_obj, 0, 0));
+	if(!idobj) RETURN_OK;
+
+	/* Build list of forms */
+	sprintf(sql, 
+		"-- action_export : build forms list\n"
+		"SELECT TLink.IdObj FROM TLink \n"
+		"INNER JOIN TLink AS TLink0 ON TLink.IdObj=TLink0.IdObj \n"
+		"WHERE TLink.IdObj NOT IN (%lu) AND TLink.DateDel IS NULL AND TLink.IdField=%lu AND TLink.IdRelObj=%lu \n"
+		"AND TLink0.DateDel IS NULL AND TLink0.IdField=%lu AND TLink0.IdValue=%lu \n"
+		"GROUP BY IdObj", idobj,
+		cntxt->val_FORMSTAMP, OBJ_FORM_CONTROL, IDVAL("_EVA_CONTROL"), IDVAL("_EVA_FORM"));
+	if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, &sqlres, 2) ||
+		qry_values_list(cntxt, &sqlres, 0, &forms)) STACK_ERROR;
+
+	/* Create a temporary heap table to hold selected objects */
+	sprintf(sql, 
+		"INSERT INTO IdList (IdObj,Lvl) VALUES (%lu, 0)", idobj);
+	if(sql_exec_query(cntxt, "-- action_export : create objects Ids table\n"
+		"CREATE TEMPORARY TABLE IdList (IdObj INT NOT NULL, Lvl INT, PRIMARY KEY (IdObj)) TYPE=HEAP") ||
+		sql_exec_query(cntxt, sql)) STACK_ERROR;
+
+	/* Read objects children */
+	while(nb_cur > nb_prev)
+	{
+		level++;
+		DYNBUF_ADD3_INT(&qry, 
+			"-- action_export : get child ids - level=", level, "\n");
+		DYNBUF_ADD3_INT(&qry, 
+			"CREATE TEMPORARY TABLE IdListTmp TYPE=HEAP \n" 
+			"SELECT TLink.IdRelObj, ", level, " AS Lvl \n" 
+			"FROM TLink \n"
+			"INNER JOIN IdList ON TLink.IdObj=IdList.IdObj \n"); 
+		DYNBUF_ADD3_INT(&qry, 
+			"WHERE IdList.Lvl=", level - 1, " AND TLink.DateDel IS NULL AND TLink.IdRelObj IS NOT NULL \n"); 
+		DYNBUF_ADD3_BUF(&qry, 
+			"AND TLink.IdRelObj NOT IN (", forms, NO_CONV,") \n" 
+			"GROUP BY TLink.IdRelObj");
+		if(sql_exec_query(cntxt, qry->data) ||
+			sql_exec_query(cntxt,
+				"INSERT IGNORE IdList SELECT * FROM IdListTmp")) STACK_ERROR;
+		if(sql_exec_query(cntxt, "DROP TABLE IdListTmp") || 
+			sql_exec_query(cntxt, "SELECT COUNT(*) FROM IdList") || 
+			sql_get_table(cntxt, &sqlres, 2)) STACK_ERROR;
+		nb_prev = nb_cur;
+		nb_cur = DYNTAB_TOUL(&sqlres);
+		M_FREE(qry);
 	}
+
+	/* Open output file - name as form & object label */
+	if(qry_obj_label(cntxt, &formname, NULL, &objname, NULL, NULL, NULL, NULL, NULL, 0, &form->objdata, 0))
+		STACK_ERROR;
+	DYNBUF_ADD(&fname, cntxt->dbname, 0, NO_CONV);
+	DYNBUF_ADD3_BUF(&fname, "-", formname, NO_CONV, "-");
+	DYNBUF_ADD_BUF(&fname, objname, NO_CONV);
+	file_compatible_name(fname->data);
+	DYNBUF_ADD_STR(&fname, ".txt");
+	if(chdir(cntxt->path) || chdir("..")) RETURN_ERR_DIRECTORY(1);
+	mkdir("objlib");
+	if(chdir("objlib")) RETURN_ERR_DIRECTORY(1);
+	f = fopen(fname->data, "w");
+	if(!f) RETURN_ERROR("Impossible d'écrire dans le fichier", NULL);
+
+	/* Output used forms ids & labels */
+	DYNBUF_ADD3_BUF(&qry, 
+		"SELECT TLink0.IdObj AS IdObj,TVal.TxtValue AS Label \n" 
+		"FROM TLink \n"
+		"INNER JOIN IdList ON TLink.IdObj=IdList.IdObj \n" 
+		"INNER JOIN TLink AS TLink0 ON TLink.IdRelObj=TLink0.IdObj \n"
+		"INNER JOIN TVal as TField ON TLink0.IdField=TField.IdValue \n"
+		"INNER JOIN TVal ON TLink0.IdValue=TVal.IdValue \n"
+		"WHERE TField.TxtValue='_EVA_LABEL' AND TLink.DateDel IS NULL AND TLink0.DateDel IS NULL \n"
+		"AND TLink.IdRelObj IN (", forms, NO_CONV,") \n" 
+		"GROUP BY TLink0.IdObj,TVal.TxtValue \n" 
+		"ORDER BY IdObj");
+	if(sql_exec_query(cntxt, qry->data) ||
+		sql_get_table(cntxt, &sqlres, 3) ||
+		FILE_write_tabrc(cntxt, &sqlres, f)) STACK_ERROR;
+	fprintf(f, "\n");
+
+	/* Read objects data & write to output file */
+	sprintf(sql, 
+		"-- action_export : read objects data\n"
+		"SELECT DISTINCT TLink.IdObj AS IdObj,"
+			"TField.TxtValue AS Field,"
+			"IF(TVal.TxtValue IS NULL,TLink.IdRelObj,TVal.TxtValue) AS Value," 
+			"IF(TLink.IdRelObj IS NULL,'V','R') AS Type,"
+			"TLink.Num,TLink.Line \n" 
+		"FROM TLink INNER JOIN IdList ON TLink.IdObj=IdList.IdObj \n" 
+		"INNER JOIN TVal as TField ON TLink.IdField=TField.IdValue \n"
+		"LEFT JOIN TVal ON TLink.IdValue=TVal.IdValue \n"
+		"WHERE TLink.DateDel IS NULL \n"
+		"ORDER BY IdList.Lvl,TLink.IdObj,TLink.IdField,TLink.Line,TLink.Num");
+	if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, &sqlres, 3) ||
+		FILE_write_tabrc(cntxt, &sqlres, f) ||
+		sql_exec_query(cntxt, "DROP TABLE IdList")) STACK_ERROR;
+
+	/* Output link to result file */
+	cntxt->jsfunc = 1;
+	put_html_page_header(cntxt, NULL, "Exporter des données", NULL, 3);
+	M_FREE(forms);
+	cntxt->form->html = &forms;
+	html = &forms;
+	cntxt->b_terminate = 15;
+	DYNBUF_ADD_STR(html, "<table noboder width=100%><tr><td align=center>");
+	if(put_html_button(cntxt, "NOP", "Revenir", "_eva_btn_gobackobj_fr.gif", "_eva_btn_gobackobj_fr_s.gif",
+							"Retourne à la page précédente", 0, 0)) STACK_ERROR;
+	DYNBUF_ADD_STR(html, "</td><td align=center>");
+	DYNBUF_ADD3_BUF(&name, "B$#.DELOBJLIB=", fname, NO_CONV, "$1");
+	if(put_html_button(cntxt, name->data, "Supprimer le fichier", "_eva_btn_delfile_fr.gif", "_eva_btn_delfile_fr_s.gif",
+							"Attendez que le téléchargement soit terminé pour supprimer le fichier", 0, 0)) STACK_ERROR;
+	DYNBUF_ADD_STR(html, "</td></tr></table>");
+	printf("<font face=Arial><center>"
+			"<font size=+1><b>%s %s</font><br><br>"
+			"Export de données terminé avec succès</b><hr><br><br>"
+			"Fichier exporté : <a "
+			"title='Cliquez avec le bouton droit de la souris et utilisez la commande \"Enregistrer sous ...\" pour transférer le fichier vers un autre ordinateur' "
+			"href='/objlib/%s'>%s %s</a><br><br>"
+			"Si vous n'utilisez pas le bouton 'Supprimer le fichier', il sera visible par les utilisateurs pouvant importer des données<br>"
+			"<hr><br>%s<br><br></center></font>", 
+			formname->data, objname->data, fname->data, formname->data, objname->data, forms->data);
 
 	RETURN_OK_CLEANUP;
 }
@@ -244,10 +338,17 @@ int action_formbuttons(				/* return : 0 on success, other on error */
 ** Description : button click handler for CLOSEALL
 *********************************************************************/
 #define ERR_FUNCTION "action_closeall"
-#define ERR_CLEANUP
+#define ERR_CLEANUP 
 int action_closeall(				/* return : 0 on success, other on error */
-	EVA_context *cntxt				/* in/out : execution context data */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 ){
+	EVA_form *form = cntxt->form;
+	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
+
+	/* TODO */
+	ctrl = 0;
+
 	DYNTAB_FREE(cntxt->id_form);
 	DYNTAB_FREE(cntxt->id_obj);
 	DYNTAB_FREE(cntxt->alt_form);
@@ -281,20 +382,21 @@ int action_end_session(				/* return : 0 on success, other on error */
 	/* End session if confirm button clicked */
 	if(!strcmp(CGI_CLICK_BTN_SUBFIELD, "ENDSESSION"))
 	{
-		if(action_closeall(cntxt)) STACK_ERROR;
+		if(action_closeall(cntxt, i_ctrl)) STACK_ERROR;
 		M_FREE(cntxt->html);
 		M_FREE(cntxt->html0);
 		M_FREE(cntxt->html1);
 		form_free(cntxt);
 		cgi_free(cntxt);
-		cntxt->b_identified= 0;
+		cntxt->b_user_ok = 0;
 		if(qry_add_obj_field_val(cntxt, &cntxt->session, "_EVA_TERMINATE", add_sz_str("1"), 0, 1)) STACK_ERROR;
 		DYNTAB_FREE(cntxt->session);
 		RETURN_OK;
 	}
 
 	/* Output page header */
-	put_html_page_header(cntxt, NULL, "Fin de session", NULL, 3);
+	cntxt->jsfunc = 1;
+	put_html_page_header(cntxt, NULL, "Importer des données", NULL, 3);
 	form->html = &form->html_top;
 	cntxt->b_terminate = 15;
 	fflush(stdout);
@@ -315,18 +417,18 @@ int action_end_session(				/* return : 0 on success, other on error */
 	{
 		/* Check if form was modified */
 		CGIData *cgi = cntxt->cgi + i;
-		char *bgcolor = table_row_bgcolor(cntxt, &tbl, j, NULL);
+		char *bgcolor = table_row_bgcolor(cntxt, &tbl, j);
 		if(cgi_check_form_change(cntxt, cgi->IdForm, cgi->IdObj) != 1) continue;
 		j++;
 
 		/* Read object data */
-		if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL,
+		if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL, 
 								cgi->IdObj ? ~0UL : cgi->IdForm,
 								cgi->IdObj, NULL, "", 0, 0)) STACK_ERROR;
 		if(cgi->IdObj)
 		{
 			unsigned long k;
-			if(qry_cache_idobj(&data, cgi->IdObj)) STACK_ERROR;
+			if(qry_obj_idfield(cntxt, &data, cgi->IdObj, 0)) STACK_ERROR;
 			if(qry_complete_data(cntxt, &cgival, &data, NULL, NULL)) STACK_ERROR;
 			for(k = cgival.nbrows; k; k--)
 				if(!strcmp(dyntab_cell(&cgival, k - 1, 0)->field, "_EVA_FORMSTAMP"))
@@ -342,7 +444,8 @@ int action_end_session(				/* return : 0 on success, other on error */
 
 		/* Output open button */
 		DYNBUF_ADD_STR(form->html, "<tr>");
-		if(ctrl_add_symbol_btn(cntxt, NULL, NULL, &cgival, 0, bgcolor, "SYMBOL+NAME+LABEL+OBJNOTES"))
+		if(ctrl_add_symbol_btn(cntxt, NULL, NULL, NULL, &cgival, 0,
+								add_sz_str("Cliquez pour retourner à la fiche"), bgcolor, "SYMBOL+NAME+LABEL+OBJNOTES"))
 			CLEAR_ERROR;
 		DYNBUF_ADD_STR(form->html, "</tr>");
 	}
@@ -361,7 +464,7 @@ int action_end_session(				/* return : 0 on success, other on error */
 			"<br><br><img src='../img/_eva_btn_closenosave_fr.gif' border=0></a><br><br></center>");
 	}
 	else
-	{
+	{	
 		/* Close window */
 		printf("<script>window.close();</script>");
 	}
@@ -381,10 +484,11 @@ int action_end_session(				/* return : 0 on success, other on error */
 					DYNTAB_FREE(linkdata); \
 					M_FREE(sql)
 int action_delete(					/* return : 0 on success, other on error */
-	EVA_context *cntxt				/* in/out : execution context data */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 ){
-
 	EVA_form *form = cntxt->form;
+	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	unsigned long i, j;
 	EVA_ctrl *ctrl_delobj = 0;
 	EVA_ctrl *ctrl_delmode = 0;
@@ -393,6 +497,9 @@ int action_delete(					/* return : 0 on success, other on error */
 	DynTable objdata = {0};
 	DynTable linkdata = {0};
 	DynBuffer *sql = NULL;
+
+	/* TODO */
+	ctrl = 0;
 
 	/* Retrieve delete parameters controls index */
 	for(i = 0; i < form->nb_ctrl; i++)
@@ -449,37 +556,14 @@ int action_delete(					/* return : 0 on success, other on error */
 			c->len = dyntab_sz(&t_keepobj, 0, 0);
 			if(qry_add_val(cntxt, c, 1, NULL)) STACK_ERROR;
 		}
-
-		/* Handle IdWhoCr */
-		DYNBUF_ADD3_INT(&sql, "-- Handle IdWhoCr\n"
-			"UPDATE TLink SET IdWhoCr=", keepobj, "\nWHERE IdWhoCr IN(");
-		if(qry_values_list(cntxt, &ctrl_delobj->val, 0, &sql)) STACK_ERROR;
-		DYNBUF_ADD_STR(&sql, ")");
-		if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
-		M_FREE(sql);
-
-		/* Handle IdWhoDel */
-		DYNBUF_ADD3_INT(&sql, "-- Handle IdWhoDel\n"
-			"UPDATE TLink SET IdWhoDel=", keepobj, "\nWHERE IdWhoDel IN(");
-		if(qry_values_list(cntxt, &ctrl_delobj->val, 0, &sql)) STACK_ERROR;
-		DYNBUF_ADD_STR(&sql, ")");
-		if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
-		M_FREE(sql);
 	}
 
-	/* Delete objects */
+	/* Delete objects & links to objects */
 	DYNBUF_ADD3(&sql, "-- Delete objects & links\n"
 		"UPDATE TLink SET DateDel='", cntxt->timestamp, 0, NO_CONV, "'");
-	DYNBUF_ADD3_CELL(&sql, ",IdWhoDel=", &cntxt->id_user, 0, 0, NO_CONV, "\nWHERE DateDel IS NULL AND IdObj IN(");
+	DYNBUF_ADD3_CELL(&sql, ",IdWhoDel=", &cntxt->id_user, 0, 0, NO_CONV, "\nWHERE IdObj IN(");
 	if(qry_values_list(cntxt, &ctrl_delobj->val, 0, &sql)) STACK_ERROR;
-	DYNBUF_ADD_STR(&sql, ")");
-	if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
-	M_FREE(sql);
-
-	/* Delete links to objects */
-	DYNBUF_ADD3(&sql, "-- Delete objects & links\n"
-		"UPDATE TLink SET DateDel='", cntxt->timestamp, 0, NO_CONV, "'");
-	DYNBUF_ADD3_CELL(&sql, ",IdWhoDel=", &cntxt->id_user, 0, 0, NO_CONV, "\nWHERE DateDel IS NULL AND IdRelObj IN(");
+	DYNBUF_ADD_STR(&sql, ") \nOR IdRelObj IN (");
 	if(qry_values_list(cntxt, &ctrl_delobj->val, 0, &sql)) STACK_ERROR;
 	DYNBUF_ADD_STR(&sql, ")");
 	if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
@@ -511,26 +595,16 @@ int action_delete(					/* return : 0 on success, other on error */
 ** Description : button click handler for COPYOBJ
 *********************************************************************/
 #define ERR_FUNCTION "action_copyobj"
-#define ERR_CLEANUP M_FREE(name)
+#define ERR_CLEANUP	
 int action_copyobj(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	DynBuffer *name = NULL;
 
-	/* Clear current clipboard values if applicable */
-	if(*CTRL_ATTR_VAL(ADD) != '1')
-	{
-		unsigned long i;
-		if(cgi_filter_values(cntxt, &ctrl->cgival, 'D', 0, 0, 0, "CB", NULL, 0, 0)) STACK_ERROR;
-		for(i = 0; i < ctrl->cgival.nbrows; i++) cgi_value_setkeep(cntxt, &ctrl->cgival, i, 2);
-	}
-
-	/* Add new values */
-	DYNBUF_ADD_STR(&name, "D0$0#CB$1");
-	if(cgi_add_input(cntxt, NULL, DYNBUF_VAL_SZ(name), DYNTAB_VAL_SZ(&form->id_obj, 0, 0))) STACK_ERROR;
+	/* TODO */
+	ctrl = 0;
 
 	RETURN_OK_CLEANUP;
 }
@@ -562,46 +636,32 @@ int action_default(					/* return : 0 on success, other on error */
 	{
 	case 'I':	/* Info button : display control info */
 		/* Load alternate form */
-		DYNTAB_ADD_INT(&id_form, 0, 0, (unsigned long int)OBJ_FORM_CONTROL);
+		DYNTAB_ADD_INT(&id_form, 0, 0, OBJ_FORM_CONTROL);
 		DYNTAB_ADD_INT(&id_obj, 0, 0, cgi->IdCtrl);
-		if((cntxt->opt_btn_mode == OptBtn_OpenSame || cntxt->opt_btn_mode ==  OptBtn_OpenBottom) &&
-			form_load_from_ctrl(cntxt, &id_form, &id_obj, cntxt->opt_btn_mode == OptBtn_OpenSame ? 0 : 2, 0)) STACK_ERROR;
+		if((cntxt->opt_btn_mode == OptBtn_OpenSame || cntxt->opt_btn_mode ==  OptBtn_OpenBottom) && 
+			form_load_from_ctrl(cntxt, &id_form, &id_obj, cntxt->opt_btn_mode == OptBtn_OpenSame ? 0 : 2, form->nb_ctrl)) STACK_ERROR;
 		break;
 
 	case 'T':	/* TAB button : memorize selected tab */
-		form->seltab = i_ctrl;
+		form->i_seltab = i_ctrl;
 		break;
 
 	default:
 		/* Check for program specific actions */
 		if(equal)
 		{
-			/* Get parameters : IdObj,IdForm,Location,Mode */
-			unsigned long idobj = 0, idform = 0;
-			int loc = 0, mode = 0;
+			/* Get parameters : IdObj,IdForm,Location */
+			unsigned long idobj = strtoul(equal + 1, NULL, 10);
+			char *c = strchr(equal, ',');
+			unsigned long idform = c ? strtoul(c + 1, &c, 10) : 0;
+			int loc = c ? atoi(c + 1) : 0;
 
 			if(!strncmp(btn, add_sz_str("OPENOBJ")))
 			{
 				/* Open object in given form */
-				if(sscanf(equal + 1, "%lu,%lu,%d,%d", &idobj, &idform, &loc, &mode) > 0)
-				{
-					if(idform) DYNTAB_ADD_INT(&id_form, 0, 0, idform);
-					if(idobj) DYNTAB_ADD_INT(&id_obj, 0, 0, idobj);
-					if(form_load_from_ctrl(cntxt, &id_form, &id_obj, loc, mode)) STACK_ERROR;
-				}
-			}
-			else if(!strncmp(btn, add_sz_str("CLOSESETVAL")))
-			{
-				char *sep = strchr(equal + 1, '=');
-				dyntab_from_list(&id_obj, DYNTAB_VAL_SZ(&form->call_data, 0, 0), "/", 0, 6);
-				idform = DYNTAB_TOUL(&id_obj);
-				idobj = DYNTAB_TOULRC(&id_obj, 1, 0);
-				form_close_nosave(cntxt, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), NULL);
-				if(sep && sep - equal > 1 && idform)
-				{
-					DYNTAB_ADD(&id_form, 0, 0, sep + 1, 0, NO_CONV);
-					if(cgi_set_field_values(cntxt, idform, idobj, equal + 1, sep - equal - 1, &id_form, "_EVA_REPLACE", 0)) STACK_ERROR;
-				}
+				if(idform) DYNTAB_ADD_INT(&id_form, 0, 0, idform);
+				if(idobj) DYNTAB_ADD_INT(&id_obj, 0, 0, idobj);
+				if(form_load_from_ctrl(cntxt, &id_form, &id_obj, loc, i_ctrl)) STACK_ERROR;
 			}
 			else if(!strncmp(btn, add_sz_str("CLOSE")))
 			{
@@ -609,13 +669,13 @@ int action_default(					/* return : 0 on success, other on error */
 			}
 			else if(!strncmp(btn, add_sz_str("DELOBJLIB")))
 			{
-				if(!chdir(cntxt->rootdir) && !chdir("objlib"))
+				if(!chdir(cntxt->path) && !chdir("..") && !chdir("objlib"))
 					remove(equal + 1);
 			}
 		}
-		else if(!strcmp(btn, "CLOSE"))
+		else if(!strcmp(btn, "CLOSE")) 
 		{
-			form_close_nosave(cntxt, DYNTAB_TOUL(form ? &form->id_form : &cntxt->id_form),
+			form_close_nosave(cntxt, DYNTAB_TOUL(form ? &form->id_form : &cntxt->id_form), 
 										DYNTAB_TOUL(form ? &form->id_obj : &cntxt->id_obj),
 										NULL);
 		}

@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : date_utils.c
 ** Description : date conversion functions
 **      Author : Alain BOUTE
@@ -37,23 +31,11 @@ int time_to_datetxt(		/* return : 0 on success, other on error */
 	*valdate =  0;
 	dt = localtime(&t);
 	if(!dt) return 1;
-	sprintf(valdate, "%04d%02d%02d%02d%02d%02d",
-			1900 + dt->tm_year, dt->tm_mon+1, dt->tm_mday,
+	sprintf(valdate, "%04d%02d%02d%02d%02d%02d", 
+			1900 + dt->tm_year, dt->tm_mon+1, dt->tm_mday, 
 			dt->tm_hour, dt->tm_min, dt->tm_sec);
 
 	return 0;
-}
-
-/*********************************************************************
-** Function : full_datetxt
-** Description : set missing digits for a YYYYMMDDHHMMSS date
-*********************************************************************/
-void full_datetxt(
-	char *date			/* in/out : date - must be 16 bytes long minimum */
-){
-	size_t sz = date ? strlen(date) : 0;
-	if(sz != 4 && sz != 6 && sz != 8 && sz != 10 && sz != 12) return;
-	sprintf(date + sz, "%s", "0101000000" + sz - 4);
 }
 
 /*********************************************************************
@@ -103,7 +85,7 @@ int date_difference(									/* return : date difference in given unit */
 		if(Y0 == Y1 && M0 == M1)
 			return (D1 - D0 + (h1 >= h0 ? 0 : 1))*86400 + (h1 - h0 + (m1 >= m0 ? 0 : 1))*3600 + (m1 - m0 + (s1 >= s0 ? 0 : 1))*60 + s1 - s0;
 
-		/* TODO : exact implementation for old dates */
+		/* TODO */
 		*fmt = 'm';
 	case 'm':
 		/* Unix time implementation */
@@ -113,25 +95,24 @@ int date_difference(									/* return : date difference in given unit */
 		if(Y0 == Y1 && M0 == M1)
 			return (D1 - D0 + (h1 >= h0 ? 0 : 1))*1440 + (h1 - h0 + (m1 >= m0 ? 0 : 1))*60 + m1 - m0;
 
-		/* TODO : exact implementation for old dates */
+		/* TODO */
 		*fmt = 'h';
 	case 'h':
-		/* Unix time implementation */
-		if(b_unix) return (t1 - t0)/3600;
-
 		/* Simple implementation for days in same month */
 		if(Y0 == Y1 && M0 == M1)
 			return (D1 - D0 + (h1 >= h0 ? 0 : 1))*24 + h1 - h0;
 
-		/* TODO : exact implementation for old dates */
+		/* Unix time implementation */
+		if(b_unix) return (t1 - t0)/3600;
+
+		/* TODO */
 		*fmt = 'D';
 	case 'D':
-		/* Unix time implementation */
-		if(b_unix) return (t1 - t0)/86400;
-
 		/* Simple implementation for days in same month */
 		if(Y0 == Y1 && M0 == M1) return (D1 - D0);
 
+		/* Unix time implementation */
+		if(b_unix) return (t1 - t0)/86400;
 		*fmt = 'M';
 	case 'M':
 		return M1 - M0 + (Y1 - Y0) * 12 - (D1 >= D0 ? 0 : 1);
@@ -180,7 +161,7 @@ int datetxt_to_age(		/* return : age (signed) in the requested unit */
 	/* Select best fit if required */
 	if(!fmt)
 	{
-		while(!b_done)
+		while(!b_done)  
 		{
 			char outfmt;
 			switch(fmt)
@@ -239,7 +220,7 @@ int datetxt_invalid(		/* return : 0 if date valid, other if invalid */
 *********************************************************************/
 int input_to_datetxt(		/* return : 0 on success, other on error */
 	char *valdate,			/* in : date to convert (user input format) */
-	char *date				/* out : converted date - must be 16 bytes long minimum */
+	char *date				/* out : converted time - must be 16 bytes long minimum */
 )
 {
 	int num[6], nb, i, i_hour = -1;
@@ -249,7 +230,6 @@ int input_to_datetxt(		/* return : 0 on success, other on error */
 	*date = 0;
 	if(!valdate || !*valdate) return 0;
 	memset(num, 0, sizeof(num));
-
 
 	/* Search for up to 6 numbers */
 	for(i = 0; i < 6 && *txt; i++)
@@ -290,41 +270,45 @@ int input_to_datetxt(		/* return : 0 on success, other on error */
 		for(i = 0; valdate[i] && valdate[i] >= '0' && valdate[i] <= '9' && i < 14; i++) date[i] = valdate[i];
 		date[i] = 0;
 	}
-	else if(nb == 2 && num[0] >= 1 && num[0] <= 31 && num[1] >= 1 && num[1] <= 12)
+	else if(nb == 2 && num[0] >= 1 && num[0] <= 31 && num[1] >= 1 && num[1] <= 12) 
 	{
 		/* Two numbers in range 1-31 / 1-12 : treat as day / month */
 		strncpy(date, datetxt_now(), 4);
 		sprintf(date+4, "%02d%02d", num[1], num[0]);
 	}
-	else if(nb == 2 && num[0] >= 1 && num[0] <= 12 && num[1] >= 1000 && num[1] <= 9999)
+	else if(nb == 2 && num[0] >= 1 && num[0] <= 12 && num[1] >= 1000 && num[1] <= 9999) 
 	{
 		/* Two numbers in range 1-12 / 1000-9999 : treat as month / year */
 		sprintf(date, "%04d%02d", num[1], num[0]);
 	}
-	else if(nb >= 3 && num[0] >= 1 && num[0] <= 31 && num[1] >= 1 && num[1] <= 12)
+	else if(nb >= 3 && num[0] >= 1 && num[0] <= 31 && num[1] >= 1 && num[1] <= 12) 
 	{
 		/* Three or more numbers with first two in range 1-31 / 1-12 : treat as day / month / year */
 		div_t c;
 		sscanf(datetxt_now(), "%04d", &i);
 		c = div(i, 100);
-
+		
 		/* Translate year under 100 to closest century */
 		if(num[2] < 100) num[2] += 100 * (c.quot + (c.rem <= 50 ?
 													num[2] > c.rem + 50 ? -1 : 0 :
 													num[2] < c.rem - 50 ? 1 : 0));
 		sprintf(date, "%04d%02d%02d", num[2], num[1], num[0]);
 	}
-	else if(nb >= 3 && num[0] >= 100 && num[0] <= 9999 && num[1] >= 1 && num[1] <= 12 && num[2] >= 1 && num[2] <= 31)
+	else if(nb >= 3 && num[0] >= 100 && num[0] <= 9999 && num[1] >= 1 && num[1] <= 12 && num[2] >= 1 && num[2] <= 31) 
 	{
 		/* Three or more numbers in range 100-9999 / 1-12 / 1-31 : treat as year / month / day */
 		sprintf(date, "%04d%02d%02d", num[0], num[1], num[2]);
 	}
 
 	/* Add time if given */
-	if((nb > 3 || i_hour >= 0) && *date && num[3] < 24 && num[4] < 60 && num[5] < 60)
+	if((nb > 3 || i_hour >= 0) && *date && num[3] < 24 && num[4] < 60 && num[5] < 60) 
 	{
-		sprintf(date + 8, "%02d%02d", num[3], num[4]);
-		if(num[5]) sprintf(date + 12, "%02d", num[5]);
+		sprintf(date + 8, "%02d", num[3]);
+		if(num[4])
+		{
+			sprintf(date + 10, "%02d", num[4]);
+			if(num[5]) sprintf(date + 12, "%02d", num[5]);
+		}
 	}
 
 	/* Set return value */
@@ -357,7 +341,7 @@ int datetxt_to_time(		/* return : 0 on success, other on error */
 	/* Convert date to Unix time */
 	dt->tm_isdst = -1;
 	dt->tm_mday = 1;
-	sscanf(valdate, "%4u%2u%2u%2u%2u%2u",
+	sscanf(valdate, "%4u%2u%2u%2u%2u%2u", 
 					&dt->tm_year, &dt->tm_mon, &dt->tm_mday,
 					&dt->tm_hour, &dt->tm_min, &dt->tm_sec);
 	dt->tm_year -= 1900;
@@ -410,11 +394,11 @@ int delay_to_datetxt(	/* return : 0 on success, other on error */
 		sprintf(date, "%04d%02d%02d%02d%02d%02d", Y0, M0, D0, h0, m0, s0);
 		break;
 
-
+	
 	case 'm':
 		sprintf(date, "%04d%02d%02d%02d%02d", Y0, M0, D0, h0, m0);
 		break;
-
+	
 	case 'h':
 		{
 			/* Try computation with unix time */
@@ -429,25 +413,19 @@ int delay_to_datetxt(	/* return : 0 on success, other on error */
 				/* Ensure valid date */
 				ENSURE_VALID_DATE;
 				sprintf(date, "%04d%02d%02d", Y0, M0, D0);
-				if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0);
+				if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0); 
 			}
 		}
 		break;
-
+	
 	case 'D':
 		{
 			/* Try computation with unix time */
-			if(!b_errtime)
-			{
-				time_t t1;
-				int b_notime = !dt.tm_hour && !dt.tm_min && !dt.tm_sec;
-				dt.tm_mday += delay;
-				if(b_notime) dt.tm_hour = 1;
-				t1 = mktime(&dt);
-				b_errtime = t1 == (time_t)-1 || time_to_datetxt(t1, date);
-				if(b_notime) date[8] = 0;
-			}
-			if(b_errtime)
+			time_t t1 = (time_t)-1;
+			dt.tm_mday += delay;
+
+			if(!b_errtime) t1 = mktime(&dt);
+			if(b_errtime || t1 == (time_t)-1 || time_to_datetxt(t1, date))
 			{
 				/* Use approximate computation (365 days / year) */
 				div_t dy = div(delay, 365);
@@ -463,11 +441,11 @@ int delay_to_datetxt(	/* return : 0 on success, other on error */
 				/* Ensure valid date */
 				ENSURE_VALID_DATE;
 				sprintf(date, "%04d%02d%02d", Y0, M0, D0);
-				if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0);
+				if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0); 
 			}
 		}
 		break;
-
+	
 	case 'M':
 		/* Compute month delay */
 		{
@@ -477,14 +455,14 @@ int delay_to_datetxt(	/* return : 0 on success, other on error */
 			else if(M0 > 12) { M0 -= 12; Y0++; }
 			Y0 += dy.quot;
 			sprintf(date, "%04d%02d%02d", Y0, M0, D0);
-			if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0);
+			if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0); 
 			break;
 		}
-
+	
 	default:
 		Y0 += delay;
 		sprintf(date, "%04d%02d%02d", Y0, M0, D0);
-		if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0);
+		if(h0 || m0 || s0) sprintf(date+8, "%02d%02d%02d", h0, m0, s0); 
 	}
 
 	return 0;
@@ -503,13 +481,13 @@ size_t datetxt_time(		/* return : # of output chars */
 	size_t sz = 0;
 	if(!outlen) outlen = len;
 	if(outlen > 8) sz += sprintf(date_out, " %.2s:%.2s", len > 8 ? date+8 : "00", len > 10 ? date+10 : "00");
-	if(outlen > 12) sz += sprintf(date_out + sz, ":%.2s", len > 12 ? date+12 : "00");
+	if(outlen > 12) sz += sprintf(date_out + sz, ":%.2s", len > 12 ? date+12 : "00"); 
 	return sz;
 }
 
 /*********************************************************************
 ** Function : datetxt_to_numbers
-** Description : return a number formated date string
+** Description : return a number formated date string 
 *********************************************************************/
 void datetxt_to_numbers(
 	char *date_out,			/* out : converted date - must be 32 bytes long minimum */
@@ -523,21 +501,21 @@ void datetxt_to_numbers(
 	/* Handle short date formats */
 	if(outlen <= 4)
 	{
-		sprintf(date_out, "%.4s", date);
+		sprintf(date_out, "%.4s", date); 
 	}
 	else if(outlen <= 6)
 	{
-		sprintf(date_out, "%.2s/%.4s", len > 4 ? date+4 : "01", date);
+		sprintf(date_out, "%.2s/%.4s", len > 4 ? date+4 : "01", date); 
 	}
 	else
 	{
 		/* Convert date part */
 		size_t sz = sprintf(date_out, b_year2 ? "%.2s/%.2s/%.2s" : "%.2s/%.2s/%.4s",
-									len > 6 ? date+6 : "01", len > 4 ? date+4 : "01",
-									(b_year2 && len > 2) ? date+2 : date);
+									len > 6 ? date+6 : "01", len > 4 ? date+4 : "01", 
+									(b_year2 && len > 2) ? date+2 : date); 
 
 		/* Convert time part */
-		datetxt_time(date_out + sz, date, len, outlen);
+		datetxt_time(date_out + sz, date, len, outlen); 
 	}
 }
 
@@ -560,27 +538,21 @@ size_t datetxt_day(					/* return : # of output chars */
 	if(len > 7) sscanf(date + 6, "%2d", &monthday);
 
 	/* Add weekday if applicable */
-	if(b_day && len > 7)
+	if(b_day && !datetxt_to_time(date, &t, &dt))
 	{
-		int b_wd =  !datetxt_to_time(date, &t, &dt);
-		if(!b_wd)
-		{
-			int b_feb29 = !(dt.tm_year % 4) && strcmp(date + 4, "0229") < 0;
-			dt.tm_wday = (4 - 365 * (1970 - dt.tm_year) - (1967 - dt.tm_year)/4 - (1999 - dt.tm_year)/100 - (b_feb29 ? 0 : 1)) % 7;
-		}
 		sz += sprintf(date_out, "%s ", dyntab_val((b_long ? &cntxt->daylong : &cntxt->dayshort), dt.tm_wday, 0));
 	}
 	if(b_day == 2) return sz;
 
 	/* Add day */
-	sz += sprintf(date_out + sz, "%u", monthday);
-	if((b_day || b_long) && monthday == 1) sz += sprintf(date_out + sz, "er");
+	sz += sprintf(date_out + sz, "%u", monthday); 
+	if((b_day || b_long) && monthday == 1) sz += sprintf(date_out + sz, "er"); 
 	return sz;
 }
 
 /*********************************************************************
 ** Function : datetxt_to_text
-** Description : return a text formated date string
+** Description : return a text formated date string 
 *********************************************************************/
 void datetxt_to_text(
 	EVA_context *cntxt,				/* in/out : execution context data */
@@ -604,31 +576,31 @@ void datetxt_to_text(
 	/* Handle short date formats */
 	if(outlen <= 4)
 	{
-		sprintf(date_out, "Année %.4s", date);
+		sprintf(date_out, "Année %.4s", date); 
 	}
 	else if(outlen <= 6)
 	{
-		sprintf(date_out, "%s %.4s", dyntab_val((b_long ? &cntxt->monthlong : &cntxt->monthshort), month, 0), date);
+		sprintf(date_out, "%s %.4s", dyntab_val((b_long ? &cntxt->monthlong : &cntxt->monthshort), month, 0), date); 
 	}
 	else
 	{
 		/* Convert date part */
 		size_t sz = datetxt_day(cntxt, date_out, date, len, b_day, b_long);
-		sz += sprintf(date_out + sz, " %s", dyntab_val((b_long ? &cntxt->monthlong : &cntxt->monthshort), month, 0));
-		if(b_year) sz += sprintf(date_out + sz, " %.4s", date);
+		sz += sprintf(date_out + sz, " %s", dyntab_val((b_long ? &cntxt->monthlong : &cntxt->monthshort), month, 0)); 
+		if(b_year) sz += sprintf(date_out + sz, " %.4s", date); 
 
 		/* Convert time part */
-		datetxt_time(date_out + sz, date, len, outlen);
+		datetxt_time(date_out + sz, date, len, outlen); 
 	}
 }
 
 /*********************************************************************
 ** Function : datetxt_to_format
-** Description : return a formatted date string
+** Description : return a formatted date string 
 *********************************************************************/
 int datetxt_to_format(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
-	char *date_out,					/* out : converted date - must be 32 bytes long minimum */
+	char *date_out,					/* out : converted date - must be 48 bytes long minimum */
 	char *date,						/* in : date/time in YYYYMMDDHHMMSS format to convert */
 	char *format					/* in : output format */
 ){
@@ -648,14 +620,14 @@ int datetxt_to_format(				/* return : 0 on success, other on error */
 	/* Parse format specification */
 	if(!format) format = "";
 	if(!strcmp(format, "_EVA_DATE"))  datetxt_to_numbers(date_out, date, len, 0, len < 8 ? 0 : 8);
-	else if(!strcmp(format, "_EVA_DATETIME")) datetxt_to_numbers(date_out, date, len, 0, len < 14 ? 0 : 14);
-	else if(!strcmp(format, "_EVA_Short")) datetxt_to_numbers(date_out, date, len, 1, 8);
-	else if(!strcmp(format, "_EVA_ShortTime")) datetxt_to_numbers(date_out, date, len, 1, 12);
-	else if(!strcmp(format, "_EVA_Std")) datetxt_to_numbers(date_out, date, len, 0, 8);
-	else if(!strcmp(format, "_EVA_StdTime")) datetxt_to_numbers(date_out, date, len, 0, 12);
-	else if(!strcmp(format, "_EVA_StdTimeSec")) datetxt_to_numbers(date_out, date, len, 0, 14);
-	else if(!strcmp(format, "_EVA_StdMonth")) datetxt_to_numbers(date_out, date, len, 0, 6);
-	else if(!strcmp(format, "_EVA_Year")) datetxt_to_numbers(date_out, date, len, 0, 4);
+	else if(!strcmp(format, "_EVA_DATETIME")) datetxt_to_numbers(date_out, date, len, 0, len < 12 ? 0 : 12); 
+	else if(!strcmp(format, "_EVA_Short")) datetxt_to_numbers(date_out, date, len, 1, 8); 
+	else if(!strcmp(format, "_EVA_ShortTime")) datetxt_to_numbers(date_out, date, len, 1, 12); 
+	else if(!strcmp(format, "_EVA_Std")) datetxt_to_numbers(date_out, date, len, 0, 8); 
+	else if(!strcmp(format, "_EVA_StdTime")) datetxt_to_numbers(date_out, date, len, 0, 12); 
+	else if(!strcmp(format, "_EVA_StdTimeSec")) datetxt_to_numbers(date_out, date, len, 0, 14); 
+	else if(!strcmp(format, "_EVA_StdMonth")) datetxt_to_numbers(date_out, date, len, 0, 6); 
+	else if(!strcmp(format, "_EVA_Year")) datetxt_to_numbers(date_out, date, len, 0, 4); 
 	else if(!strcmp(format, "_EVA_Long")) datetxt_to_text(cntxt, date_out, date, len, 0, 0, 8);
 	else if(!strcmp(format, "_EVA_LongVar")) datetxt_to_text(cntxt, date_out, date, len, 1, 0, 0);
 	else if(!strcmp(format, "_EVA_LongTime")) datetxt_to_text(cntxt, date_out, date, len, 0, 0, 12);
@@ -669,14 +641,13 @@ int datetxt_to_format(				/* return : 0 on success, other on error */
 	else if(!strcmp(format, "_EVA_FullDay")) datetxt_to_text(cntxt, date_out, date, len, 1, 1, 8);
 	else if(!strcmp(format, "_EVA_FullTimeDay")) datetxt_to_text(cntxt, date_out, date, len, 1, 1, 12);
 	else if(!strcmp(format, "_EVA_MonthYear")) datetxt_to_text(cntxt, date_out, date, len, 0, 1, 6);
-	else if(!strcmp(format, "_EVA_MonthYearShort")) datetxt_to_text(cntxt, date_out, date, len, 0, 0, 6);
-	else if(!strcmp(format, "_EVA_DayMonth")) datetxt_to_text(cntxt, date_out, date, len, 3, 0, 8);
-	else if(!strcmp(format, "_EVA_DayMonthFull")) datetxt_to_text(cntxt, date_out, date, len, 3, 1, 8);
-	else if(!strcmp(format, "_EVA_Day")) datetxt_day(cntxt, date_out, date, len, 0, 1);
-	else if(!strcmp(format, "_EVA_DayShort")) datetxt_day(cntxt, date_out, date, len, 0, 0);
-	else if(!strcmp(format, "_EVA_DayLong")) datetxt_day(cntxt, date_out, date, len, 1, 0);
-	else if(!strcmp(format, "_EVA_DayFull")) datetxt_day(cntxt, date_out, date, len, 1, 1);
-	else if(!strcmp(format, "_EVA_Time")) datetxt_time(date_out, date, len, 12);
+	else if(!strcmp(format, "_EVA_MonthYearShort")) datetxt_to_text(cntxt, date_out, date, len, 0, 0, 6); 
+	else if(!strcmp(format, "_EVA_DayMonthFull")) datetxt_to_text(cntxt, date_out, date, len, 3, 1, 8); 
+	else if(!strcmp(format, "_EVA_Day")) datetxt_day(cntxt, date_out, date, len, 0, 1); 
+	else if(!strcmp(format, "_EVA_DayShort")) datetxt_day(cntxt, date_out, date, len, 0, 0); 
+	else if(!strcmp(format, "_EVA_DayLong")) datetxt_day(cntxt, date_out, date, len, 1, 0); 
+	else if(!strcmp(format, "_EVA_DayFull")) datetxt_day(cntxt, date_out, date, len, 1, 1); 
+	else if(!strcmp(format, "_EVA_Time")) datetxt_time(date_out, date, len, 12); 
 	else if(!strcmp(format, "_EVA_DayTime") ||
 			!strcmp(format, "_EVA_DayFullTime"))
 	{
@@ -687,26 +658,26 @@ int datetxt_to_format(				/* return : 0 on success, other on error */
 	else if(!strcmp(format, "_EVA_Adaptative"))
 	{
 		char f = 'D';
-		int age = datetxt_to_age(date, NULL, &f);
+		int age = datetxt_to_age(date, NULL, &f); 
 		if(f == 'D' && abs(age) < 7)
 		{
 			size_t sz = abs(age) < 2 ?
-				sprintf(date_out,
+				sprintf(date_out, 
 						age == 0 ? "aujourd'hui" :
 						age == 1 ? "hier" :
 						age == 2 ? "avant hier" :
 						age == -1 ? "demain" :
 						age == -2 ? "après demain" : "") :
 				datetxt_day(cntxt, date_out, date, len, 1, 1);
-			if(len > 8) datetxt_time(date_out + sz, date, len, 12);
+			if(len > 8) datetxt_time(date_out + sz, date, len, 12); 
 		}
 		else
 			datetxt_to_numbers(date_out, date, len, 0, 0);
 	}
 	else if(!strcmp(format, "_EVA_DATE_SORT"))
 	{
-		sprintf(date_out, "%.4s-%.2s-%.2s",
-			date, len > 4 ? date+4 : "01", len > 6 ? date+6 : "01");
+		sprintf(date_out, "%.4s-%.2s-%.2s", 
+			date, len > 4 ? date+4 : "01", len > 6 ? date+6 : "01"); 
 	}
 	else
 		datetxt_to_numbers(date_out, date, len, 0, 0);
@@ -716,7 +687,7 @@ int datetxt_to_format(				/* return : 0 on success, other on error */
 
 /*********************************************************************
 ** Function : number_space_thousands
-** Description : format a number with thousands spaces & decimals
+** Description : insert thousands spaces in the integer part of a number
 *********************************************************************/
 char *number_space_thousands(	/* return : formated number (static copy) */
 	char *stdnum,				/* in : original unformated number */
@@ -765,8 +736,10 @@ char *number_space_thousands(	/* return : formated number (static copy) */
 	{
 		/* Round integer part */
 		int i;
+		char c = 0;
 		for(i = 0; i < -decimals && out > num; i++)
 		{
+			c = *out;
 			if(*out != ' ') { out--; decimals--; } else *out-- = '0';
 		}
 	}
@@ -776,42 +749,30 @@ char *number_space_thousands(	/* return : formated number (static copy) */
 
 /*********************************************************************
 ** Function : input_to_number
-** Description : return a clean number from user input
+** Description : return a number with spaces between thousands
 *********************************************************************/
-char *input_to_number(char *in)
+char *input_to_number(char *input)
 {
 	static char num[32];
-	char *input = in;
 	char *n = num;
 	int b_sep = 0;
 	if(*input == '-') *n++ = *input++;
 	while(*input && n - num < sizeof(num) - 1)
 	{
-		/* Keep digits without leading zero */
-		if(*input > '0' && *input <= '9' || *input == '0' && n > num)
-			*n++ = *input;
-
-		/* Keep first decimal separator */
+		if(isdigit(*input)) *n++ = *input;
 		else if(strchr(".,", *input) && !b_sep)
 		{
 			b_sep = 1;
-
-			/* Insert leading zero before decimal separator */
-			if(n == num) *n++ = '0';
 			*n++ = '.';
 		}
 		input++;
 	}
-
-	/* Remove trailing zeros after decimal separator */
 	if(b_sep)
 	{
 		while(n > num && *(n - 1) == '0') n--;
-		/* Remove trailing decimal separator */
 		if(*(n - 1) == '.') n--;
 	}
 	*n = 0;
-	if(in && *in && (n == num || !strcmp(num, "-"))) sprintf(num, "0");
 	return num;
 }
 
@@ -873,7 +834,7 @@ char *number_to_format(char *in, char *format)
 	if(!strcmp(format, "_EVA_Std")) sprintf(num, "%ld", numl);
 	else if(!strcmp(format, "_EVA_StdDec")) sprintf(num, "%lf", numf);
 	else if(!strcmp(format, "_EVA_FILESIZE")) return human_filesize(numl);
-	else if(!STRCMPCASE(format, "_EVA_Money"))
+	else if(!strcmp(format, "_EVA_Money"))
 	{
 		sprintf(num, "%1.2lf", numf);
 		return number_space_thousands(num, 2);
@@ -886,7 +847,7 @@ char *number_to_format(char *in, char *format)
 
 /*********************************************************************
 ** Function : unique_bit_index
-** Description : return the unique bit position (starting at 1) in a number
+** Description : return the unique bit position (starting at 1) in a number	
 **				 return 0 if multiple or no bits set
 *********************************************************************/
 unsigned long unique_bit_index(unsigned long word)
@@ -895,47 +856,9 @@ unsigned long unique_bit_index(unsigned long word)
 	for(i = 1, j = 0; word; i++, word >>= 1)
 		if(word & 1)
 		{
-			if(j) return 0;
+			if(j) return 0; 
 			j = i;
 		}
 
 	return j;
-}
-
-/*********************************************************************
-* Fonction : dbl_str
-** Description : convert double to simplest string
-*********************************************************************/
-size_t dbl_str(			/* return : # of chars output to txt */
-	char *txt,			/* out : d converted to string */
-	double d,			/* in : number to convert */
-	const char *fmt		/* in : optional print format */
-){
-	size_t sz = sprintf(txt, fmt ? fmt : "%lf", d);
-	char *dot = strchr(txt, '.');
-	if(dot)
-	{
-		while(sz && txt[sz - 1] == '0') txt[--sz] = 0;
-		if(txt + sz == dot + 1)
-		{
-			*dot = 0;
-			sz--;
-		}
-	}
-	return sz;
-}
-
-/*********************************************************************
-* Fonction : mystrdup
-** Description : strdup clone
-*********************************************************************/
-char *mystrdup(char *src, size_t sz)
-{
-	char *r = malloc(sz + 2);
-	if(r)
-	{
-		memset(r, 0, sz + 1);
-		if(src) memcpy(r, src, sz);
-	}
-	return r;
 }

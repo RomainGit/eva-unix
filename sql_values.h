@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : sql_values.h
 ** Description : values handling functions for EVA DB schema
 **      Author : Alain BOUTE
@@ -45,6 +39,7 @@ unsigned long get_id_value(	/* return : value Id or 0 on error */
 	char *val,				/* in : value to search for */
 	size_t sz_val			/* val string length */
 );
+#define GET_IDVALUE(tag) get_id_value(cntxt, add_sz_str("_EVA_"#tag))
 
 /*********************************************************************
 ** Function : sql_add_value

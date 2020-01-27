@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : dyntab.c
 ** Description : dynamic size tables handling functions
 **      Author : Alain BOUTE
@@ -59,8 +53,6 @@ int dyntab_resize(			/* return : 0 on success, other on error */
 
 	/* Realloc data cells if needed */
 	if(!tab) return 0;
-	if(row == ~0UL) row = 0;
-	if(col == ~0UL) col = 0;
 	if(row >= tab->szrows || col >= tab->szcols)
 	{
 		/* Calc new sizes for cells array */
@@ -78,7 +70,7 @@ int dyntab_resize(			/* return : 0 on success, other on error */
 		/* Reorganize cells with new column width if changed */
 		if(tab->cell)
 		{
-			if(tab->szcols > oldcols)
+			if(tab->szcols > oldcols) 
 				for(i = 0; i < oldrows; i++)
 					memcpy(cell + i * tab->szcols, tab->cell + i * oldcols, sizeof(cell[0]) * oldcols);
 			else
@@ -100,7 +92,7 @@ int dyntab_resize(			/* return : 0 on success, other on error */
 ** Function : dyntab_sz
 ** Description : return the value size of a cell
 *********************************************************************/
-size_t dyntab_sz(			/* out : string size */
+size_t dyntab_sz(			/* out : string value (never NULL) */
 	DynTable *tab,			/* in : table to read */
 	unsigned long row,		/* in : row index */
 	unsigned long col		/* in : column index */
@@ -144,13 +136,10 @@ DynTableCell *dyntab_cell(	/* out : cell data */
 	unsigned long col		/* in : column index */
 ){
 	/* Check params */
-	unsigned long i;
 	if(!tab || row >= tab->nbrows || col >= tab->nbcols) return NULL;
 
-
 	/* Return cell pointer */
-	i = DYNTAB_INDEX(tab, row, col);
-	return	tab->cell + i;
+	return	tab->cell + DYNTAB_INDEX(tab, row, col);
 }
 
 /*********************************************************************
@@ -165,7 +154,7 @@ int dyntab_set(					/* return : 0 on success, other on error */
 ){
 	unsigned long i;
 
-	/* Memorize cell to avoid pointer sweeping on dyntab_resize (happens if c is in tab) */
+	/* Memorize cell to avoid pointer swweping on dyntab_resize (happens if c is in tab) */
 	DynTableCell cell = {0};
 	if(c) memcpy(&cell, c, sizeof(cell));
 
@@ -230,7 +219,7 @@ int dyntab_copy(				/* return : 0 on success, other on error */
 			if(!cell->txt) return 1;
 			cell->b_dontfreetxt = 0;
 		}
-
+		
 		/* Field string */
 		if(cell->field)
 		{
@@ -253,7 +242,7 @@ int dyntab_add(				/* return : 0 on success, other on error */
 	unsigned long col,		/* in : column index */
 	char *txt, size_t len,	/* in : text to add to table */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int srmode				/* in : # of elements in sr */
+	int sz_sr				/* in : # of elements in sr */
 ){
 	DynTableCell *cell;
 	DynBuffer *buf = NULL;
@@ -265,9 +254,9 @@ int dyntab_add(				/* return : 0 on success, other on error */
 	if(!len && txt) len = strlen(txt);
 
 	/* Use a buffer to handle search & replace */
-	if(sr && srmode && txt && len)
+	if(sr && sz_sr && txt && len)
 	{
-		if(dynbuf_add(&buf, txt, len, sr, srmode)) return 1;
+		if(dynbuf_add(&buf, txt, len, sr, sz_sr)) return 1;
 		txt = buf->data;
 		len = buf->cnt;
 	}
@@ -310,7 +299,7 @@ int dyntab_from_tab(		/* return : 0 on success, other on error */
 									bit 0 : use multiple rows if set
 									bit 1 : use multiple colums if set
 									bit 2 : include empty values if set
-									bit 3 : reserved
+									bit 3 : loop on source columns first if set
 									bit 4 : clear tab if set
 									bit 5 : copy values if set */
 ){
@@ -336,7 +325,7 @@ int dyntab_from_tab(		/* return : 0 on success, other on error */
 			DynTableCell *c = dyntab_cell(src, i, j);
 			if(!b_useempty && (!c || !c->txt || !c->len)) continue;
 			if(dyntab_copy(dest, row, col, c, b_strdup)) return 1;
-			if(b_cols) col++;
+			if(b_cols) col++; 
 			else if(b_rows) row++;
 			else return 0;
 		}
@@ -434,7 +423,7 @@ int dyntab_to_dynbuf(		/* return : 0 on success, other on error */
 	char *cs, size_t sz_cs,	/* in : column separator */
 	char *rs, size_t sz_rs,	/* in : row separator */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int srmode				/* in : # of elements in sr */
+	int sz_sr				/* in : # of elements in sr */
 ){
 	unsigned long i, j;
 
@@ -444,8 +433,8 @@ int dyntab_to_dynbuf(		/* return : 0 on success, other on error */
 		if(i && dynbuf_add(buf, rs, sz_rs, NO_CONV)) return 1;
 		for(j = 0; j < tab->nbcols && (!j || cs); j++)
 		{
-			if(j && dynbuf_add(buf, cs, sz_cs, sr, srmode)) return 1;
-			if(dynbuf_add(buf, DYNTAB_VAL_SZ(tab, i, j), sr, srmode)) return 1;
+			if(j && dynbuf_add(buf, cs, sz_cs, sr, sz_sr)) return 1;
+			if(dynbuf_add(buf, DYNTAB_VAL_SZ(tab, i, j), sr, sz_sr)) return 1;
 		}
 	}
 	return 0;
@@ -464,16 +453,20 @@ int dyntab_txt_cmp(			/* return : comparison result : -1 / 0 / 1 */
 ){
 	char *txt1;
 	size_t sz1;
+	int res;
 
 	/* Check params */
 	if(!tab) return txt && *txt;
 	if(!txt) txt = "";
 	if(!sz) sz = strlen(txt);
 
-	/* Return string comparison on max length */
+	/* Calc result on shortest length string comparison */
 	txt1 = dyntab_val(tab, row, col);
 	sz1 = dyntab_sz(tab, row, col);
-	return strncmp(txt, txt1, sz1 < sz ? sz : sz1);
+	res = strncmp(txt1, txt, sz1 < sz ? sz1 : sz);
+
+	/* Return comparison result */
+	return sz1 == sz || res ? res : sz1 < sz ? -1 : 1;
 }
 
 /*********************************************************************
@@ -500,6 +493,24 @@ int dyntab_cmp(				/* return : comparison result : -1 / 0 / 1 */
 }
 
 /*********************************************************************
+** Function : dyntab_del_numline
+** Description : delete rows with given Num/Line indexes in a table
+*********************************************************************/
+void dyntab_del_numline(
+	DynTable *tab,			/* in/out : table to delete in */
+	unsigned long num,		/* in : num index */
+	unsigned long line		/* in : line index */
+){
+	unsigned long i;
+	for(i = tab->nbrows; i; i--)
+	{
+		DynTableCell *c = dyntab_cell(tab, i - 1, 0);
+		if(!num || c->Num && !line || c->Line == line)
+			dyntab_del_rows(tab, i - 1, 1);
+	}
+}
+
+/*********************************************************************
 ** Function : dyntab_del_rows
 ** Description : delete rows in a table
 *********************************************************************/
@@ -511,7 +522,7 @@ void dyntab_del_rows(
 	unsigned long i, j, k;
 
 	/* Check params */
-	if(!tab || row >= tab->nbrows) return;
+	if(row >= tab->nbrows) return;
 	if(row + nbrows > tab->nbrows) nbrows = tab->nbrows - row;
 
 	/* Free deleted rows cells */
@@ -526,44 +537,11 @@ void dyntab_del_rows(
 	i = DYNTAB_INDEX(tab, row, 0);
 	j = DYNTAB_INDEX(tab, row + nbrows, 0);
 	k = tab->szcols	* (tab->nbrows - row - nbrows);
-	memmove(tab->cell + i, tab->cell + j, sizeof(tab->cell[0]) * k);
+	memcpy(tab->cell + i, tab->cell + j, sizeof(tab->cell[0]) * k);
 	i = DYNTAB_INDEX(tab, tab->nbrows - nbrows, 0);
 	k = tab->szcols	* nbrows;
 	memset(tab->cell + i, 0, sizeof(tab->cell[0]) * k);
 	tab->nbrows -= nbrows;
-}
-
-/*********************************************************************
-** Function : dyntab_ins_rows
-** Description : insert rows in a table
-*********************************************************************/
-int dyntab_ins_rows(				/* return : 0 on success, other on error */
-	DynTable *tab,					/* in : DynTable pointer */
-	unsigned long row,				/* in : insert before this row */
-	unsigned long nbrows			/* in : # of rows to insert */
-){
-	unsigned long i, j, k, nbr, nbr0;
-
-	/* Check params */
-	if(!tab || !nbrows) return 0;
-
-	/* Resize table */
-	nbr0 = tab->nbrows;
-	nbr = ((row < nbr0) ? nbr0 : row) + nbrows;
-	if(dyntab_resize(tab, nbr, tab->nbcols)) return 1;
-
-	/* Move following rows & clear new rows */
-	if(nbr0 >= row)
-	{
-		i = DYNTAB_INDEX(tab, row, 0);
-		j = DYNTAB_INDEX(tab, row + nbrows, 0);
-		k = tab->szcols	* (nbr0 - row);
-		memmove(tab->cell + j, tab->cell + i, sizeof(tab->cell[0]) * k);
-		k = tab->szcols	* nbrows;
-		memset(tab->cell + i, 0, sizeof(tab->cell[0]) * k);
-		tab->nbrows = nbr;
-	}
-	return 0;
 }
 
 /*********************************************************************
@@ -591,7 +569,7 @@ DynTable *dyntab_transform(		/* return : pointer on transformed table if Ok, NUL
 	for(i = 1; i < tab->nbrows; i++)
 	{
 		/* Search for col value in row 1 */
-		for(j = 1; j < cross->nbcols &&
+		for(j = 1; j < cross->nbcols &&	
 			STRCMPNUL(cross->cell[j].txt, tab->cell[col + i * tab->szcols].txt); j++);
 
 		/* Add new column if not found */
@@ -602,7 +580,7 @@ DynTable *dyntab_transform(		/* return : pointer on transformed table if Ok, NUL
 		}
 
 		/* Search for row value in column row */
-		for(k = 1; k < cross->nbrows &&
+		for(k = 1; k < cross->nbrows && 
 			STRCMPNUL(cross->cell[k * cross->szcols].txt, tab->cell[row + i * tab->szcols].txt); k++);
 
 		/* Add new line if not found */

@@ -1,10 +1,4 @@
 /*********************************************************************
-** ---------------------- Copyright notice ---------------------------
-** This source code is part of the EVASoft project
-** It is property of Alain Boute Ingenierie - www.abing.fr and is
-** distributed under the GNU Public Licence version 2
-** Commercial use is submited to licencing - contact eva@abing.fr
-** -------------------------------------------------------------------
 **        File : ctrl_output_list.c
 ** Description : handling functions for output controls of type LIST (tables of objects)
 **      Author : Alain BOUTE
@@ -45,6 +39,27 @@ int ctrl_add_output_list_simple(	/* return : 0 on success, other on error */
 			ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
 		break;
 	}
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Function : ctrl_add_output_list_ctrl
+** Description : handles OUTPUT controls of type LIST_CTRL
+*********************************************************************/
+#define ERR_FUNCTION "ctrl_add_output_list_ctrl"
+#define ERR_CLEANUP 
+int ctrl_add_output_list_ctrl(		/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long i_ctrl						/* in : control index in cntxt->form->ctrl */
+){
+	EVA_form *form = cntxt->form;
+	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
+
+	/* TODO */
+	ctrl = 0;
 
 	RETURN_OK_CLEANUP;
 }
