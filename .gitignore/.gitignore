@@ -1,10 +1,9 @@
 #whitelisting of C projects file
-*
-Debug
-bin
-obj
 
-#allowed files
+#Ignore all files
+*
+
+#allowed files and folders
 !*.c
 !*.h
 !makefile
