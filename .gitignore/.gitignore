@@ -9,3 +9,6 @@
 !makefile
 !.gitignore
 !*.cbp
+!*.dsp
+!*.def
+!*.H
