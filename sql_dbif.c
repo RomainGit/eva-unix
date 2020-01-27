@@ -46,7 +46,7 @@ int sql_open_session(				/* return : 0 on success, other on error */
 	}
 
 	/* Connect to MySql server using named pipes - return on error */
-	mysql_options(cntxt->sql_session, MYSQL_OPT_NAMED_PIPE, NULL);
+	//mysql_options(cntxt->sql_session, MYSQL_OPT_NAMED_PIPE, NULL);
 	if(!mysql_real_connect(cntxt->sql_session, cntxt->srvaddr, SQL_USER, cntxt->dbpwd, cntxt->dbname, 0, NULL, 0))
 	{
 		sql_control(cntxt, 0);

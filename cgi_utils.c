@@ -1491,11 +1491,14 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 		cntxt->input->cnt = r;
 
 		/* Trace CGI data if applicable */
-		if(cntxt->debug & DEBUG_CGI_RAW) cgi_trace_input(cntxt);
+#ifdef PROD_VERSION
+		if(cntxt->debug & DEBUG_CGI_RAW)
+#endif
+            cgi_trace_input(cntxt);
 	}
 
 	/* If debug mode from trace input */
-	else if(cntxt->argc > 1 && !strcmp(cntxt->argv[cntxt->argc - 1], "CGITrace"))
+	else if(!enctype)
 		cgi_read_trace_input(cntxt);
 
 	/* Call CGI read function depending on encoding type */
