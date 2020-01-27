@@ -1,0 +1,9 @@
+#whitelisting of C projects file
+*
+
+#allowed files
+!*.c
+!*.h
+!makefile
+!.gitignore
+!*.cbp
