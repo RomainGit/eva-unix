@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : dyntab_sortcb.c
 ** Description : qsort callbacks for ordering dynamic tables
 **      Author : Alain BOUTE
@@ -38,7 +44,7 @@ int dyntab_order_lines(		/* return : 0 on success, other on error */
 		if(!val->len || !val->txt || !*val->txt) continue;
 		line = val->Line ? val->Line - 1 : lines ? lines : 0;
 		for(j = 0; j < res.nbcols && dyntab_sz(&res, line, j); j++);
-		if(dyntab_copy(&res, line, j, val, 
+		if(dyntab_copy(&res, line, j, val,
 				!val->b_dontfreefield  && val->field ||
 				!val->b_dontfreetxt && val->txt))
 			return 1;
@@ -57,7 +63,7 @@ void dyntab_sort(
 		(const void *el1, const void *el2)
 ){
 	/* Check params */
-	if(!tab) return;
+	if(!tab || !tab->nbrows) return;
 
 	/* Call qsort */
 	qsort(tab->cell, tab->nbrows, sizeof(tab->cell[0])*tab->szcols, qsort_cb);
@@ -66,7 +72,7 @@ void dyntab_sort(
 
 /*********************************************************************
 ** Fonction : qsort_col1
-** Description : qsort callback for DynTable - column 1 
+** Description : qsort callback for DynTable - column 1
 *********************************************************************/
 int qsort_col1(const void *el1, const void *el2)
 {
@@ -78,9 +84,10 @@ int qsort_col1(const void *el1, const void *el2)
 	if(!t1 || !*t1) t1 = "~";
 	if(!t2 || !*t2) t2 = "~";
 
-	res = stricmp(t1, t2);
+	res = STRCMPCASE(t1, t2);
 	if(res) return res;
 
+	/* Identical strings : sort on column 0 integer */
 	t1 = ((DynTableCell *)el1)->txt;
 	t2 = ((DynTableCell *)el2)->txt;
 	i1 = t1 ? atoi(t1) : 0;
@@ -103,7 +110,7 @@ int qsort_col1desc(const void *el1, const void *el2)
 	if(!t1) t1 = "";
 	if(!t2) t2 = "";
 
-	res = -stricmp(t1, t2);
+	res = -STRCMPCASE(t1, t2);
 	if(res) return res;
 
 	t1 = ((DynTableCell *)el1)->txt;
@@ -116,7 +123,7 @@ int qsort_col1desc(const void *el1, const void *el2)
 
 /*********************************************************************
 ** Fonction : qsort_col2
-** Description : qsort callback for DynTable - column 1 
+** Description : qsort callback for DynTable - column 1
 *********************************************************************/
 int qsort_col2(const void *el1, const void *el2)
 {
@@ -124,7 +131,7 @@ int qsort_col2(const void *el1, const void *el2)
 	char *t2 = ((DynTableCell *)el2+2)->txt;
 	if(!t1 || !*t1) t1 = "²";
 	if(!t2 || !*t2) t2 = "²";
-	return _stricmp( t1, t2 );
+	return STRCMPCASE( t1, t2 );
 }
 
 /*********************************************************************
@@ -231,7 +238,7 @@ int qsort_col013i(const void *el1, const void *el2)
 	i2 = t20 ? atoi(t20) : 0;
 	if(i1 != i2) return i1 > i2 ? 1 : -1;
 
-	res = stricmp(t11 ? t11 : "", t21 ? t21 : "");
+	res = STRCMPCASE(t11 ? t11 : "", t21 ? t21 : "");
 	if(res) return res;
 
 	i1 = t13 ? atoi(t13) : 0;
@@ -324,7 +331,11 @@ int qsort_val_fldnum(const void *el1, const void *el2)
 int qsort_ctrlval(const void *el1, const void *el2)
 {
 	int res = qsort_val_num(el1, el2);
-	if(!res) res = qsort_val_line(el1, el2);
+	if(!res)
+	{
+		res = qsort_val_line(el1, el2);
+		if(!res) res = qsort_col0(el1, el2);
+	}
 	return res;
 }
 
@@ -362,7 +373,7 @@ int qsort_mode_values(const void *el1, const void *el2)
 	{
 		DynTableCell *e1 = (DynTableCell *)el1;
 		DynTableCell *e2 = (DynTableCell *)el2;
-		res = e1->Pkey < e2->Pkey ? 1 : -1; 
+		res = e1->Pkey < e2->Pkey ? 1 : -1;
 	}
 	return res;
 }
@@ -382,7 +393,7 @@ int qsort_compare_values(const void *el1, const void *el2)
 	{
 		DynTableCell *e1 = (DynTableCell *)el1;
 		DynTableCell *e2 = (DynTableCell *)el2;
-		res = STRCMPNUL(e1->txt, e2->txt); 
+		res = STRCMPNUL(e1->txt, e2->txt);
 	}
 	return res;
 }
@@ -414,10 +425,9 @@ int dyntab_group(			/* return : 0 on success, other on error */
 		double sum = 0;
 		unsigned long i;
 		char s[16];
-		if(tab->nbrows < 2) return 0;
 		for(i = 0; i < tab->nbrows; i++) sum += atof(dyntab_val(tab, i, 0));
 		dyntab_free(tab);
-		return dyntab_add(tab, 0, 0, s, snprintf(add_sz_str(s), "%lf", sum), NO_CONV);
+		return dyntab_add(tab, 0, 0, s, dbl_str(s, sum, NULL), NO_CONV);
 	}
 
 	/* Handle average operation mode */
@@ -426,7 +436,6 @@ int dyntab_group(			/* return : 0 on success, other on error */
 		double sum = 0;
 		unsigned long i, nb;
 		char s[16];
-		if(tab->nbrows < 2) return 0;
 		for(i = 0, nb = 0; i < tab->nbrows; i++)
 		{
 			char *v = dyntab_val(tab, i, 0);
@@ -435,16 +444,21 @@ int dyntab_group(			/* return : 0 on success, other on error */
 			sum += n;
 		}
 		dyntab_free(tab);
-		return dyntab_add(tab, 0, 0, s, snprintf(add_sz_str(s), "%lf", nb ? sum / nb : 0), NO_CONV);
+		return dyntab_add(tab, 0, 0, s, dbl_str(s, nb ? sum / nb : 0, NULL), NO_CONV);
 	}
 
 	/* Handle minimum / maximum operation mode */
 	if(!strcmp(oper, "MIN") || !strcmp(oper, "MAX") || !strcmp(oper, "NMIN") || !strcmp(oper, "NMAX"))
 	{
-		if(tab->nbrows < 2) return 0;
-		dyntab_sort(tab, !strcmp(oper, "MIN") ? qsort_col0 : !strcmp(oper, "MAX") ? qsort_col0desc :
-						 !strcmp(oper, "NMIN") ? qsort_col0i : qsort_col0idesc);
-		tab->nbrows = 1;
+		if(tab->nbrows > 1)
+			dyntab_sort(tab, !strcmp(oper, "MIN") ? qsort_col0 : !strcmp(oper, "MAX") ? qsort_col0desc :
+							 !strcmp(oper, "NMIN") ? qsort_col0i : qsort_col0idesc);
+		if(tab->cell)
+		{
+			tab->cell->Num = 0;
+			tab->cell->Line = 0;
+			tab->nbrows = 1;
+		}
 		return 0;
 	}
 
@@ -460,6 +474,31 @@ int dyntab_group(			/* return : 0 on success, other on error */
 				if(!STRCMPNUL(v1->txt, v2->txt)) dyntab_del_rows(tab, j--, 1);
 			}
 		return 0;
+	}
+
+	/* Handle first value operation mode */
+	if(!strcmp(oper, "FIRST"))
+	{
+		if(!tab->nbcols) return 0;
+		tab->nbrows = 1;
+		tab->nbcols = 1;
+		return 0;
+	}
+
+	/* Handle values list operation mode */
+	if(!strcmp(oper, "LIST") || !strcmp(oper, "LINES") || !strcmp(oper, "SPACE"))
+	{
+		unsigned long i;
+		char *s = !strcmp(oper, "LIST") ? ", " : !strcmp(oper, "SPACE") ? " ": "\n";
+		DynBuffer *buf = NULL;
+		for(i = 0; i < tab->nbrows; i++)
+		{
+			DynTableCell *c = dyntab_cell(tab, i, 0);
+			if(i && dynbuf_add(&buf, s, 0, NO_CONV)) return 1;
+			if(dynbuf_add(&buf, c->txt, c->len, NO_CONV)) return 1;
+		}
+		dyntab_free(tab);
+		return !buf ? 0 : dyntab_add(tab, 0, 0, buf->data, buf->cnt, NO_CONV);
 	}
 
 	/* Handle count operation mode */
@@ -480,6 +519,23 @@ int dyntab_group(			/* return : 0 on success, other on error */
 		i = tab->nbrows;
 		dyntab_free(tab);
 		return dyntab_add(tab, 0, 0, s, snprintf(add_sz_str(s), "%lu", i), NO_CONV);
+	}
+
+	/* Handle telephone format */
+	if(!strcmp(oper, "TEL"))
+	{
+		char tel[16];
+		unsigned long i;
+		for(i = 0; i < tab->nbrows; i++)
+		{
+			DynTableCell *c = dyntab_cell(tab, i, 0);
+
+			/* French numbers format */
+			if(!c->txt || *c->txt != '0' || c->len != 10) continue;
+			snprintf(add_sz_str(tel), "%.2s %.2s %.2s %.2s %.2s", c->txt, c->txt + 2, c->txt + 4, c->txt + 6, c->txt + 8);
+			dyntab_add(tab, i, 0, tel, 14, NO_CONV);
+		}
+		return 0;
 	}
 	return 1;
 }

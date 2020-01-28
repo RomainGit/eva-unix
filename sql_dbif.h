@@ -1,14 +1,19 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : sql_dbif.c
 ** Description : EVA SQL interface functions - MySQL version
 **      Author : Alain BOUTE
 **     Created : Aug 15 2001
 *********************************************************************/
 
-
 /*********************************************************************
-** Function : sql_shutdown
-** Description : shutdown the SQL database server
+** Function : sql_control
+** Description : special operations on database server
 *********************************************************************/
 char *sql_control(EVA_context *cntxt, int mode);
 
@@ -64,13 +69,16 @@ int sql_exec_query				/* return : 0 on success, other on error */
 								  out : cntxt->sql_result */
 	char *query					/* in : SQL query */
 );
-#define SQL_QRY_DEBUG_FLT(flt, qury, errcode) \
-{ int sqltrace = cntxt->sql_trace; \
-	if((flt)->debug) cntxt->sql_trace = DEBUG_SQL_RES; \
-	if(sql_exec_query(cntxt, qury)) errcode; \
-	if((cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > 0.03) || cntxt->sql_trace & DEBUG_SQL_RES) err_print_filter(&cntxt->debug_msg, flt); \
-	cntxt->sql_trace = sqltrace; \
-}
+
+/*********************************************************************
+** Function : qry_exec_filter
+** Description : execute query for a filter
+*********************************************************************/
+int qry_exec_filter(			/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	QryBuild *flt,					/* in : filter data */
+	char *qry						/* in : SQL query to exec */
+);
 
 /*********************************************************************
 ** Function : sql_result_next_row

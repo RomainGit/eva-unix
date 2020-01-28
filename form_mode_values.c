@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **form->stepform->stepFile : form_mode_values.c
 ** Description : handling function for for values mode
 **form->step  Author : Alain BOUTE
@@ -31,12 +37,14 @@ int form_mode_values(
 	char sql[2048];
 	unsigned long i, j, k, l, i_ctrl, idfield;
 	DynTableCell *val;
-	char *clickbtn = cntxt->cgi[cntxt->cgibtn].name;
-	char *dispfield = strncmp(clickbtn, add_sz_str("BFIELD=")) ? NULL : clickbtn + 7;
+	char *clickbtn = cntxt->cgi ? cntxt->cgi[cntxt->cgibtn].name : NULL;
+	char *dispfield = !clickbtn ? NULL : strncmp(clickbtn, add_sz_str("BFIELD=")) ? NULL : clickbtn + 7;
 	int rawvalues = 0;
 	ObjTableFormat tbl = {0};
+	int b_ident_user = DYNTAB_TOUL(&form->id_obj) == DYNTAB_TOUL(&cntxt->id_user);
 
 	/* Handle buttons */
+	if(!clickbtn) clickbtn = "";
 	if(!strncmp(clickbtn, add_sz_str("BCLR=")))
 	{
 		/* Delete value */
@@ -58,11 +66,14 @@ int form_mode_values(
 			"IF(TVal.TxtValue IS NULL,TLink.IdRelObj,TVal.TxtValue), \n"
 			"TLink.Num, \n"
 			"TLink.Line, \n"
-			"TLink.Lvl, \n"
 			"TLink.Lang, \n"
+#define _DateCr 8
 			"TLink.DateCr, \n"
+#define _IdWhoCr 9
 			"TLink.IdWhoCr, \n"
+#define _DateDel 10
 			"TLink.DateDel, \n"
+#define _IdWhoDel 11
 			"TLink.IdWhoDel, \n"
 			"TLink.Pkey	\n"
 		"FROM TLink LEFT JOIN TVal ON TLink.IdValue = TVal.IdValue \n"
@@ -93,7 +104,7 @@ int form_mode_values(
 		char *field = dyntab_val(&data, i, 1);
 		unsigned long Num = DYNTAB_TOULRC(&data, i, 5);
 		unsigned long Line = DYNTAB_TOULRC(&data, i, 6);
-		char *datedel = dyntab_val(&data, i, 11);
+		char *datedel = dyntab_val(&data, i, _DateDel);
 		int b_changefield;
 
 		/* Skip if field specified and different */
@@ -122,10 +133,17 @@ int form_mode_values(
 		val->field = field;
 		val->Num = Num;
 		val->Line = Line;
-		val->Pkey = DYNTAB_TOULRC(&data, i, 13);
+		val->Pkey = DYNTAB_TOULRC(&data, i, 12);
 
+		/* If user credentials and not identified user or admin */
+		if(!cntxt->b_admin && !b_ident_user && field && 
+			(!strcmp(field, "_EVA_LOGIN") || !strcmp(field, "_EVA_PASSWORD"))) 
+		{
+			/* Hide credentials */
+			DYNBUF_ADD_STR(form->html, "<font size=-1>******</font>");
+		}
 		/* If value is a relation */
-		if(dyntab_sz(&data, i, 2) && !rawvalues) 
+		else if(dyntab_sz(&data, i, 2) && !rawvalues) 
 		{
 			/* Add open button & object label */
 			DYNTAB_SET_CELL(&idobj, 0, 0, &data, i, 2);
@@ -137,8 +155,9 @@ int form_mode_values(
 			/* Use control for display in view mode */
 			ctrl->LABELPOS = "_EVA_NONE";
 			ctrl->POSITION = "_EVA_SameCell";
-			ctrl->FONTCOLOR = dyntab_sz(&data, i, 12) ? "888888" : "";
+			ctrl->FONTCOLOR = dyntab_sz(&data, i, _DateDel) ? "888888" : "";
 			ctrl->FONTSIZE = "-1";
+			ctrl->CELL_STYLE = "";
 			form->step = HtmlView;
 			dyntab_free(&ctrl->val);
 			dyntab_free(&ctrl->allval);
@@ -159,7 +178,7 @@ int form_mode_values(
 		DYNTAB_SET_CELL(&table, k, 5, &data, i, 6);
 
 		/* Add Clear value button */
-		if(!*datedel)
+		if(!*datedel && cntxt->user_data.cell && cntxt->b_admin)
 		{
 			snprintf(add_sz_str(sql), "BCLR=%lu", val->Pkey);
 			if(put_html_button(cntxt, sql, NULL, "_eva_cancel.gif", "_eva_cancel_s.gif",
@@ -169,20 +188,20 @@ int form_mode_values(
 		}
 
 		/* Set create infos */
-		if(datetxt_to_format(cntxt, sql, dyntab_val(&data, i, 9), NULL)) 
-			strcpy(sql, dyntab_val(&data, i, 9));
+		if(datetxt_to_format(cntxt, sql, dyntab_val(&data, i, _DateCr), NULL)) 
+			strcpy(sql, dyntab_val(&data, i, _DateCr));
 		DYNTAB_ADD(&table, k, 7, sql, 0, NO_CONV);
 		sprintf(sql, 
 			"-- form_mode_values : Read create username\n"
 			"SELECT TVal.TxtValue \n"
 			"FROM TLink INNER JOIN TVal ON TLink.IdValue = TVal.IdValue \n"
 			"WHERE TLink.DateDel is NULL AND TLink.IdField=%lu \n"
-				"AND TLink.IdObj=0%s", idfield, dyntab_val(&data, i, 10));
+				"AND TLink.IdObj=0%s", idfield, dyntab_val(&data, i, _IdWhoCr));
 		if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, &idobj, 2)) STACK_ERROR;
 		DYNTAB_ADD_CELL(&table, k, 8, &idobj, 0, 0);
 
 		/* Set delete infos if field history is displayed */
-		if(dyntab_sz(&data, i, 12))
+		if(dyntab_sz(&data, i, _DateDel))
 		{
 			if(datetxt_to_format(cntxt, sql, datedel, NULL)) 
 				strcpy(sql, datedel);
@@ -192,7 +211,7 @@ int form_mode_values(
 				"SELECT TVal.TxtValue \n"
 				"FROM TLink INNER JOIN TVal ON TLink.IdValue = TVal.IdValue \n"
 				"WHERE TLink.DateDel is NULL AND TLink.IdField=%lu \n"
-					"AND TLink.IdObj=0%s", idfield, dyntab_val(&data, i, 12));
+					"AND TLink.IdObj=0%s", idfield, dyntab_val(&data, i, _IdWhoDel));
 			if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, &idobj, 2)) STACK_ERROR;
 			DYNTAB_ADD_CELL(&table, k, 10, &idobj, 0, 0);
 		}
@@ -202,7 +221,7 @@ int form_mode_values(
 		{
 			for(b_changefield = 0, j = i + 1; j < data.nbrows; j++)
 					if(strcmp(dyntab_val(&data, j, 1), field)) break;
-					else if(dyntab_sz(&data, j, 11)) { b_changefield = 1; break; }
+					else if(dyntab_sz(&data, j, _DateDel)) { b_changefield = 1; break; }
 			if(b_changefield)
 			{
 				snprintf(add_sz_str(sql), "BFIELD=%s", field);
@@ -238,7 +257,9 @@ int form_mode_values(
 	for(i = 1, k = 0, l = 0; i < table.nbrows; i++)
 	{
 		int b_head = 0;
-		char *bgcolor = table_row_bgcolor(cntxt, &tbl, k);
+		char *bgcolor = table_row_bgcolor(cntxt, &tbl, k, NULL);
+		if(!bgcolor || !*bgcolor) bgcolor = "FFFFFF";
+
 		/* Handle fields cells grouping */
 		if(l) l--;
 		if(dyntab_cmp(&table, i, 1, &table, i + 1, 1)) k++;
@@ -254,7 +275,7 @@ int form_mode_values(
 			DYNBUF_ADD_STR(form->html, "<td bgcolor=#");
 			DYNBUF_ADD(form->html, bgcolor, 6, NO_CONV);
 			if(b_head && j < 2) DYNBUF_ADD3_INT(form->html, " rowspan=", l, "");
-			if(dyntab_sz(&table, i, 9) && j >= 2 && j <= 6)
+			if(dyntab_sz(&table, i, _DateDel) && j >= 2 && j <= 6)
 				DYNBUF_ADD_STR(form->html, " background='../img/bg_rayures_grises.gif'");
 			DYNBUF_ADD_STR(form->html, ">");
 			if(dyntab_sz(&table, i, j)) DYNBUF_ADD3_CELL(form->html,

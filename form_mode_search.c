@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : form_mode_search.c
 ** Description : handling function for for values mode
 **      Author : Alain BOUTE
@@ -65,7 +71,7 @@ int form_mode_search(
 		"<table cellspacing=0 cellpadding=0 border=0 rules=none><tr>\n"
 		"<td>Rechercher dans<br>\n");
 	DYNBUF_ADD_BUF(&name, form->ctrl->cginame, NO_CONV);
-	if(put_html_list(cntxt, name, &fields, &selfields, 30, 0, 1, 1, 0)) STACK_ERROR;
+	if(put_html_list(cntxt, name, &fields, &selfields, 30, 0, 1, 1, 0, NULL)) STACK_ERROR;
 	DYNBUF_ADD_STR(form->html, "</td>");
 
 	/* Query values for selected fields in objects having this formstamp */

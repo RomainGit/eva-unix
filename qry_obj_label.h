@@ -1,10 +1,30 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : qry_obj_label.h
 ** Description : retrieve an object labeling informations
 **      Author : Alain BOUTE
 **     Created : March 14 2003
 **********************************************************************/
 
+
+/*********************************************************************
+** Function : ctrl_get_label_img
+** Description : return images to symbolize a control
+*********************************************************************/
+int ctrl_get_label_img(				/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in : execution context data */
+	DynBuffer **img,				/* out : symbol normal image */
+	DynBuffer **imgsel,				/* out : symbol selected image */
+	DynBuffer **label,				/* out : symbol label */
+	DynBuffer **notes,				/* out : object notes */
+	DynTable *data,					/* in : object data (must contain _EVA_CONTROL & _EVA_TYPE attributes) */
+	unsigned long beg 				/* in : first processed lines in data */
+);
 
 /*********************************************************************
 ** Function : qry_obj_label

@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : qry_utils.h
 ** Description : utility functions for building SQL queries
 **      Author : Alain BOUTE
@@ -179,6 +185,15 @@ int qry_update_idobj_idfield(		/* return : 0 on success, other on error */
 );
 
 /*********************************************************************
+** Function : qry_check_idobj
+** Description : check IdObj exists with formstamp in DB
+*********************************************************************/
+int qry_check_idobj(				/* return : 1 if object exists, 0 else */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long idobj				/* in : object id to check */
+);
+
+/*********************************************************************
 ** Function : qry_add_val
 ** Description : add an object value in db
 *********************************************************************/
@@ -293,6 +308,19 @@ int qry_build_flt_select			/* return : 0 on success, other on error */
 	QryBuild *flt,					/* in : query build data */
 	unsigned long row,				/* in : 1st row for LIMIT clause */
 	unsigned long nbrows			/* in : # of rows for LIMIT clause */
+);
+
+/*********************************************************************
+** Function : sql_get_buf
+** Description : return values of a SQL query as a list of values
+*********************************************************************/
+int sql_get_buf					/* return : 0 on success, other on error */
+(
+	EVA_context *cntxt,			/* in : execution data */
+	DynBuffer **res,			/* in/out : values list */
+	int options					/* in : table output format flags :
+									bit 0 : quote values
+									bit 1 : clear res before processing */
 );
 
 /*********************************************************************

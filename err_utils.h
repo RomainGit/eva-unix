@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : err_utils.c
 ** Description : error handling functions
 **      Author : Alain BOUTE
@@ -11,8 +17,8 @@
 *********************************************************************/
 void err_add_context(
 	EVA_context *cntxt,		/* in/out : execution context data */
-	char *function, 
-	char *file, 
+	char *function,
+	char *file,
 	int line
 );
 
@@ -22,8 +28,8 @@ void err_add_context(
 *********************************************************************/
 void err_clear(
 	EVA_context *cntxt,		/* in/out : execution context data */
-	char *function, 
-	char *file, 
+	char *function,
+	char *file,
 	int line
 );
 
@@ -58,7 +64,7 @@ void put_debug_sqltable(EVA_context *cntxt, char *table);
 *********************************************************************/
 void err_print_filter(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	QryBuild *flt			/* in : filter to output */ 
+	QryBuild *flt			/* in : filter to output */
 );
 
 /*********************************************************************
@@ -67,10 +73,10 @@ void err_print_filter(
 *********************************************************************/
 void err_print_dyntab(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	DynTable *tab,			/* in : table to output */ 
+	DynTable *tab,			/* in : table to output */
 	unsigned long rows,		/* in : max # of rows to print */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int sz_sr				/* in : # of elements in sr */
+	int sz_sr				/* in : search & replace direction (1=direct, 0=none, -1=reverse) */
 );
 
 /*********************************************************************
@@ -79,11 +85,11 @@ void err_print_dyntab(
 *********************************************************************/
 void err_print_data(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	DynTable *tab,			/* in : table to output */ 
+	DynTable *tab,			/* in : table to output */
 	unsigned long beg,		/* in : 1st row to print */
 	unsigned long end,		/* in : last row to print */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int sz_sr				/* in : # of elements in sr */
+	int sz_sr				/* in : search & replace direction (1=direct, 0=none, -1=reverse) */
 );
 
 /*********************************************************************
@@ -108,7 +114,7 @@ void debug_put_info(EVA_context *cntxt);
 ** Macro : RETURN_ERR_MEMORY
 ** Description : handles directory access error
 *********************************************************************/
-#define RETURN_ERR_DIRECTORY(code)	RETURN_ERROR("Droits d'accès incorrects sur un dossier", code)
+#define RETURN_ERR_DIRECTORY	RETURN_ERROR("Droits d'accès incorrects sur un dossier", NULL)
 
 /*********************************************************************
 ** Macro : RETURN_ERR_PARAM
@@ -117,7 +123,7 @@ void debug_put_info(EVA_context *cntxt);
 #define RETURN_ERR_PARAM(code)	RETURN_ERROR("Il y a un bug - mauvais paramètres", code)
 
 /*********************************************************************
-** Macro : RETURN_ERR_PARAM
+** Macro : RETURN_ERR_PROG
 ** Description : handles programmer's errors
 *********************************************************************/
 #define RETURN_ERR_PROG(code)	RETURN_ERROR("Il y a un bug - incohérence du programme", code)
@@ -161,12 +167,18 @@ eva_err: \
 	ERR_CLEANUP; return cntxt->err.text != NULL;
 
 /*********************************************************************
+** Macro : RETURN_WARNING
+** Description : handle normal return before end of functions body
+*********************************************************************/
+#define RETURN_WARNING(label) { dynbuf_add(&cntxt->debug_msg, add_sz_str(label), NO_CONV); goto eva_noerr; }
+
+/*********************************************************************
 ** Macro : ERR_PUT_TXT
 ** Description : add text to detailed error message
 *********************************************************************/
 #define ERR_PUT_TXT(label, txt, len) {\
 	dynbuf_add(&cntxt->err.detail, add_sz_str(label), NO_CONV); \
-	dynbuf_add(&cntxt->err.detail, txt ? txt : "(null)", txt ? len : 0, NO_CONV); }
+	dynbuf_add(&cntxt->err.detail, (txt) ? (txt) : "(null)", (txt) ? len : 0, NO_CONV); }
 
 /*********************************************************************
 ** Macro : ERR_PUT_FILE
@@ -180,7 +192,7 @@ eva_err: \
 ** Macro : ERR_PUT_BUF
 ** Description : add text to detailed error message
 *********************************************************************/
-#define ERR_PUT_BUF(label, buf) if(buf) ERR_PUT_TXT(label, buf->data, buf->cnt, NO_CONV)
+#define ERR_PUT_BUF(label, buf) ERR_PUT_TXT(label, buf ? buf->data : "", buf ? buf->cnt : 0)
 
 /*********************************************************************
 ** Macro : ERR_PUT_CELL
@@ -193,7 +205,7 @@ eva_err: \
 ** Description : add integer to detailed error message
 *********************************************************************/
 #define ERR_PUT_INT(label, i) { \
-	char txt[32]; itoa(i, txt, 10);\
+	char txt[32]; snprintf(txt, sizeof(txt), "%d", (int)i);\
 	dynbuf_add(&cntxt->err.detail, add_sz_str(label), NO_CONV); \
 	dynbuf_add(&cntxt->err.detail, txt, 0, NO_CONV); \
 }

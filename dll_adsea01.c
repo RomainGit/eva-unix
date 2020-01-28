@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : dll_adsea01.c
 ** Description : fonctions specifiques pour l'ADSEA de l'Ain : facturation
 **      Author : Alain BOUTE
@@ -8,8 +14,8 @@
 #include "eva.h"
 
 /* Macros pour la mise a jour des valeurs */
-#define QRY_SET_RECORD(idobj, f, idval, t, l, b_rel, valmode) val.IdObj = idobj; val.IdField = cf->val_##f; val.IdValue = idval; val.txt = t; val.len = l; val.b_relation = b_rel;\
-			if(qry_add_val(cntxt, &val, valmode, NULL)) STACK_ERROR
+#define QRY_SET_RECORD(idobj, f, idval, t, l, b_rel, valmode) { val.IdObj = idobj; val.IdField = cf->val_##f; val.IdValue = idval; val.txt = t; val.len = l; val.b_relation = b_rel;\
+																if(qry_add_val(cntxt, &val, valmode, NULL)) STACK_ERROR; }
 #define QRY_CREATE_REL(idobj, f, idrelobj) QRY_SET_RECORD(idobj, f, idrelobj, NULL, 0, 1, 0)
 #define QRY_UPDATE_REL(idobj, f, idrelobj) QRY_SET_RECORD(idobj, f, idrelobj, NULL, 0, 1, 3)
 #define QRY_UPDATE_VAL(idobj, f, t, l) QRY_SET_RECORD(idobj, f, 0, t, l, 0, 3)
@@ -57,11 +63,13 @@ typedef struct _cntxt_fact
 	unsigned long val_Majorite0M;
 	unsigned long val_Majorite1M;
 	unsigned long val_Majorite2M;
+	unsigned long val_AttenteAffectationTS;
 
 	/* Compteurs echeancier et facturation */
 	unsigned long nb_echeance;
 	unsigned long nb_echeance1M;
 	unsigned long nb_echeance2M;
+	unsigned long nb_attenteTS;
 	unsigned long nb_lignfact;
 	unsigned long nb_modif;
 	int b_detail_journal;
@@ -83,7 +91,6 @@ typedef struct _cntxt_fact
 		char deb[10];
 		char fin[10];
 		char majorite[10];
-		char saisderjug[10];	/* date de saisie du dernier jugement */
 		char effetderjug[10];	/* date de d'effet du dernier jugement */
 		int b_mainlevee;
 		int b_jeunemajeur;
@@ -162,6 +169,7 @@ int Init_liste_mes(
 	cf->val_Majorite0M = get_id_value(cntxt, add_sz_str("Majorité ce mois"));
 	cf->val_Majorite1M = get_id_value(cntxt, add_sz_str("Majorité le mois prochain"));
 	cf->val_Majorite2M = get_id_value(cntxt, add_sz_str("Majorité dans deux mois"));
+	cf->val_AttenteAffectationTS = get_id_value(cntxt, add_sz_str("Attente affectation TS"));
 
 	/* Creation de la liste des mesures a traiter */
 	if(sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdMes (IdObj INT) TYPE=HEAP")) STACK_ERROR;
@@ -171,15 +179,14 @@ int Init_liste_mes(
 	{
 		printf(" Lecture des mesures de la facture ...");
 		fflush(stdout);
-		snprintf(qry, sizeof(qry), 
+		snprintf(qry, sizeof(qry),
 				"INSERT INTO IdMes (IdObj) \n"
 				"SELECT DISTINCT TLink2.IdRelObj FROM TLink AS TLink0 \n"
 				"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
 				"INNER JOIN TLink AS TLink2 ON TLink0.IdObj=TLink2.IdObj \n"
 				"WHERE TLink0.DateDel IS NULL AND TLink0.IdRelObj=%lu AND TLink0.IdField=%lu \n"
 				"AND TLink1.DateDel IS NULL AND TLink1.IdRelObj=%lu AND TLink1.IdField=%lu \n"
-				"AND TLink2.DateDel IS NULL AND TLink2.IdField=%lu \n"
-				"GROUP BY TLink2.IdRelObj",
+				"AND TLink2.DateDel IS NULL AND TLink2.IdField=%lu",
 			cf->form_LigneFacture, cf->val_FORMSTAMP, cf->idfacture, cf->val_FACTURE, cf->val_MES_LIGNE_FACT);
 		if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 		printf(" %lu trouvées<br>", cntxt->sql_nbrows);
@@ -190,15 +197,14 @@ int Init_liste_mes(
 	printf("Lecture des mesures avec des jugements sur les 24 derniers mois ...");
 	fflush(stdout);
 	delay_to_datetxt(txt, cf->datedebmois, -24, 'M');
-	snprintf(qry, sizeof(qry), 
+	snprintf(qry, sizeof(qry),
 			"INSERT INTO IdMes (IdObj) \n"
 			"SELECT DISTINCT TLink0.IdRelObj FROM TLink AS TLink0 \n"
 			"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
 			"INNER JOIN TVal ON TLink1.IdValue=TVal.IdValue \n"
 			"AND TLink0.DateDel IS NULL AND TLink0.IdField=%lu \n"
 			"AND TLink1.DateDel IS NULL AND TLink1.IdField IN (%lu,%lu,%lu) \n"
-			"AND TVal.TxtValue>='%s' \n"
-			"GROUP BY TLink0.IdObj",
+			"AND TVal.TxtValue>='%s'",
 		cf->val_MESURE_JUGT, cf->val_EFFET_JUGT, cf->val_ECHEANCE_JUGT, cf->val_DATE_JUGT, txt);
 	if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 	printf(" %lu trouvées<br>", cntxt->sql_nbrows);
@@ -207,13 +213,12 @@ int Init_liste_mes(
 	/* Lecture des mesures en cours */
 	printf("Lecture des mesures en cours et en attente ...");
 	fflush(stdout);
-	snprintf(qry, sizeof(qry), 
+	snprintf(qry, sizeof(qry),
 			"INSERT INTO IdMes (IdObj) \n"
 			"SELECT DISTINCT TLink0.IdObj FROM TLink AS TLink0 \n"
 			"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
 			"WHERE TLink0.DateDel IS NULL AND TLink0.IdRelObj=%lu AND TLink0.IdField=%lu \n"
-			"AND TLink1.DateDel IS NULL AND TLink1.IdField=%lu AND TLink1.IdValue<>%lu\n"
-			"GROUP BY TLink0.IdObj",
+			"AND TLink1.DateDel IS NULL AND TLink1.IdField=%lu AND TLink1.IdValue<>%lu",
 		cf->form_Mesure, cf->val_FORMSTAMP, cf->val_ETAT_FACTURATION, cf->val_Archivee);
 	if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 	printf(" %lu trouvées<br>", cntxt->sql_nbrows);
@@ -222,7 +227,7 @@ int Init_liste_mes(
 	/* Compilation des mesures a examiner */
 	printf("Nombre total de mesures à examiner :");
 	fflush(stdout);
-	if(sql_exec_query(cntxt, "SELECT DISTINCT IdObj FROM IdMes ORDER BY IdObj") || 
+	if(sql_exec_query(cntxt, "SELECT DISTINCT IdObj FROM IdMes ORDER BY IdObj") ||
 		sql_get_table(cntxt, &cf->tmes, 2) ||
 		sql_exec_query(cntxt, "DROP TABLE IdMes")) STACK_ERROR;
 
@@ -242,7 +247,7 @@ int Init_liste_mes(
 ** Description : preparation de l'échancier mensuel
 *********************************************************************/
 #define ERR_FUNCTION "Calc_echeancier"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int Calc_echeancier(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	cntxt_fact *cf					/* in : contexte de facturation */
@@ -267,8 +272,8 @@ int Calc_echeancier(				/* return : 0 on success, other on error */
 		}
 
 		/* Calcul des échéances sur 3 mois */
-		if(strcmp(majorite, datefin) <= 0 && 
-			strcmp(majorite, cf->datedebmois) >= 0 && strcmp(majorite, cf->datefinmois) <= 0) 
+		if(strcmp(majorite, datefin) <= 0 &&
+			strcmp(majorite, cf->datedebmois) >= 0 && strcmp(majorite, cf->datefinmois) <= 0)
 		{
 			echeance = cf->val_Majorite0M;
 			cf->nb_echeance++;
@@ -278,39 +283,45 @@ int Calc_echeancier(				/* return : 0 on success, other on error */
 			echeance = cf->val_Echeance0M;
 			cf->nb_echeance++;
 		}
-		else if(strcmp(majorite, datefin) <= 0 && 
-				strcmp(majorite, cf->datefinmois) > 0 && strcmp(majorite, cf->datemois2) < 0) 
+		else if(strcmp(majorite, datefin) <= 0 &&
+				strcmp(majorite, cf->datefinmois) > 0 && strcmp(majorite, cf->datemois2) < 0)
 		{
 			echeance = cf->val_Majorite1M;
 			cf->nb_echeance1M++;
 		}
-		else if(strcmp(datefin, cf->datefinmois) > 0 && strcmp(datefin, cf->datemois2) < 0) 
+		else if(strcmp(datefin, cf->datefinmois) > 0 && strcmp(datefin, cf->datemois2) < 0)
 		{
 			echeance = cf->val_Echeance1M;
 			cf->nb_echeance1M++;
 		}
-		else if(strcmp(majorite, datefin) <= 0 && 
-				strcmp(majorite, cf->datemois2) >= 0 && strcmp(majorite, cf->datemois3) < 0) 
+		else if(strcmp(majorite, datefin) <= 0 &&
+				strcmp(majorite, cf->datemois2) >= 0 && strcmp(majorite, cf->datemois3) < 0)
 		{
 			echeance = cf->val_Majorite2M;
 			cf->nb_echeance2M++;
 		}
-		else if(strcmp(datefin, cf->datemois2) >= 0 && strcmp(datefin, cf->datemois3) < 0) 
+		else if(strcmp(datefin, cf->datemois2) >= 0 && strcmp(datefin, cf->datemois3) < 0)
 		{
 			echeance = cf->val_Echeance2M;
 			cf->nb_echeance2M++;
 		}
+		else if(!cf->mes[i].ts)
+		{
+			echeance = cf->val_AttenteAffectationTS;
+			cf->nb_attenteTS++;
+		}
 
 		QRY_UPDATE_IDVAL(cf->mes[i].id, ECHEANCIER, echeance);
-		if(qry_update_idobj_idfield(cntxt, cf->mes[i].id, cf->val_ETAT_ECHEANCIER, ano, 1)) STACK_ERROR;
+		if(qry_update_idobj_idfield(cntxt, cf->mes[i].id, cf->val_ETAT_ECHEANCIER, ano, 3)) STACK_ERROR;
 	}
 
 	/* Affiche le bouton de retour à la page precedente */
 	printf("*</pre></font></b><hr>");
 	printf("%lu échéances ce mois<br>"
 			"%lu échéances le mois prochain<br>"
-			"%lu échéances à deux mois<br><br>",
-			cf->nb_echeance, cf->nb_echeance1M, cf->nb_echeance2M);
+			"%lu échéances à deux mois<br>"
+			"%lu mesures en attente d'affectation TS<br><br>",
+			cf->nb_echeance, cf->nb_echeance1M, cf->nb_echeance2M, cf->nb_attenteTS);
 	printf("<hr><br><center><input type=image name='B$#NOP' src='../img/_eva_btn_gobackobj_fr.gif'></center><br>\n");
 	cntxt->b_terminate = 15;
 
@@ -320,18 +331,40 @@ int Calc_echeancier(				/* return : 0 on success, other on error */
 #undef ERR_CLEANUP
 
 /*********************************************************************
+** Fonction : qsort_nom
+** Description : tri sur colonnes 15/16
+*********************************************************************/
+int qsort_nom(const void *el1, const void *el2)
+{
+	char *t1 = ((DynTableCell *)el1+15)->txt;
+	char *t2 = ((DynTableCell *)el2+15)->txt;
+	int res;
+
+	if(!t1 || !*t1) t1 = "";
+	if(!t2 || !*t2) t2 = "";
+
+	res = STRCMPCASE(t1, t2);
+	if(res) return res;
+
+	t1 = ((DynTableCell *)el1+16)->txt;
+	t2 = ((DynTableCell *)el2+16)->txt;
+	if(!t1 || !*t1) t1 = "";
+	if(!t2 || !*t2) t2 = "";
+
+	return STRCMPCASE(t1, t2);
+}
+
+/*********************************************************************
 ** Function : Init_AEMO
 ** Description : initialisation des constantes de facturation
 *********************************************************************/
 #define ERR_FUNCTION "Init_AEMO"
-#define ERR_CLEANUP	DYNTAB_FREE(data); \
-					DYNTAB_FREE(tmpdata)
+#define ERR_CLEANUP	DYNTAB_FREE(data)
 int Init_AEMO(
 	EVA_context *cntxt,				/* in/out : execution context data */
 	cntxt_fact *cf					/* in/out : structure à initialiser */
 ){
 	DynTable data = { 0 };
-	DynTable tmpdata = { 0 };
 	unsigned long i, cnt = 0;
 	char qry[2048] = {0};
 	char txt[32];
@@ -370,10 +403,15 @@ int Init_AEMO(
 	if(qry_add_table_col(cntxt, &cf->tmes, add_sz_str("DATE_ECHEANCE"))) STACK_ERROR;
 	if(qry_add_table_col(cntxt, &cf->tmes, add_sz_str("DATE_AFFECT_TS"))) STACK_ERROR;
 	if(qry_add_table_col(cntxt, &cf->tmes, add_sz_str("EDUCATEUR"))) STACK_ERROR;
+	if(qry_add_table_col(cntxt, &cf->tmes, add_sz_str("ENFANT->NOM"))) STACK_ERROR;
+	if(qry_add_table_col(cntxt, &cf->tmes, add_sz_str("ENFANT->PRENOM"))) STACK_ERROR;
 
 	/* Affichage de la barre d'avancement */
 	printf("<hr><font face=Courier><b><pre>Examen de %lu mesures\n%s", cf->nb_mes, WAIT_TXTSCALE);
 	fflush(stdout);
+
+	/* Tri des mesures sur nom/prénom */
+	dyntab_sort(&cf->tmes, qsort_nom);
 
 	/* Pour chaque mesure a examiner */
 	for(i = 0; i < cf->nb_mes; i++)
@@ -404,7 +442,7 @@ int Init_AEMO(
 		strncpy(datedeb, dyntab_val(&cf->tmes, i, 2), 8);
 		cf->mes[i].b_jeunemajeur = dyntab_val(&cf->tmes, i, 4)[0] != 0;
 		strncpy(cf->mes[i].statfact, dyntab_val(&cf->tmes, i, 5), sizeof(cf->mes->statfact));
-		cf->mes[i].idvalstat = dyntab_cell(&cf->tmes, i, 5)->IdValue;
+		cf->mes[i].idvalstat = get_id_value(cntxt, DYNTAB_VAL_SZ(&cf->tmes, i, 5));
 		strncpy(cf->mes[i].modefact, dyntab_val(&cf->tmes, i, 6), sizeof(cf->mes->modefact));
 		strncpy(cf->mes[i].prisecharge, dyntab_val(&cf->tmes, i, 7), 8);
 		strncpy(cf->mes[i].debfact, dyntab_val(&cf->tmes, i, 8), 8);
@@ -422,28 +460,19 @@ int Init_AEMO(
 			"AND TLink1.DateDel IS NULL AND TLink1.IdField=%lu AND TLink1.IdValue=%lu\n"
 			"ORDER BY TLink0.IdObj DESC",
 			cf->val_MESURE_JUGT, cf->mes[i].id, cf->val_DATE_JUGT, idval);
-		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2) ||
-			qry_obj_data(cntxt, &data, &data, NULL)) STACK_ERROR;
+		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
 
 		/* Lecture date d'échéance */
-		{
-			DynTableCell *c = dyntab_field_cell(&data, "ECHEANCE_JUGT", 0, 1, 0);
-			if(c && c->txt) 
-			{
-				strncpy(datefin, c->txt, 8);
-				snprintf(add_sz_str(qry), "SELECT DateCr FROM TLink WHERE Pkey=%lu AND DateDel IS NULL", c->Pkey);
-				if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &tmpdata, 2)) STACK_ERROR;
-				strncpy(cf->mes[i].saisderjug, dyntab_val(&tmpdata, 0, 0), 8);
-			}
-		}
+		if(qry_obj_field(cntxt, &data, DYNTAB_TOUL(&data), "ECHEANCE_JUGT,ORD_JUGTS_EFFET_DU,ORD_JUGTS_TYPE")) STACK_ERROR;
+		strncpy(datefin, dyntab_field_val(&data, "ECHEANCE_JUGT", ~0UL, 0), 8);
 
 		/* Détermine si mesure terminée (main levée) */
 		{
-			char *effetdu = dyntab_field_val(&data, "ORD_JUGTS_EFFET_DU", 0, 1, 0);
+			char *effetdu = dyntab_field_val(&data, "ORD_JUGTS_EFFET_DU", ~0UL, 0);
 			char *datejug = dyntab_val(&cf->tmes, i, 3);
 			strncpy(cf->mes[i].effetderjug, effetdu, 8);
-			cf->mes[i].b_mainlevee = 
-				!strcmp(dyntab_field_val(&data, "ORD_JUGTS_TYPE", 0, 1, 0), "Main levée") ||
+			cf->mes[i].b_mainlevee =
+				!strcmp(dyntab_field_val(&data, "ORD_JUGTS_TYPE", ~0UL, 0), "Main levée") ||
 				!strncmp(effetdu, datefin, 8) || !strncmp(datejug, datefin, 8);
 		}
 
@@ -461,7 +490,7 @@ int Init_AEMO(
 					strncpy(datefin, txt, 8);
 				}
 			}
-			else 
+			else
 			{
 				if(!strncmp(majorite, cf->datedebmois, 6)) DYNTAB_SET(ano, ano->nbrows, 0, "Arrêt à 18 ans");
 				strncpy(datefin, majorite, 8);
@@ -495,7 +524,7 @@ int Init_AEMO(
 ** Description : produit l'entete du journal d'execution
 *********************************************************************/
 #define ERR_FUNCTION "Entete_journal"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int Entete_journal(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	cntxt_fact *cf					/* in/out : structure à initialiser */
@@ -543,65 +572,93 @@ int calc_jcor_AEMO(					/* return : 0 on success, other on error */
 	char datetmp[16];
 	unsigned long idmesure = cf->mes[i].id;
 	unsigned long tot_fact = 0;
-	unsigned long jdeb;
 	char *dfact0 = NULL;
 	DynTable lignfact = { 0 };
 	DynTable data = { 0 };
 	char qry[2048] = {0};
 	unsigned long j;
+	char fmt = 'D';
+	char *dfin = strcmp(cf->datemois1, datefin) < 0 ? cf->datemois1 : datefin;
 
-	/* Lecture des lignes de facture pour la mesure */
-	snprintf(qry, sizeof(qry), 
-			"SELECT DISTINCT TLink0.IdObj,TLink2.IdRelObj,DFact.TxtValue FROM TLink AS TLink0 \n"
-			"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
-			"INNER JOIN TLink AS TLink2 ON TLink0.IdObj=TLink2.IdObj \n"
-			"INNER JOIN TLink AS TLink3 ON TLink2.IdRelObj=TLink3.IdObj \n"
-			"INNER JOIN TVal AS DFact ON TLink3.IdValue=DFact.IdValue \n"
-			"WHERE TLink0.DateDel IS NULL AND TLink0.IdField=%lu AND TLink0.IdRelObj=%lu \n"
-			"AND TLink1.DateDel IS NULL AND TLink1.IdField=%lu AND TLink1.IdRelObj=%lu \n"
-			"AND TLink2.DateDel IS NULL AND TLink2.IdField=%lu \n"
-			"AND TLink3.DateDel IS NULL AND TLink3.IdField=%lu AND DFact.TxtValue>'2004' \n"
-			"ORDER BY DFact.TxtValue DESC",
-		cf->val_FORMSTAMP, cf->form_LigneFacture, 
-		cf->val_MES_LIGNE_FACT, idmesure,
-		cf->val_FACTURE,
-		cf->val_DATE_FACTURE);
-	if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &lignfact, 2)) STACK_ERROR;
-
-	/* Examen des lignes de factures */
-	jdeb = idlignefact == DYNTAB_TOULRC(&lignfact, 0, 0) ? 1 : 0;
-	for(j = jdeb; j < lignfact.nbrows; j++)
+	/* Calcul depuis la dernière correction si mesure commencée avant 06-2004 */
+	if(strcmp(cf->mes[i].deb, "2004") < 0)
 	{
-		/* Lecture des jours facturés */
-		snprintf(qry, sizeof(qry), 
-				"SELECT DISTINCT TLink.IdField,TVal.TxtValue FROM TLink \n"
-				"INNER JOIN TVal ON TLink.IdValue=TVal.IdValue \n"
-				"WHERE TLink.IdObj=%s AND TLink.DateDel IS NULL AND TLink.IdField IN (%lu,%lu) \n",
-			dyntab_val(&lignfact, j, 0), 
-			cf->val_QTE_FACTURE, cf->val_QTE_CORRECTION);
-		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
+		/* Lecture des lignes de facture après 2004 pour la mesure */
+		snprintf(qry, sizeof(qry),
+				"SELECT DISTINCT TLink0.IdObj,TLink2.IdRelObj,DFact.TxtValue FROM TLink AS TLink0 \n"
+				"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
+				"INNER JOIN TLink AS TLink2 ON TLink0.IdObj=TLink2.IdObj \n"
+				"INNER JOIN TLink AS TLink3 ON TLink2.IdRelObj=TLink3.IdObj \n"
+				"INNER JOIN TVal AS DFact ON TLink3.IdValue=DFact.IdValue \n"
+				"WHERE TLink0.DateDel IS NULL AND TLink0.IdField=%lu AND TLink0.IdRelObj=%lu AND TLink0.IdObj<>%lu\n"
+				"AND TLink1.DateDel IS NULL AND TLink1.IdField=%lu AND TLink1.IdRelObj=%lu \n"
+				"AND TLink2.DateDel IS NULL AND TLink2.IdField=%lu \n"
+				"AND TLink3.DateDel IS NULL AND TLink3.IdField=%lu AND DFact.TxtValue>'2004' \n"
+				"ORDER BY DFact.TxtValue DESC",
+			cf->val_FORMSTAMP, cf->form_LigneFacture, idlignefact,
+			cf->val_MES_LIGNE_FACT, idmesure,
+			cf->val_FACTURE,
+			cf->val_DATE_FACTURE);
+		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &lignfact, 2)) STACK_ERROR;
+		if(!lignfact.nbrows) RETURN_OK;
 
-		/* Arret si correction - decompte à partir du mois suivant */
-		if(data.nbrows > 1 || DYNTAB_TOUL(&data) == cf->val_QTE_CORRECTION)
+		/* Examen des lignes de factures */
+		for(j = 0; j < lignfact.nbrows; j++)
 		{
-			delay_to_datetxt(datetmp, dyntab_val(&lignfact, j, 2), 1, 'M');
-			dfact0 = datetmp;
-			break; 
+			/* Lecture des jours facturés */
+			snprintf(qry, sizeof(qry),
+					"SELECT DISTINCT TLink.IdField,TVal.TxtValue FROM TLink \n"
+					"INNER JOIN TVal ON TLink.IdValue=TVal.IdValue \n"
+					"WHERE TLink.IdObj=%s AND TLink.DateDel IS NULL AND TLink.IdField IN (%lu,%lu) \n",
+				dyntab_val(&lignfact, j, 0),
+				cf->val_QTE_FACTURE, cf->val_QTE_CORRECTION);
+			if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
+
+			/* Arret si correction - decompte à partir du mois suivant */
+			if(data.nbrows > 1 || DYNTAB_TOUL(&data) == cf->val_QTE_CORRECTION)
+			{
+				delay_to_datetxt(datetmp, dyntab_val(&lignfact, j, 2), 1, 'M');
+				dfact0 = datetmp;
+				break;
+			}
+
+			/* Total de jours facturés */
+			tot_fact += DYNTAB_TOULRC(&data, 0, 1);
 		}
 
-		/* Total de jours facturés */
-		tot_fact += DYNTAB_TOULRC(&data, 0, 1);
+		/* Calcul du début de la période à régulariser */
+		if(!dfact0) dfact0 = dyntab_val(&lignfact, lignfact.nbrows - 1, 2);
+		if(strcmp(dfact0, datedeb) < 0) dfact0 = datedeb;
+
+		/* Régularisation uniquement à partir de 2004 */
+		if(strcmp(dfact0, "2004") > 0)
+		{
+			/* Calcul nb de jours à facturer sur la période à régulariser */
+			int a_fact = strcmp(dfact0, dfin) < 0 ? datetxt_to_age(dfact0, dfin, &fmt) : 0;
+			*nbjcorr = (a_fact > 0 ? a_fact : 0) - tot_fact - nbjours;
+		}
+	}
+	/* Calcul sur l'ensemble des factures */
+	else
+	{
+		/* Lecture des totaux de facturation pour la mesure */
+		int a_fact = datetxt_to_age(datedeb, dfin, &fmt);
+		snprintf(qry, sizeof(qry),
+				"SELECT SUM(TVal.TxtValue) FROM TLink AS TLink0 \n"
+				"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
+				"INNER JOIN TLink AS TLink2 ON TLink0.IdObj=TLink2.IdObj \n"
+				"INNER JOIN TVal ON TLink2.IdValue=TVal.IdValue \n"
+				"WHERE TLink0.DateDel IS NULL AND TLink0.IdField=%lu AND TLink0.IdRelObj=%lu AND TLink0.IdObj<>%lu\n"
+				"AND TLink1.DateDel IS NULL AND TLink1.IdField=%lu AND TLink1.IdRelObj=%lu \n"
+				"AND TLink2.DateDel IS NULL AND TLink2.IdField IN(%lu,%lu)",
+			cf->val_FORMSTAMP, cf->form_LigneFacture, idlignefact,
+			cf->val_MES_LIGNE_FACT, idmesure,
+			cf->val_QTE_FACTURE, cf->val_QTE_CORRECTION);
+		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
+		tot_fact = DYNTAB_TOUL(&data);
+		*nbjcorr = (a_fact > 0 ? a_fact : 0) - tot_fact - nbjours;
 	}
 
-	/* Calcul nb de jours à facturer sur la période à régulariser */
-	if(!dfact0) dfact0 = jdeb == lignfact.nbrows ? datedeb : dyntab_val(&lignfact, lignfact.nbrows - 1, 2);
-	if(strcmp(dfact0, datedeb) < 0) dfact0 = datedeb;
-	{
-		char fmt = 'D';
-		char *dfin = strcmp(cf->datemois1, datefin) < 0 ? cf->datemois1 : datefin;
-		unsigned long a_fact = strcmp(dfact0, dfin) < 0 ? datetxt_to_age(dfact0, dfin, &fmt) : 0;
-		*nbjcorr = a_fact - tot_fact - nbjours;
-	}
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -659,7 +716,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		char *majorite = cf->mes[i].majorite;
 		char datedebcor[16] = {0}, datefincor[16] = {0};
 		char *modefact = cf->mes[i].modefact, *mindeb, *maxfin;
-		int nbjours = cf->nbjoursmois, nbjcorr = 0, b_calcmanuel;	  
+		int nbjours = cf->nbjoursmois, nbjcorr = 0, b_calcmanuel;
 		unsigned long statut;
 		char *valstatut = cf->mes[i].statfact, *nouvstatut, *bgcolor = "FFFFFF";
 		DynTableCell val = {0};
@@ -669,7 +726,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		M_FREE(msg);
 
 		/* Recherche si une ligne existe deja pour cette mesure dans la facture */
-		snprintf(qry, sizeof(qry), 
+		snprintf(qry, sizeof(qry),
 				"SELECT TLink0.IdObj AS IdObj,TLink0.Num AS Num FROM TLink AS TLink0 \n"
 				"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
 				"INNER JOIN TLink AS TLink2 ON TLink0.IdObj=TLink2.IdObj \n"
@@ -681,28 +738,22 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
 		idlignefact = DYNTAB_TOUL(&data);
 
-		/* Si plus d'une ligne : efface les lignes en trop */
-		if(data.nbrows > 1) DYNBUF_ADD3_INT(&msg, "Lignes de factures multiples - ", data.nbrows - 1, " ligne(s) supprimée(s)");
-		for(j = 1; j < data.nbrows; j++)
-		{
-			snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE IdObj=%lu",
-				cntxt->timestamp, DYNTAB_TOUL(&cntxt->id_user), DYNTAB_TOULRC(&data, j, 0));
-			if(sql_exec_query(cntxt, qry)) STACK_ERROR;
-		}
+		/* Si plus d'une ligne : ne touche à rien */
+		if(data.nbrows > 1) continue;
 
 		/* Lecture des donnees de la ligne */
 		DYNTAB_FREE(lignfact);
 		if(idlignefact && qry_obj_idfield(cntxt, &lignfact, idlignefact, 0)) STACK_ERROR;
 
 		/* Gestion du mode de facturation */
-		b_calcmanuel = idlignefact && dyntab_field_cell(&lignfact, "CALC_MANUEL", 0, 1, 0);
+		b_calcmanuel = idlignefact && dyntab_field_cell(&lignfact, "CALC_MANUEL", ~0UL, 0);
 		if(b_calcmanuel)
 		{
 			/* Calcul manuel : lecture des données de la ligne */
-			nbjours = strtoul(dyntab_field_val(&lignfact, "JOURS_FACT", 0, 1, 0), NULL, 10);
-			nbjcorr = strtoul(dyntab_field_val(&lignfact, "JOURS_CORRECTION", 0, 1, 0), NULL, 10);
-			if(dyntab_filter_field(ano, 0, &lignfact, "MOTIF_CORRECTION", 0, 1, NULL)) RETURN_ERR_MEMORY; 
-			iddest = strtoul(dyntab_field_val(&lignfact, "DEST_FACTURE", 0, 1, 0), NULL, 10);
+			nbjours = strtoul(dyntab_field_val(&lignfact, "JOURS_FACT", ~0UL, 0), NULL, 10);
+			nbjcorr = strtoul(dyntab_field_val(&lignfact, "JOURS_CORRECTION", ~0UL, 0), NULL, 10);
+			if(dyntab_filter_field(ano, 0, &lignfact, "MOTIF_CORRECTION", ~0UL, NULL)) RETURN_ERR_MEMORY;
+			iddest = strtoul(dyntab_field_val(&lignfact, "DEST_FACTURE", ~0UL, 0), NULL, 10);
 		}
 		else if(!strcmp(modefact, "DateManuelle"))
 		{
@@ -711,7 +762,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 			strncpy(datedebcor, cf->mes[i].debfact, 8);
 			strncpy(datefincor, cf->mes[i].finfact, 8);
 		}
-		else if(!strcmp(modefact, "DateRecept") && cf->mes[i].prisecharge[0])
+		else if(!strcmp(modefact, "DateRecept") && strcmp(cf->mes[i].prisecharge, cf->mes[i].deb) > 0)
 		{
 			strncpy(datedebcor, cf->mes[i].prisecharge, 8);
 		}
@@ -720,7 +771,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 			/* Facturation auto */
 			if(cf->mes[i].affect[0])
 				strncpy(datedebcor, cf->mes[i].affect, 8);
-			else if(cf->mes[i].prisecharge[0])
+			else if(strcmp(cf->mes[i].prisecharge, cf->mes[i].deb) > 0)
 				strncpy(datedebcor, cf->mes[i].prisecharge, 8);
 		}
 
@@ -768,14 +819,14 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 			statut = cf->mes[i].idvalstat;
 			nouvstatut = cf->mes[i].statfact;
 		}
-		else if(strcmp(maxfin, cf->datedebmois) < 0)
+		else if(strcmp(maxfin, cf->datedebmois) <= 0)
 		{
 			/* Date de fin de facturation atteinte : maintien de la mesure si:
 					* 12 mois max apres echeance
 					* facturation non manuelle
 					* facturation DIPAS 01
 					* majorité non atteinte
-					* pas de main levee 
+					* pas de main levee
 					* echeance après 1 janvier 2003 */
 			delay_to_datetxt(txt, datefin, 12, 'M');
 			if(	strcmp(txt, cf->datedebmois) > 0 &&
@@ -813,57 +864,59 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		}
 
 		/* Calcul du nombre de jours factures pour le mois */
-		if(!b_calcmanuel && statut != cf->val_Maintien)
+		if(!b_calcmanuel && statut != cf->val_Maintien && statut != cf->val_En_attente)
 		{
 			if(!cf->mes[i].ts || strcmp(datefincor, cf->datedebmois) <= 0)
 			{
+				/* Mois après la date d'écheance ou TS non affecté : non facturé */
 				nbjours = 0;
 			}
 			else if(strcmp(datefincor, cf->datefinmois) <= 0)
 			{
+				/* Fin le mois en cours : facturer jour de fin - 1 */
 				nbjours = atoi(datefincor + 6) - 1;
 			}
 			else if(strcmp(datedebcor, cf->datefinmois) > 0)
 			{
+				/* Mois avant la date de début :non facturé */
 				nbjours = 0;
-			}															 
+			}
 			else if(strcmp(datedebcor, cf->datedebmois) >= 0)
 			{
+				/* Début le mois en cours : facturer jour de début à fin de mois */
 				nbjours = cf->nbjoursmois - atoi(datedebcor + 6) + 1;
 			}
 
-			/* Calcul des corrections si modif échéance récente et TS affecté */
-			if(cf->mes[i].ts)
+			/* Si TS affecté et pas de correction donnée */
+			if(cf->mes[i].ts && !nbjcorr)
 			{
-				char datetmp[16];
-				delay_to_datetxt(datetmp, cf->mes[i].saisderjug, 60, 'D');
-				if(strcmp(datetmp, cf->datefinmois) > 0 &&
-					calc_jcor_AEMO(cntxt, cf, i, datedebcor, datefincor, idlignefact, nbjours, &nbjcorr)) STACK_ERROR;
+				/* Calcul des corrections */
+				if(calc_jcor_AEMO(cntxt, cf, i, datedebcor, datefincor, idlignefact, nbjours, &nbjcorr)) STACK_ERROR;
 				if(nbjcorr)
 				{
 					char buf[256] = {0}, d[32];
 					int b_new = !strcmp(cf->mes[i].effetderjug, datedeb);
 					datetxt_to_format(cntxt, d, b_new ? datedebcor : cf->mes[i].effetderjug, NULL);
 					DYNBUF_ADD3_INT(&msg, "Correction ", nbjcorr, "j");
-					DYNTAB_ADD(ano, ano->nbrows, 0, buf, 
-						snprintf(add_sz_str(buf), "%s à/c du %s", 
-								b_new ? "Prise en charge" : cf->mes[i].b_mainlevee ? "Main levée" : "Maintien", 
+					DYNTAB_ADD(ano, ano->nbrows, 0, buf,
+						snprintf(add_sz_str(buf), "%s à/c du %s",
+								b_new ? "Prise en charge" : cf->mes[i].b_mainlevee ? "Main levée" : "Maintien",
 								d), NO_CONV);
-				}					   
+				}
 			}
 
 
 			/* Annotation si modification des dates de facturation */
 			mindeb = strcmp(datedeb, datedebcor) > 0 ? datedebcor : datedeb;
 			maxfin = strcmp(datedeb, datedebcor) < 0 ? datedebcor : datedeb;
-			if(strcmp(mindeb, cf->datefinmois) <= 0 && strcmp(maxfin, cf->datedebmois) >= 0)
+			if(strcmp(mindeb, cf->datefinmois) <= 0 && strcmp(maxfin, cf->datedebmois) >= 0 && !nbjcorr)
 			{
  				datetxt_to_format(cntxt, txt, datedebcor, NULL);
 				DYNTAB_ADD(ano, ano->nbrows, 0, qry, snprintf(add_sz_str(qry), "Prise en charge le %s", txt), NO_CONV);
 			}
 			mindeb = strcmp(datefin, datefincor) > 0 ? datefincor : datefin;
 			maxfin = strcmp(datefin, datefincor) < 0 ? datefincor : datefin;
-			if(strcmp(mindeb, cf->datefinmois) <= 0 && strcmp(maxfin, cf->datedebmois) >= 0)
+			if(strcmp(mindeb, cf->datefinmois) <= 0 && strcmp(maxfin, cf->datedebmois) >= 0 && !nbjcorr)
 			{
  				datetxt_to_format(cntxt, txt, datefincor, NULL);
 				DYNTAB_ADD(ano, ano->nbrows, 0, qry, snprintf(add_sz_str(qry), "Fin de prise en charge le %s", txt), NO_CONV);
@@ -875,9 +928,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		{
 			if(strcmp(valstatut, nouvstatut)) cf->nb_modif++;
 			printf("<table border=0 cellpadding=1 cellspacing=0 width=800><tr>");
-			if(form_eval_fieldexpr(cntxt, &data, 0,  idmesure, add_sz_str("ENFANT->NOM,PRENOM"), NULL, 0)) STACK_ERROR; 
-			dyntab_sort(&data, qsort_colval);
-			printf("<td width=150><font size=-1>%s %s</td>", dyntab_val(&data, 1, 0), dyntab_val(&data, 0, 0));
+			printf("<td width=150><font size=-1>%s %s</td>", dyntab_val(&cf->tmes, i, 15), dyntab_val(&cf->tmes, i, 16));
 			printf("<td width=80 align=right><font size=-1>");
 			if(*datedeb) printf("%.2s/%.2s/%.4s", datedeb+6, datedeb+4, datedeb);
 			printf("</td><td width=10 align=center>-</td><td width=80><font size=-1>");
@@ -906,13 +957,12 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		{
 			if(idlignefact)
 			{
-				snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE IdObj=%lu",
+				snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE DateDel IS NULL AND IdObj=%lu",
 					cntxt->timestamp, DYNTAB_TOUL(&cntxt->id_user), idlignefact);
 				if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 			}
 
-			/* Maj mesure : etat facturation et année de fin si terminée */
-			QRY_UPDATE_IDVAL(idmesure, ETAT_FACTURATION, statut);
+			/* Maj année de fin */
 			QRY_UPDATE_VAL(idmesure, ANNEE_FIN, datefincor, 4);
 			continue;
 		}
@@ -929,7 +979,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 
 		/* Mise a jour des valeurs calculees */
 		QRY_UPDATE_REL(idlignefact, DEST_FACTURE, iddest);
-		if(nbjours) 
+		if(nbjours)
 		{
 			QRY_UPDATE_VAL(idmesure, ANNEE_FIN, NULL, 0);
 			QRY_UPDATE_VAL(idlignefact, QTE_FACTURE, txt, snprintf(add_sz_str(txt), "%d", nbjours));
@@ -938,7 +988,7 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		{
 			QRY_UPDATE_VAL(idlignefact, QTE_FACTURE, NULL, 0);
 		}
-		if(nbjcorr) 
+		if(nbjcorr)
 		{
 			QRY_UPDATE_VAL(idlignefact, QTE_CORRECTION, txt, snprintf(add_sz_str(txt), "%d", nbjcorr));
 		}
@@ -946,18 +996,17 @@ int FactureAEMO(					/* return : 0 on success, other on error */
 		{
 			QRY_UPDATE_VAL(idlignefact, QTE_CORRECTION, NULL, 0);
 		}
-		if(qry_update_idobj_idfield(cntxt, idlignefact, cf->val_MOTIF_CORRECTION, ano, 1)) STACK_ERROR;
+		if(qry_update_idobj_idfield(cntxt, idlignefact, cf->val_MOTIF_CORRECTION, ano, 3)) STACK_ERROR;
 	}
 
 	printf("</table><br><br>"
 			"<table border=1 rules=none width=100%%><tr><td align=center>%lu mesures examinées<br>%lu mesures modifiées<br>%lu mesures facturées</td></tr>"
 			"<tr><td align=center><font size=-1><i>Utilisez la commande Fichier/Enregistrer "
 				"de votre navigateur si vous voulez conserver ce journal</td></tr>"
-			"<tr><td align=center><input type=image name='B$#NOP' src='../img/_eva_btn_gobackobj_fr.gif'></td></tr>"
-			"</table>\n",
+			"<tr><td align=center><br><input type=submit value='Revenir à la facture' name='B$#NOP'></td></tr>"
+			"</table>\n<script>document.mainform['B$#NOP'].focus();</script>",
 			cf->nb_mes, cf->nb_modif, cf->nb_lignfact);
 
-	DYNBUF_ADD_STR(&cntxt->focus1, "B$#NOP");
 	cntxt->b_terminate = 31;
 
 	RETURN_OK_CLEANUP;
@@ -1072,14 +1121,14 @@ int Init_TPS(
 			cf->val_MESURE_JUGT, cf->mes[i].id, cf->val_DATE_JUGT, idval);
 		if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, &data, 2) ||
 			qry_obj_data(cntxt, &data, &data, NULL)) STACK_ERROR;
-		strncpy(datefin, dyntab_field_val(&data, "ECHEANCE", 0, 1, 0), 8);
+		strncpy(datefin, dyntab_field_val(&data, "ECHEANCE", ~0UL, 0), 8);
 
 		/* Détermine si mesure terminée (main levée) */
 		{
-			char *effetdu = dyntab_field_val(&data, "ORD_JUGTS_EFFET_DU", 0, 1, 0);
+			char *effetdu = dyntab_field_val(&data, "ORD_JUGTS_EFFET_DU", ~0UL, 0);
 			char *datejug = dyntab_val(&cf->tmes, i, 3);
-			cf->mes[i].b_mainlevee = 
-				!strcmp(dyntab_field_val(&data, "ORD_JUGTS_TYPE", 0, 1, 0), "Main levée") ||
+			cf->mes[i].b_mainlevee =
+				!strcmp(dyntab_field_val(&data, "ORD_JUGTS_TYPE", ~0UL, 0), "Main levée") ||
 				!strncmp(effetdu, datefin, 8) || !strncmp(datejug, datefin, 8);
 		}
 
@@ -1142,14 +1191,14 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		char *datefin = cf->mes[i].fin;
 		char datedebcor[16] = {0}, datefincor[16] = {0};
 		char *modefact = cf->mes[i].modefact, *mindeb, *maxfin;
-		int nbfact = 0, nbcorr = 0, b_calcmanuel;	  
+		int nbfact = 0, nbcorr = 0, b_calcmanuel;
 		unsigned long statut;
 		char *valstatut = cf->mes[i].statfact, *nouvstatut, *bgcolor = "FFFFFF";
 		DynTableCell val = {0};
 		DynTable *ano = &cf->mes[i].notes;
 
 		/* Recherche si une ligne existe deja pour cette mesure dans la facture */
-		snprintf(qry, sizeof(qry), 
+		snprintf(qry, sizeof(qry),
 				"SELECT TLink0.IdObj AS IdObj,TLink0.Num AS Num FROM TLink AS TLink0 \n"
 				"INNER JOIN TLink AS TLink1 ON TLink0.IdObj=TLink1.IdObj \n"
 				"INNER JOIN TLink AS TLink2 ON TLink0.IdObj=TLink2.IdObj \n"
@@ -1164,7 +1213,7 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		/* Si plus d'un ligne : efface les lignes en trop */
 		for(j = 1; j < data.nbrows; j++)
 		{
-			snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE IdObj=%lu",
+			snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE DateDel IS NULL AND IdObj=%lu",
 				cntxt->timestamp, DYNTAB_TOUL(&cntxt->id_user), DYNTAB_TOULRC(&data, j, 0));
 			if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 		}
@@ -1174,14 +1223,14 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		if(idlignefact && qry_obj_idfield(cntxt, &lignfact, idlignefact, 0)) STACK_ERROR;
 
 		/* Gestion du mode de facturation */
-		b_calcmanuel = idlignefact && dyntab_field_cell(&lignfact, "CALC_MANUEL", 0, 1, 0);
+		b_calcmanuel = idlignefact && dyntab_field_cell(&lignfact, "CALC_MANUEL", ~0UL, 0);
 		if(b_calcmanuel)
 		{
 			/* Calcul manuel : lecture des données de la ligne */
-			nbfact = strtoul(dyntab_field_val(&lignfact, "MOIS_FACT", 0, 1, 0), NULL, 10);
-			nbcorr = strtoul(dyntab_field_val(&lignfact, "MOIS_CORRECTION", 0, 1, 0), NULL, 10);
-			if(dyntab_filter_field(ano, 0, &lignfact, "MOTIF_CORRECTION", 0, 1, NULL)) RETURN_ERR_MEMORY; 
-			iddest = strtoul(dyntab_field_val(&lignfact, "DEST_FACTURE", 0, 1, 0), NULL, 10);
+			nbfact = strtoul(dyntab_field_val(&lignfact, "MOIS_FACT", ~0UL, 0), NULL, 10);
+			nbcorr = strtoul(dyntab_field_val(&lignfact, "MOIS_CORRECTION", ~0UL, 0), NULL, 10);
+			if(dyntab_filter_field(ano, 0, &lignfact, "MOTIF_CORRECTION", ~0UL, NULL)) RETURN_ERR_MEMORY;
+			iddest = strtoul(dyntab_field_val(&lignfact, "DEST_FACTURE", ~0UL, 0), NULL, 10);
 		}
 		else if(!strcmp(modefact, "DateManuelle"))
 		{
@@ -1234,7 +1283,7 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		{
 			if(strcmp(valstatut, nouvstatut)) cf->nb_modif++;
 			printf("<table border=0 cellpadding=1 cellspacing=0 width=800><tr>");
-			if(form_eval_fieldexpr(cntxt, &data, 0,  idmesure, add_sz_str("ALLOCATAIRE->NOM,PRENOM"), NULL, 0)) STACK_ERROR; 
+			if(form_eval_fieldexpr(cntxt, &data, 0,  idmesure, add_sz_str("ALLOCATAIRE->NOM,PRENOM"), NULL, 0)) STACK_ERROR;
 			dyntab_sort(&data, qsort_colval);
 			printf("<td width=150><font size=-1>%s %s</td>", dyntab_val(&data, 1, 0), dyntab_val(&data, 0, 0));
 			printf("<td width=80 align=right><font size=-1>");
@@ -1264,7 +1313,7 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		{
 			if(idlignefact)
 			{
-				snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE IdObj=%lu",
+				snprintf(add_sz_str(qry), "UPDATE TLink SET DateDel='%s',IdWhoDel=%lu WHERE DateDel IS NULL AND IdObj=%lu",
 					cntxt->timestamp, DYNTAB_TOUL(&cntxt->id_user), idlignefact);
 				if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 			}
@@ -1298,7 +1347,7 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		{
 			QRY_UPDATE_VAL(idlignefact, QTE_FACTURE, NULL, 0);
 		}
-		if(nbcorr) 
+		if(nbcorr)
 		{
 			QRY_UPDATE_VAL(idlignefact, QTE_CORRECTION, txt, snprintf(add_sz_str(txt), "%d", nbcorr));
 		}
@@ -1306,18 +1355,17 @@ int FactureTPS(					/* return : 0 on success, other on error */
 		{
 			QRY_UPDATE_VAL(idlignefact, QTE_CORRECTION, NULL, 0);
 		}
-		if(qry_update_idobj_idfield(cntxt, idlignefact, cf->val_MOTIF_CORRECTION, ano, 1)) STACK_ERROR;
+		if(qry_update_idobj_idfield(cntxt, idlignefact, cf->val_MOTIF_CORRECTION, ano, 3)) STACK_ERROR;
 	}
 
 	printf("</table><br><br>"
 			"<table border=1 rules=none width=100%%><tr><td align=center>%lu mesures examinées<br>%lu mesures modifiées<br>%lu mesures facturées</td></tr>"
 			"<tr><td align=center><font size=-1><i>Utilisez la commande Fichier/Enregistrer "
 				"de votre navigateur si vous voulez conserver ce journal</td></tr>"
-			"<tr><td align=center><input type=image name='B$#NOP' src='../img/_eva_btn_gobackobj_fr.gif'></td></tr>"
-			"</table>\n",
+			"<tr><td align=center><br><input type=submit value='Revenir à la facture' name='B$#NOP'></td></tr>"
+			"</table>\n<script>document.mainform['B$#NOP'].focus();</script>",
 			cf->nb_mes, cf->nb_modif, cf->nb_lignfact);
 
-	DYNBUF_ADD_STR(&cntxt->focus1, "B$#NOP");
 	cntxt->b_terminate = 31;
 
 	RETURN_OK_CLEANUP;

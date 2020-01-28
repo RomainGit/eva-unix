@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : date_utils.h
 ** Description : date conversion functions
 **      Author : Alain BOUTE
@@ -48,6 +54,14 @@ int datetxt_to_age(		/* return : age (signed) in the requested unit */
 int time_to_datetxt(		/* return : 0 on success, other on error */
 	time_t t,				/* in : unix time to convert */
 	char *valdate			/* out : converted time - must be 16 bytes long minimum */
+);
+
+/*********************************************************************
+** Function : full_datetxt
+** Description : set missing digits for a YYYYMMDDHHMMSS date
+*********************************************************************/
+void full_datetxt(
+	char *date			/* in/out : date - must be 16 bytes long minimum */
 );
 
 /*********************************************************************
@@ -139,3 +153,25 @@ char *human_filesize(size_t size);
 **				 return 0 if multiple or no bits set
 *********************************************************************/
 unsigned long unique_bit_index(unsigned long word);
+
+/*********************************************************************
+* Fonction : dbl_str
+** Description : convert double to string
+*********************************************************************/
+size_t dbl_str(			/* return : # of chars output to txt */
+	char *txt,			/* out : d converted to string */
+	double d,			/* in : number to convert */
+	const char *fmt		/* in : optional print format */
+);
+
+/*********************************************************************
+* Fonction : mystrdup
+** Description : strdup clone
+*********************************************************************/
+char *mystrdup(char *src, size_t sz);
+
+/*********************************************************************
+* Fonction : ms_since
+** Description : return number of milliseconds since given time
+*********************************************************************/
+int ms_since(struct timeval* t0);

@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_tree.c
-** Description : handling functions for tree controls
+** Description : handling functions for objects tree controls
 **      Author : Alain BOUTE
 **     Created : Apr 01 2002
 *********************************************************************/
@@ -11,14 +17,17 @@ typedef struct _TreeDef
 {
 	unsigned long i_ctrl;			/* control index in cntxt->form->ctrl */
 	unsigned long nbrel;			/* # of relations to process */
+	unsigned long maxobj;			/* max # of objects to read */
 	DynTable relfields;				/* relation fields */
 	DynTable rellabel;				/* relation labels */
 	DynTable relcolor;				/* relation colors */
 	DynTable exclude;				/* exclude relation fields if set */
 	DynTable relmask;				/* relation is not displayed at once if set */
-	char *notesexpr;
-	size_t notesexpr_sz;
-	DynTable formfilter;
+	int b_reverse;					/* display reverse relation if set */
+	char *notesexpr;				/* Expression evaluated to get extra text displayed under node */
+	size_t notesexpr_sz;			/* length of notesexpr */
+	int b_level1;					/* do not display level 0 object if set */
+	int b_maxobj;					/* max # of objects is reached if set */
 	DynTable treenodes;				/* table of displayed nodes path */
 }
 	TreeDef;
@@ -91,40 +100,41 @@ int ctrl_tree_qry_children(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in : execution context data  */
 	DynTable *res,					/* out : list of Ids */
 	char *idfld, size_t idfld_sz,	/* in : relation fields to use to build the tree (comma separated Ids) */
-	int b_exclude,					/* in : exclude fields if 1, include if 0 */
+	int options,					/* in : options bitmask
+										bit 0 : exclude fields if set, include if 0
+										bit 1 : use reverse relation if set, direct if 0 */
 	DynTable *id_obj				/* in : object id to search for in IdRelObj */
 ){
 	DynBuffer *sql = NULL;
-	int outmode = 0;
+	char *obj = "IdObj", *rel = "IdRelObj", *tmp;
 
 	/* Return if no objects given */
 	if(!id_obj || !id_obj->nbrows) RETURN_OK;
 
+	/* Swap obj / relobj if reverse relation tree */
+	if(options & 2) { tmp = obj; obj = rel; rel = tmp; }
+
 	/* Build SQL request */
-	if(outmode) DYNBUF_ADD_STR(&sql, 
-		"-- ctrl_tree_qry_children : read IdObj & Field \n"
-		"SELECT DISTINCTROW TLink.IdRelObj, TVal.TxtValue, TLink.IdField, TLink.Pkey, TLink.IdObj \n"
-		"FROM TLink LEFT JOIN TVal ON TLink.IdField = TVal.IdValue \n")
-	else DYNBUF_ADD_STR(&sql, 
+	DYNBUF_ADD3(&sql, 
 		"-- ctrl_tree_qry_children : read IdObj \n"
-		"SELECT DISTINCTROW IdRelObj FROM TLink \n");
-	DYNBUF_ADD_STR(&sql, 
+		"SELECT DISTINCTROW ", rel, 0, NO_CONV, ",IdField FROM TLink \n");
+	DYNBUF_ADD3(&sql, 
 		"WHERE TLink.DateDel IS NULL \n"
 			"AND TLink.IdRelObj IS NOT NULL \n"
-			"AND TLink.IdObj IN (");
+			"AND TLink.", obj, 0, NO_CONV, " IN (");
 	if(qry_values_list(cntxt, id_obj, 0, &sql)) STACK_ERROR;
 	DYNBUF_ADD_STR(&sql, ") \n");
 	if(res->nbrows)
 	{
-		DYNBUF_ADD_STR(&sql, 
-			"AND TLink.IdRelObj NOT IN ("); 
+		DYNBUF_ADD3(&sql, 
+			"AND TLink.", rel, 0, NO_CONV, " NOT IN ("); 
 		if(qry_values_list(cntxt, res, 0, &sql)) STACK_ERROR;
 		DYNBUF_ADD_STR(&sql, ") \n"); 
 	}
 	if(idfld && *idfld && idfld_sz) 
 	{
 		DYNBUF_ADD_STR(&sql, "AND TLink.IdField");
-		if(b_exclude) DYNBUF_ADD_STR(&sql, " NOT");
+		if(options & 1) DYNBUF_ADD_STR(&sql, " NOT");
 		DYNBUF_ADD3(&sql,  " IN (", idfld, idfld_sz, NO_CONV, ") \n");
 	}
 	DYNBUF_ADD_STR(&sql, 
@@ -158,6 +168,11 @@ int ctrl_tree_status(				/* return : 0 on success, other on error */
 
 	/* Return if maximum level reached */
 	if(maxlvl <= 0 || inode >= tr->treenodes.nbrows) RETURN_OK;
+	if(tr->treenodes.nbrows > tr->maxobj)
+	{
+		tr->b_maxobj = 1;
+		RETURN_OK;
+	}
 
 	/* Change node status */
 	if(set_node_status(cntxt, &tr->treenodes, NULL, 0, inode, status)) STACK_ERROR;
@@ -165,10 +180,14 @@ int ctrl_tree_status(				/* return : 0 on success, other on error */
 	/* Read related objects Ids */
 	DYNTAB_ADD_INT(&id_obj, 0, 0, dyntab_cell(&tr->treenodes, inode, 0)->IdObj);
 	for(i = 0; i < tr->nbrel; i++)
-		if(!dyntab_sz(&tr->relmask, i, 0) &&
+	{
+		char *msk = dyntab_val(&tr->relmask, i, 0);
+		if(!*msk &&
 			ctrl_tree_qry_children(cntxt, &list,
 										DYNTAB_VAL_SZ(&tr->relfields, i, 1),
-										dyntab_sz(&tr->exclude, i, 0), &id_obj)) STACK_ERROR;
+										(dyntab_sz(&tr->exclude, i, 0) ? 1 : 0) |
+										(tr->b_reverse ? 2 : 0), &id_obj)) STACK_ERROR;
+	}
 
 	/* Process children nodes */
 	for(i = 0; i < list.nbrows; i++)
@@ -195,7 +214,7 @@ int ctrl_tree_status(				/* return : 0 on success, other on error */
 #define ERR_CLEANUP 
 int ctrl_tree_minmax(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *treenodes,				/* in : control CGI data */
+	DynTable *treenodes,			/* in : control CGI data */
 	char *path, size_t sz_path		/* in : focused node path */
 ){
 	unsigned long i;
@@ -260,6 +279,7 @@ int put_html_tree(					/* return : 0 on success, other on error */
 	DynBuffer *subfield = NULL;
 	DynBuffer *name = NULL;
 	DynBuffer *child_path = NULL;
+	int b_hide = tr->b_level1 && !dyntab_cmp(id_obj, 0, 0, &form->id_obj, 0, 0);
 	CHECK_HTML_STATUS;
 
 	/* Build node path */
@@ -270,10 +290,10 @@ int put_html_tree(					/* return : 0 on success, other on error */
 	inode = get_node_status(&tr->treenodes, DYNBUF_VAL_SZ(child_path), &status);
 
 	/* Return if parent status is single node and node not displayed */
-	if(parent_status & 4 && inode >= tr->treenodes.nbrows || tr->treenodes.nbrows > 200) RETURN_OK;
+	if(parent_status & 4 && inode >= tr->treenodes.nbrows) RETURN_OK;
 	
 	/* Output node status as CGI hidden input */
-	if(status)
+	if(status || !inode)
 	{
 		DYNBUF_ADD3_BUF(html, "<input type=hidden name='", ctrl->cginame, NO_CONV, "'");
 		DYNBUF_ADD3_BUF(html, " value='", child_path, NO_CONV, "§");
@@ -290,102 +310,102 @@ int put_html_tree(					/* return : 0 on success, other on error */
 		unsigned long row = children.nbrows, j;
 		if(ctrl_tree_qry_children(cntxt, &children, 
 					DYNTAB_VAL_SZ(&tr->relfields, i, 1), 
-					dyntab_sz(&tr->exclude, i, 0), id_obj)) STACK_ERROR;
+					(dyntab_sz(&tr->exclude, i, 0) ? 1 : 0) |
+					(tr->b_reverse ? 2 : 0), id_obj)) STACK_ERROR;
 		for(j = row; j < children.nbrows; j++) dyntab_cell(&children, j, 0)->col = i + 1;
 	}
 
 	/* Output table header */
-	DYNBUF_ADD_STR(html, "<table cellspacing=0 cellpadding=0 border=0><tr>");
-	DYNBUF_ADD_STR(html, "<td valign=top width=20");
-	if(!b_last || parent_status & 4) DYNBUF_ADD_STR(html, " background='../img/_eva_tree_bar.gif'");
-	i = dyntab_cell(id_obj, 0, 0)->col;
-	if(i && dyntab_sz(&tr->relcolor, i - 1, 0))
-		DYNBUF_ADD3_CELL(html, " bgcolor=#", &tr->relcolor, i - 1, 0, NO_CONV, "");
-	DYNBUF_ADD_STR(html, ">");
+	DYNBUF_ADD_STR(html, "<table cellspacing=0 cellpadding=0 border=0>");
 
-	/* Output tree structure (plus / minus buttons & continuation bars) */
-	M_FREE(subfield);
-	DYNBUF_ADD3_BUF(&subfield, "TREEOPEN=", child_path, NO_CONV, "§");
-	CTRL_CGINAMEBTN(&name, NULL, DYNBUF_VAL_SZ(subfield));
-	if(!children.nbrows)
-		DYNBUF_ADD_STR(html, "<img src='../img/_eva_tree_end.gif'>")
-	else if(status & 4)
+	/* If not hidden first node */
+	if(!b_hide)
 	{
-		if(put_html_button(cntxt, name->data, NULL,
-					"_eva_tree_single.gif",
-					"_eva_tree_single_s.gif",
-					"Ouvrir la branche",
-					0, 0))
-				STACK_ERROR;
-	}
-	else if(status & 1)
-	{
-		if(put_html_button(cntxt, name->data, NULL,
-					"_eva_tree_minus.gif",
-					"_eva_tree_minus_s.gif",
-					"Refermer la branche",
-					0, 0))
-				STACK_ERROR;
-	}
-	else
-	{
-		if(put_html_button(cntxt, name->data, NULL,
-					"_eva_tree_plus.gif",
-					"_eva_tree_plus_s.gif",
-					"Ouvrir la branche",
-					0, 0))
-				STACK_ERROR;
-	}
-	M_FREE(name);
-	DYNBUF_ADD_STR(html, "</td><td>\n");
-	DYNBUF_ADD_STR(html, "<table cellspacing=0 cellpadding=0 border=0><tr>");
+		/* Output cell header */
+		DYNBUF_ADD_STR(html, "<tr><td valign=top width=20");
+		if(!b_last || parent_status & 4) DYNBUF_ADD_STR(html, " background='../img/_eva_tree_bar.gif'");
+		i = dyntab_cell(id_obj, 0, 0)->col;
+		if(i && dyntab_sz(&tr->relcolor, i - 1, 0))
+			DYNBUF_ADD3_CELL(html, " bgcolor=#", &tr->relcolor, i - 1, 0, NO_CONV, "");
+		DYNBUF_ADD_STR(html, ">");
 
-	/* Output column with vertical treebar background if open with children */
-	DYNBUF_ADD_STR(html, "<td valign=top width=1%");
-	if(children.nbrows && status & 1) DYNBUF_ADD_STR(html, " background='../img/_eva_tree_bar.gif'");
-	DYNBUF_ADD_STR(html, ">");
-
-	/* Output select checkbox */
-	if(0)
-	{
-		CTRL_CGINAMESUBFIELD(&name, NULL, "SEL");
-		if(put_html_chkbox(cntxt, DYNBUF_VAL_SZ(name), DYNTAB_VAL_SZ(id_obj, 0, 0), 0, 0)) STACK_ERROR;
-	}
-
-	/* Output symbol for object */
-	if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, ctrl->cginame, &objdata, 0, NULL, 0, "*><font size=-1", "SYMBOL+LABEL+NOTES"))
-			STACK_ERROR;
-	M_FREE(name);
-	DYNBUF_ADD_STR(html, "</font><font size=-2>");
-	if(children.nbrows) DYNBUF_ADD3_INT(html, " (", children.nbrows, ")");
-
-	/* Output 'Open all' button */
-	if(children.nbrows)
-	{
+		/* Output tree structure (plus / minus buttons & continuation bars) */
 		M_FREE(subfield);
-		DYNBUF_ADD3_BUF(&subfield, "TREEOPENALL=", child_path, NO_CONV, "§");
+		DYNBUF_ADD3_BUF(&subfield, "TREEOPEN=", child_path, NO_CONV, "§");
 		CTRL_CGINAMEBTN(&name, NULL, DYNBUF_VAL_SZ(subfield));
-		if(put_html_button(cntxt, name->data, NULL,
-				"_eva_tree_plus2.gif", 
-				"_eva_tree_plus2_s.gif",
-				"Développer toutes les branches", 
-				0, 4))
-			STACK_ERROR;
-		M_FREE(name);
-	}
-
-	/* Output extra display field if applicable */
-	if(status & 1)
-	{
-		if(tr->notesexpr && tr->notesexpr[0]) 
+		if(!children.nbrows)
+			DYNBUF_ADD_STR(html, "<img src='../img/_eva_tree_end.gif'>")
+		else if(status & 4)
 		{
-			data.nbrows=0;
-			if(form_eval_fieldexpr(cntxt, &data, 0, idobj, tr->notesexpr, tr->notesexpr_sz, &objdata, 0)) CLEAR_ERROR;
-			for(i = 0; i < data.nbrows; i++) DYNBUF_ADD3_CELL(html, "<br>", &data, i, 0, TO_HTML, "");
+			if(put_html_button(cntxt, name->data, NULL,
+						"_eva_tree_single.gif",
+						"_eva_tree_single_s.gif",
+						"Ouvrir la branche",
+						0, 0))
+					STACK_ERROR;
 		}
-	}
+		else if(status & 1)
+		{
+			if(put_html_button(cntxt, name->data, NULL,
+						"_eva_tree_minus.gif",
+						"_eva_tree_minus_s.gif",
+						"Refermer la branche",
+						0, 0))
+					STACK_ERROR;
+		}
+		else
+		{
+			if(put_html_button(cntxt, name->data, NULL,
+						"_eva_tree_plus.gif",
+						"_eva_tree_plus_s.gif",
+						"Ouvrir la branche",
+						0, 0))
+					STACK_ERROR;
+		}
+		M_FREE(name);
+		DYNBUF_ADD_STR(html, "</td><td>\n");
+		DYNBUF_ADD_STR(html, "<table cellspacing=0 cellpadding=0 border=0><tr>");
 
-	DYNBUF_ADD_STR(html, "</font></td></tr>");
+		/* Output column with vertical treebar background if open with children */
+		DYNBUF_ADD_STR(html, "<td valign=top width=1%");
+		if(children.nbrows && status & 1) DYNBUF_ADD_STR(html, " background='../img/_eva_tree_bar.gif'");
+		DYNBUF_ADD_STR(html, ">");
+
+		/* Output symbol for object */
+		if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, &objdata, 0, "*><font size=-1", "SYMBOL+LABEL+NOTES"))
+				STACK_ERROR;
+		M_FREE(name);
+		DYNBUF_ADD_STR(html, "</font><font size=-2>");
+		if(children.nbrows) DYNBUF_ADD3_INT(html, " (", children.nbrows, ")");
+
+		/* Output 'Open all' button */
+		if(children.nbrows)
+		{
+			M_FREE(subfield);
+			DYNBUF_ADD3_BUF(&subfield, "TREEOPENALL=", child_path, NO_CONV, "§");
+			CTRL_CGINAMEBTN(&name, NULL, DYNBUF_VAL_SZ(subfield));
+			if(put_html_button(cntxt, name->data, NULL,
+					"_eva_tree_plus2.gif", 
+					"_eva_tree_plus2_s.gif",
+					"Développer toutes les branches", 
+					0, 4))
+				STACK_ERROR;
+			M_FREE(name);
+		}
+
+		/* Output extra display field if applicable */
+		if(status & 1)
+		{
+			if(tr->notesexpr && tr->notesexpr[0]) 
+			{
+				data.nbrows=0;
+				if(form_eval_fieldexpr(cntxt, &data, 0, idobj, tr->notesexpr, tr->notesexpr_sz, &objdata, 0)) CLEAR_ERROR;
+				for(i = 0; i < data.nbrows; i++) DYNBUF_ADD3_CELL(html, "<br>", &data, i, 0, TO_HTML, "");
+			}
+		}
+
+		DYNBUF_ADD_STR(html, "</font></td></tr>");
+	}
 
 	/* Recursively output related objects */
 	if(status & 1) for(i = 0; i < children.nbrows; i++)
@@ -398,7 +418,8 @@ int put_html_tree(					/* return : 0 on success, other on error */
 	}
 
 	/* Put table footer */
-	DYNBUF_ADD_STR(html, "</table></td>\n</tr></table>");
+	if(!b_hide) DYNBUF_ADD_STR(html, "</table></td>\n</tr>");
+	DYNBUF_ADD_STR(html, "</table>");
 	
 	RETURN_OK_CLEANUP;
 }
@@ -415,8 +436,9 @@ int put_html_tree(					/* return : 0 on success, other on error */
 					DYNTAB_FREE(tr->exclude); \
 					DYNTAB_FREE(tr->relcolor); \
 					DYNTAB_FREE(tr->relmask); \
-					DYNTAB_FREE(tr->formfilter); \
 					DYNTAB_FREE(tr->treenodes); \
+					DYNTAB_FREE(idobj); \
+					DYNTAB_FREE(id_child); \
 					DYNTAB_FREE(srcrec)
 int ctrl_add_reltree(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
@@ -427,8 +449,11 @@ int ctrl_add_reltree(				/* return : 0 on success, other on error */
 	TreeDef _tr = {0}, *tr = &_tr;
 	DynTable cgival = { 0 };
 	DynTable srcrec = { 0 };
+	DynTable idobj = { 0 };
+	DynTable id_child = { 0 };
   	DynBuffer *buf = NULL;
 	DynTableCell *c;
+	char *txt;
 	unsigned long i, node;
 
 	switch(form->step)
@@ -440,34 +465,50 @@ int ctrl_add_reltree(				/* return : 0 on success, other on error */
 	case HtmlView:
 	case HtmlPrint:
 	case HtmlEdit:
-		if(!form->html || form->b_newobj) break;
+		if(!form->html) break;
+
+		/* Read tree base objects */
+		txt = CTRL_ATTR_VAL(STARTOBJ);
+		if(!strcmp(txt, "_EVA_LEVEL1"))
+		{
+			tr->b_level1 = 1;
+			DYNTAB_SET_CELL(&idobj, 0, 0, &form->id_obj, 0, 0);
+		}
+		else if(*txt)
+			CTRL_ATTR(idobj, LISTOBJ)
+		else
+			DYNTAB_SET_CELL(&idobj, 0, 0, &form->id_obj, 0, 0);
+		if(!idobj.nbrows) break;
 
 		/* Read control attributes */
 		tr->i_ctrl = i_ctrl;
-		CTRL_READ_ATTR_TAB(tr->rellabel, REL_LABEL);
-		CTRL_READ_ATTR_TAB(tr->relfields, RELFIELDS);
-		CTRL_READ_ATTR_TAB(tr->exclude, EXCLUDE);
-		CTRL_READ_ATTR_TAB(tr->relcolor, REL_COLOR);
-		CTRL_READ_ATTR_TAB(tr->relmask, MASK_INIT);
+		CTRL_ATTR_TAB(tr->rellabel, REL_LABEL);
+		CTRL_ATTR_TAB(tr->relfields, RELFIELDS);
+		CTRL_ATTR_TAB(tr->exclude, EXCLUDE);
+		CTRL_ATTR_TAB(tr->relcolor, REL_COLOR);
+		CTRL_ATTR_TAB(tr->relmask, MASK_INIT);
+		c = CTRL_ATTR_CELL(MAX_OBJ);
+		tr->maxobj = c ? strtoul(c->txt, NULL, 10) : 1000;
 		c = CTRL_ATTR_CELL(NOTES_EXPR);
 		if(c) { tr->notesexpr = c->txt; tr->notesexpr_sz = c->len; }
-		CTRL_OPTIONAL(tr->formfilter, FORMFILTER);
 		tr->nbrel = tr->relfields.nbrows;
 		if(tr->nbrel < tr->exclude.nbrows) tr->nbrel = tr->exclude.nbrows;
 		if(tr->nbrel < tr->rellabel.nbrows) tr->nbrel = tr->rellabel.nbrows;
+		tr->b_reverse = CTRL_ATTR_CELL(REL_REVERSE) != 0;
 
-		/* Build list of allowed relations Ids */
+		/* Build list of relations Ids */
 		for(i = 0; i < tr->nbrel; i++) if(dyntab_sz(&tr->relfields, i, 0))
 		{
 			M_FREE(buf);
 			DYNTAB_FREE(cgival);
-			if(dyntab_from_list(&cgival, DYNTAB_VAL_SZ(&tr->relfields, i, 0), ",",  0, 1)) RETURN_ERR_MEMORY;
+			if(dyntab_from_list(&cgival, DYNTAB_VAL_SZ(&tr->relfields, i, 0), ",",  0, 2)) RETURN_ERR_MEMORY;
 			if(qry_values_list(cntxt, &cgival, 3, &buf)) STACK_ERROR;
 			DYNTAB_ADD_BUF(&tr->relfields, i, 1, buf);
 		}
 
 		/* Read nodes status in CGI data */
 		if(cgi_get_values(cntxt, &tr->treenodes, ctrl->cginame->data, 4)) STACK_ERROR;
+		tr->b_maxobj = tr->treenodes.nbrows > tr->maxobj;
 		CGI_VALUES_DONTKEEP(&tr->treenodes);
 		for(i = 0; i < tr->treenodes.nbrows; i++)
 		{
@@ -477,13 +518,6 @@ int ctrl_add_reltree(				/* return : 0 on success, other on error */
 			*s = 0;
 			p->len = s - p->txt;
 			p->ctype = strtoul(s + 1, NULL, 10);
-		}
-
-		/* Open all nodes under clicked node if first display */
-		if(!tr->treenodes.nbrows)
-		{
-			DYNTAB_SET_CELL(&tr->treenodes, 0, 0, &form->id_obj, 0, 0);
-			if(ctrl_tree_status(cntxt, tr, 0, 1, 4)) STACK_ERROR; 
 		}
 
 		/* Handle tree buttons click */
@@ -540,7 +574,7 @@ int ctrl_add_reltree(				/* return : 0 on success, other on error */
 					if(srcrec.nbrows)
 					{
 						/* Create new record for relation */
-						sprintf(sql, "INSERT TLink SET IdObj=%d, IdRelObj=%d, IdField=%s, Num=%s DateCr=%s, IdWhoCr=%d", 
+						sprintf(sql, "INSERT TLink SET IdObj=%d, IdRelObj=%d, IdField=%s, Num=%s DateCr=%s, IdWhoCr=%s", 
 									iddest, idrelobj, dyntab_val(&srcrec, 0, 1), dyntab_val(&srcrec, 0, 2),
 									cntxt->timestamp, dyntab_val(&cntxt->id_user, 0, 0));
 						if(sql_exec_query(cntxt, sql)) STACK_ERROR;
@@ -567,12 +601,29 @@ int ctrl_add_reltree(				/* return : 0 on success, other on error */
 
 			}
 		}
+		/* Handle first display */
+		else if(!tr->treenodes.nbrows)
+		{
+			/* Open nodes under selected node */
+			int nb = atoi(CTRL_ATTR_VAL(SHOW_LEVELS));
+			if(dyntab_from_tab(&tr->treenodes, 0, 0, &idobj, 0, 0, idobj.nbrows, 1, 1)) RETURN_ERR_MEMORY;
+			for(i = 0; i < idobj.nbrows; i++)
+				if(ctrl_tree_status(cntxt, tr, i, 1, nb > 0 ? nb : 4)) STACK_ERROR;
+		}
 
 		/* Output control header */
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
+		if(tr->b_maxobj)
+		{
+			DYNBUF_ADD3_INT(form->html, "<p><b>*** Affichage incomplet (max=", tr->maxobj, ")</b></p>");
+		}
 
 		/* Output tree control */
- 		if(put_html_tree(cntxt, tr, NULL, &form->id_obj, 1, 1)) STACK_ERROR;
+		for(i = 0; i < idobj.nbrows; i++)
+		{
+			DYNTAB_SET_CELL(&id_child, 0, 0, &idobj, i, 0);
+ 			if(put_html_tree(cntxt, tr, NULL, &id_child, i == idobj.nbrows - 1, 1)) STACK_ERROR;
+		}
 
 		/* Output control footer */
 		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;

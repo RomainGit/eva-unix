@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : form_utils.c
-** Description : generic forms functions (display, save, print, ...)
+** Description : utility forms functions
 **      Author : Alain BOUTE
 **     Created : Sept 23 2001
 *********************************************************************/
@@ -15,9 +21,9 @@ void form_free_ctrl(
 	EVA_context *cntxt,				/* in : execution context data */
 	unsigned long beg				/* control index to start with */
 ){
-	unsigned long i, end = cntxt->form->sz_ctrl ? cntxt->form->sz_ctrl : cntxt->form->nb_ctrl;
+	unsigned long i;
 	if(!cntxt->form) return;
-	for(i = beg; i < end; i++)
+	for(i = beg; i <= cntxt->form->nb_ctrl; i++)
 	{
 		if(cntxt->form->ctrl[i].objtbl)
 		{
@@ -33,7 +39,6 @@ void form_free_ctrl(
 		DYNTAB_FREE(cntxt->form->ctrl[i].dbval);
 		DYNTAB_FREE(cntxt->form->ctrl[i].allval);
 		DYNTAB_FREE(cntxt->form->ctrl[i].alldbval);
-		DYNTAB_FREE(cntxt->form->ctrl[i].childdata);
 		if(cntxt->form->ctrl[i].objtbl)
 		{
 			table_free(cntxt->form->ctrl[i].objtbl);
@@ -55,7 +60,7 @@ void form_free_html(
 	M_FREE(cntxt->form->html_top); 
 	M_FREE(cntxt->form->html_tab);	
 	M_FREE(cntxt->form->html_tabs); 
-	M_FREE(cntxt->form->html_bot); 
+	M_FREE(cntxt->form->html_menu); 
 	cntxt->form->html = NULL; 
 }
 
@@ -66,11 +71,11 @@ void form_free_html(
 void form_free(
 	EVA_context *cntxt				/* in/out : execution context data */
 ){
-	if(!cntxt->form) return;
+	if(!cntxt->form || cntxt->form->b_dontfree) return;
 	form_free_ctrl(cntxt, 0);
 	DYNTAB_FREE(cntxt->form->id_form);
 	DYNTAB_FREE(cntxt->form->id_obj);
-	DYNTAB_FREE(cntxt->form->seltab);
+	M_FREE(cntxt->form->tabs);
 	DYNTAB_FREE(cntxt->form->objdata);
 	DYNTAB_FREE(cntxt->form->call_data);
 	M_FREE(cntxt->form->title);

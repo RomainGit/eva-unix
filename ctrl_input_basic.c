@@ -1,11 +1,53 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_input_basic.c
-** Description : HTML handling functions for input controls
+** Description : handling functions for basic input controls
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
 
 #include "eva.h"
+
+/*********************************************************************
+** Function : ctrl_autofocus
+** Description : set focus to given control if applicable
+*********************************************************************/
+#define ERR_FUNCTION "ctrl_autofocus"
+#define ERR_CLEANUP
+int ctrl_autofocus(					/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	char *name, size_t sz_name,		/* in : control CGI name */
+	int b_empty						/* in : control value is empty if not zero */
+){
+	DynBuffer **focus;
+	CGIData *cgi = cntxt->cgi ? cntxt->cgi + cntxt->cgibtn : NULL, fcgi = {0};
+
+	/* Parse given input name (not very efficient - would be better to pass ctrl as param) */
+	fcgi.name = name;
+	fcgi.name_sz = sz_name;
+	if(cgi && cgi_parse_name(cntxt, &fcgi)) STACK_ERROR;
+
+	/* Return if autofocus disabled for control */
+	if(fcgi.IdCtrl)
+	{
+		EVA_ctrl *ctrl = cntxt->form ? (cntxt->form->ctrl + cntxt->form->i_ctrl) : NULL;
+		if(fcgi.IdCtrl == DYNTAB_TOUL(&ctrl->id) && *CTRL_ATTR_VAL(NO_AUTOFOCUS)) RETURN_OK;
+	}
+
+	/* Handle setfocus */
+	focus = (cgi && cgi->IdForm == fcgi.IdForm && cgi->IdObj == fcgi.IdObj && !STRCMPNUL(cgi->field, fcgi.field)) ?
+				&cntxt->focus1 : b_empty ? &cntxt->focus2 : &cntxt->focus3;
+	if(!*focus) DYNBUF_ADD(focus, name, sz_name, NO_CONV);
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
 
 /*********************************************************************
 ** Function : put_html_text_input
@@ -18,12 +60,12 @@ int put_html_text_input(				/* return : 0 on success, other on error */
 	char *name, size_t sz_name, 		/* in : input name */
 	char *val, size_t sz_val,			/* in : value  of the control */
 	int b_passwd,						/* in : treat as password */
-	int b_onblur,						/* in : use JavaScript OnBlur if 1 */
+	int mode,							/* in : bitmask
+											bit 0-1 : use JavaScript HTML editor (1=simple - 2=advanced)
+											bit 2 : use calendar date input */
 	int lines, int columns,				/* in : size of the control (in chars) */
 	int maxlength		   				/* in : maximum input length (in chars) */
 ){
-	DynBuffer **focus;
-	CGIData *cgi = cntxt->cgi ? cntxt->cgi + cntxt->cgibtn : NULL, fcgi = {0};
 	CHECK_HTML_STATUS;
 	
 	/* Output HTML code for input */
@@ -32,30 +74,32 @@ int put_html_text_input(				/* return : 0 on success, other on error */
 		if(b_passwd) DYNBUF_ADD_STR(html, "<input type=password")
 		else DYNBUF_ADD_STR(html, "<input type=text");
 		DYNBUF_ADD3(html, " name='", name, sz_name, NO_CONV, "'");
+		if(mode & 4 && cntxt->jsenabled)
+		{
+			cntxt->jsCalendarInput = 1;
+			DYNBUF_ADD_STR(html, " onClick=scwShow(this,this)");
+		}
 		if(val && *val) DYNBUF_ADD3(html, " value='", val, sz_val, HTML_NO_QUOTE, "'");
 		if(columns > 0)DYNBUF_ADD3_INT(html, " size=", columns, "");
 		if(maxlength > 0) DYNBUF_ADD3_INT(html, " maxlength=", maxlength, "");
-		if(b_onblur && cntxt->jsenabled) DYNBUF_ADD3(html, " onBlur='cb(\"", name, sz_name, NO_CONV, "\");'");
 		DYNBUF_ADD_STR(html, ">");
 	}
 	else
 	{
 		DYNBUF_ADD3(html, "<textarea name='", name, sz_name, NO_CONV, "'");
+		if(mode & 3 && cntxt->jsenabled)
+		{
+			cntxt->jsHTMLEditor = mode & 3;
+			DYNBUF_ADD_STR(html, " mce_editable=true");
+		}
 		if(lines > 0) DYNBUF_ADD3_INT(html, " rows=", lines, "");
 		if(columns > 0) DYNBUF_ADD3_INT(html, " cols=", columns, "");
-		if(b_onblur && cntxt->jsenabled) DYNBUF_ADD3(html, " onBlur='cb(\"", name, sz_name, NO_CONV, "\");'");
 		DYNBUF_ADD_STR(html, ">");
 		if(val && *val) DYNBUF_ADD(html, val, sz_val, TO_XML);
 		DYNBUF_ADD_STR(html, "</textarea>");
 	}
 
-	/* Handle setfocus */
-	fcgi.name = name;
-	fcgi.name_sz = sz_name;
-	if(cgi && cgi_parse_name(cntxt, &fcgi)) STACK_ERROR;
-	focus = (cgi && cgi->IdForm == fcgi.IdForm && cgi->IdObj == fcgi.IdObj && !strcmp(cgi->field, fcgi.field)) ? &cntxt->focus1 : 
-			(!val || !*val || !sz_val) ? &cntxt->focus2 : &cntxt->focus3;
-	if(!*focus) DYNBUF_ADD(focus, name, sz_name, NO_CONV);
+	if(ctrl_autofocus(cntxt, name, sz_name, !val || !*val || !sz_val)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -75,9 +119,11 @@ int ctrl_add_text_value(			/* return : 0 on success, other on error */
 	char *txt, size_t len,			/* in : text to use for value - if NULL use ctrl->val[i] */
 	DynBuffer *name1 				/* in : CGI input name - if NULL build control value name */
 ){
+	EVA_form *form = cntxt->form;
 	DynBuffer *name = name1 ? name1 : NULL;
 	DynTableCell *lblunit = CTRL_ATTR_CELL(LABELUNIT);
 	DynTableCell *val = dyntab_cell(&ctrl->val, i_val, 0);
+	char *editmode = CTRL_ATTR_VAL(HTML_EDITOR);
 
 	/* Set text if not given */
 	if(!txt && val)
@@ -87,13 +133,14 @@ int ctrl_add_text_value(			/* return : 0 on success, other on error */
 	}
 
 	/* If edit mode : add HTML text input */
-	if(cntxt->form->step == HtmlEdit)
+	if(form->step == HtmlEdit)
 	{
 		if(!name) CTRL_CGINAMEVAL(&name, i_val);
 		if(put_html_text_input(cntxt, 
 				DYNBUF_VAL_SZ(name),
 				txt, len,
-				CTRL_ATTR_VAL(PASSWORD)[0] == '1', 0,
+				CTRL_ATTR_VAL(PASSWORD)[0] == '1', 
+				!*editmode ? 0 : !strcmp(editmode, "_EVA_SIMPLE") ? 1 : !strcmp(editmode, "_EVA_NORMAL") ? 2 : 3,
 				ctrl->LINES,
 				ctrl->COLUMNS,
 				atoi(CTRL_ATTR_VAL(MAXLENGTH))) ||
@@ -103,10 +150,14 @@ int ctrl_add_text_value(			/* return : 0 on success, other on error */
 	else
 	{
 		/* Else : add text value */
-		if(CTRL_ATTR_VAL(PASSWORD)[0] == '1') DYNBUF_ADD_STR(cntxt->form->html, "******")
-		else DYNBUF_ADD(cntxt->form->html, txt, len, TO_HTML);
+		if(CTRL_ATTR_VAL(PASSWORD)[0] == '1') DYNBUF_ADD_STR(form->html, "******")
+		else if(*editmode)
+			DYNBUF_ADD(form->html, txt, len, NO_CONV)
+		else
+			DYNBUF_ADD(form->html, txt, len, TO_HTML)
 	}
-	if(lblunit) DYNBUF_ADD3_CELLP(cntxt->form->html, "</b><font size=-1><nobr> ", lblunit, TO_HTML, " </nobr></font>");
+	if(lblunit && (*ctrl->LABEL_NOSEL || ctrl->val.nbrows || form->step == HtmlEdit)) 
+		DYNBUF_ADD3_CELLP(form->html, " ", lblunit, TO_HTML, "");
 
 	RETURN_OK_CLEANUP;
 }
@@ -130,7 +181,7 @@ int ctrl_add_text(					/* return : 0 on success, other on error */
 	
 	switch(form->step)
 	{
-	case CtrlRead:
+	case InputCheck:
 		{
 			/* Handle input mask */
 			char *_inputmask = CTRL_ATTR_VAL(TEXTINPUTMASK), *inputmask = _inputmask + 5;
@@ -177,8 +228,7 @@ int ctrl_add_text(					/* return : 0 on success, other on error */
 					}
 					in++;
 				}
-				*out = 0;
-				c->len = out - c->txt;
+				while(out < c->txt + c->len) *out++ = ' ';
 				if(strcmp(old, c->txt))
 				{
 					c->b_modified = 1;
@@ -196,9 +246,12 @@ int ctrl_add_text(					/* return : 0 on success, other on error */
 		if(!form->html) RETURN_OK;
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
 
+		/* Handle empty value in view mode */
+		if(form->step != HtmlEdit && !ctrl->val.nbrows && *ctrl->LABEL_NOSEL) DYNBUF_ADD(form->html, ctrl->LABEL_NOSEL, 0, TO_HTML);
+
 		/* Add HTML code for each value */
-		k = ctrl->val.nbrows + ((form->step == HtmlEdit && (b_multiple || !ctrl->val.nbrows)) ? 1 : 0);
-		for(i = 0; i < k; i++)
+		k = ctrl->val.nbrows + ((form->step == HtmlEdit && b_multiple) ? 1 : 0);
+		for(i = 0; !i || i < k; i++)
 		{
 			/* Separate multiple values with a line break */
 			if(i) DYNBUF_ADD_STR(form->html, "<br>");
@@ -210,55 +263,6 @@ int ctrl_add_text(					/* return : 0 on success, other on error */
 		/* Add HTML code for the control footer */
 		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
 		break;
-	}
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : ctrl_add_input_email
-** Description : handles INPUT controls of type EMAIL
-*********************************************************************/
-#define ERR_FUNCTION "ctrl_add_input_email"
-#define ERR_CLEANUP
-int ctrl_add_input_email(			/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
-){
-	EVA_form *form = cntxt->form;
-	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	unsigned long i, k;
-	int b_multiple = ctrl->MULTIPLE[0] != 0 && strcmp("No", ctrl->MULTIPLE);
-	size_t tot_char = 0;
-	int b_stripped;
-	
-	if(!form->html) RETURN_OK;
-
-	switch(form->step)
-	{
-	case HtmlPrint:
-	case HtmlView:
-		/* Add HTML code for control label & position */
-		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
-
-		/* Add HTML code for each value */
-		k = ctrl->val.nbrows + ((form->step == HtmlEdit && (b_multiple || !ctrl->val.nbrows)) ? 1 : 0);
-		for(i = 0; i < k; i++)
-		{
-			/* Separate multiple values with a line break */
-			if(i) DYNBUF_ADD_STR(form->html, "<br>");
-
-			/* Add text control */
-			if(html_put_value_fmt(cntxt, ctrl, &ctrl->val, i, "_EVA_EMAIL", 0, &tot_char, &b_stripped)) CLEAR_ERROR;
-		}
-
-		/* Add HTML code for the control footer */
-		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
-		break;
-	default:
-		if(ctrl_add_text(cntxt, i_ctrl)) STACK_ERROR;
 	}
 
 	RETURN_OK_CLEANUP;
@@ -285,6 +289,7 @@ int ctrl_add_number(				/* return : 0 on success, other on error */
 	{
 	case CtrlRead:
 		/* Format each value */
+		if(!*ctrl->NOBR) ctrl->NOBR = "1";
 		for(i = 0; i < ctrl->val.nbrows; i++)
 		{
 			char *val = dyntab_val(&ctrl->val, i, 0);
@@ -314,7 +319,7 @@ int ctrl_add_number(				/* return : 0 on success, other on error */
 				if(cmin && cmax)
 				{
 					DYNBUF_ADD3_CELLP(&ctrl->errmsg, "Valeur entre ", cmin, NO_CONV, " et ");
-					DYNBUF_ADD_CELLP(&ctrl->errmsg, , cmax, NO_CONV);
+					DYNBUF_ADD_CELLP(&ctrl->errmsg, cmax, NO_CONV);
 				}
 				else if(cmin)
 					DYNBUF_ADD3_CELLP(&ctrl->errmsg, "Valeur supérieure à ", cmin, NO_CONV, "")
@@ -330,9 +335,12 @@ int ctrl_add_number(				/* return : 0 on success, other on error */
 		/* Add HTML code for control label & position */
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
 
+		/* Handle empty value in view mode */
+		if(form->step != HtmlEdit && !ctrl->val.nbrows && *ctrl->LABEL_NOSEL) DYNBUF_ADD(form->html, ctrl->LABEL_NOSEL, 0, TO_HTML);
+
 		/* Add HTML code for each value */
-		k = ctrl->val.nbrows + ((form->step == HtmlEdit && (b_multiple || !ctrl->val.nbrows)) ? 1 : 0);
-		for(i = 0; i < k; i++)
+		k = ctrl->val.nbrows + ((form->step == HtmlEdit && b_multiple) ? 1 : 0);
+		for(i = 0; !i || i < k; i++)
 		{
 			/* Separate multiple values with a line break */
 			if(i) DYNBUF_ADD_STR(form->html, "<br>");
@@ -393,163 +401,6 @@ int put_html_chkbox(					/* return : 0 on success, other on error */
 	if(b_submit && cntxt->jsenabled) DYNBUF_ADD3(html, " onClick='cb(\"", name, sz_name, NO_CONV, "\");'");
 	DYNBUF_ADD_STR(html, ">");
 
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : ctrl_add_chkbox
-** Description : handles INPUT controls of type CHECKBOX
-*********************************************************************/
-#define ERR_FUNCTION "ctrl_add_chkbox"
-#define ERR_CLEANUP DYNTAB_FREE(ctrltree); \
-					M_FREE(name); \
-					M_FREE(notes)
-int ctrl_add_chkbox(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl						/* in : control index in cntxt->form->ctrl */
-){
-	EVA_form *form = cntxt->form;
-	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	DynTable ctrltree = { 0 };
-	DynBuffer *name = NULL;
-	DynBuffer *notes = NULL;
-	char *img, *imgsel;
-	unsigned long i;
-	int b_3state = CTRL_ATTR_CELL(CHECKBOX_3STATE) != NULL;
-	int tree = 1;
-	switch(*dyntab_val(&ctrl->val, 0, 0))
-	{
-	case 0: tree = b_3state ? 0 : 2; break;
-	case '0': tree = 2;
-	}
-
-	switch(form->step)
-	{
-	case CtrlRead:
-		/* If checkbox clicked */
-		if(form->i_ctrl_clic == i_ctrl && cntxt->cgi && cntxt->cgi[cntxt->cgibtn].name[0] == 'B')
-		{
-			/* Search / create corresponding value */
-			CGIData *cgi = cntxt->cgi + cntxt->cgibtn;
-			DynTableCell *val;
-			for(i = 0; i < ctrl->val.nbrows; i++)
-			{
-				val = dyntab_cell(&ctrl->val, i, 0);
-				if(val->Line == cgi->Line && val->Num == cgi->Num) break;
-			}
-			if(i == ctrl->val.nbrows)
-			{
-				DYNTAB_SET(&ctrl->val, i, 0, "");
-				val = dyntab_cell(&ctrl->val, i, 0);
-				val->Line = cgi->Line;
-				val->Num = cgi->Num;
-			}
-
-			/* Handle value on checkbox click */
-			switch(*dyntab_val(&ctrl->val, i, 0))
-			{
-			case 0:	/* Null Value : Switch to checked */
-				DYNTAB_SET(&ctrl->val, i, 0, "1");
-				break;
-			case '0':	/* Unchecked value : Switch to null */
-				DYNTAB_SET(&ctrl->val, i, 0, "");
-				break;
-			default:	/* Checked value : Switch to unchecked */
-				if(b_3state) DYNTAB_SET(&ctrl->val, i, 0, "0")
-				else DYNTAB_SET(&ctrl->val, i, 0, "");
-			}
-			val = dyntab_cell(&ctrl->val, i, 0);
-			val->b_modified = 1;
-			ctrl->b_modified = 1;
-		}
-
-		/* Read both branches */
-		tree = 3;
-		break;
-
-	case InputCheck:
-		/* Disable empty value check if not 3 state */
-		if(!b_3state) ctrl->error = 0;
-		break;
-
-	case HtmlEdit:
-	case HtmlPrint:
-	case HtmlView:
-		/* Defaut is no option button */
-		if(!ctrl->OPTIONBUTTON[0]) ctrl->OPTIONBUTTON = "_EVA_NONE";
-
-		/* Handle checkbox tooltip */
-		DYNBUF_ADD3(&notes, "", ctrl->NOTES, 0, NO_CONV, "\n\n");
-
-		/* Handle 3 states images */
-		switch(tree)
-		{
-		case 0:	/* Null value */
-			img = "_eva_checkbox_nul.gif";
-			imgsel = "_eva_checkbox_nul_s.gif";
-			DYNBUF_ADD_STR(&notes, "Etat : non renseigné");
-			break;
-		case 2:	/* Unchecked value */
-			img = "_eva_checkbox_no.gif";
-			imgsel = "_eva_checkbox_no_s.gif";
-			DYNBUF_ADD_STR(&notes, "Etat : non coché");
-			break;
-		default:	/* Checked value */
-			img = "_eva_checkbox_yes.gif";
-			imgsel = "_eva_checkbox_yes_s.gif";
-			DYNBUF_ADD_STR(&notes, "Etat : coché");
-		}
-
-		/* Break if no output */
-		if(!form->html) break;
-
-		/* Add HTML code for control label & position */
-		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
-
-
-		/* If edit mode */
-		if(form->step == HtmlEdit)
-		{
-			/* Add hidden input to hold checkbox value */
-			if(ctrl_put_hidden(cntxt, ctrl, 0)) STACK_ERROR;
-
-			/* Add checkbox as button */
-			CTRL_CGINAMEVAL(&name, 0);
-			name->data[0] = 'B';
-			if(put_html_button(cntxt, name->data, NULL, img, imgsel, notes ? notes->data : NULL, 0, 0))
-				STACK_ERROR;
-		}
-		else
-		{
-			/* Else : Add checkbox as image */
-			if(put_html_image(cntxt, ctrl->cginame->data, img, notes ? notes->data : NULL, NULL, NULL, 0))
-				STACK_ERROR;
-		}
-
-		/* Add HTML code for the control footer */
-		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
-		break;
-
-	}
-
-	/* Add lower level controls depending on check status */
-	if(tree == 1 || tree == 3)
-	{
-		/* Controls when selected */
-		CTRL_OPTIONAL(ctrltree, CTRLTREE);
-		CTRL_ADD_CHILD(i_ctrl, &ctrltree);
-	}
-	if(tree == 2 || tree == 3)
-	{
-		/* Controls when not selected */
-		CTRL_OPTIONAL(ctrltree, CTRLTREE_ALT);
-		CTRL_ADD_CHILD(i_ctrl, &ctrltree);
-	}
-
-	/* Add lower level controls */
-	
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION

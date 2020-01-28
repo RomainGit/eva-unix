@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : cgi_utils.h
 ** Description : handling of cgi input format
 **      Author : Alain BOUTE
@@ -201,7 +207,7 @@ int cgi_check_form_change(			/* return : 0 = unchanged
 ** Function : cgi_clear_form_inputs
 ** Description : mark lines of cntxt->cgi with given form & obj
 *********************************************************************/
-int cgi_clear_form_inputs(
+void cgi_clear_form_inputs(
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long idform,			/* in : form id to search for */
 	unsigned long idobj,			/* in : object id to search for */
@@ -230,7 +236,7 @@ int cgi_put_hidden(					/* return : 0 if Ok, other on error */
 ** Macro : CGI_CLICK_BTN_SUBFIELD
 ** Description : get CGI values for form/obj/field given in a control cginame
 *********************************************************************/
-#define CGI_CLICK_BTN_SUBFIELD ((cntxt->cgi[cntxt->cgibtn].name[0] == 'B' && cntxt->cgi[cntxt->cgibtn].subfield) ? \
+#define CGI_CLICK_BTN_SUBFIELD ((cntxt->cgi && cntxt->cgi[cntxt->cgibtn].name[0] == 'B' && cntxt->cgi[cntxt->cgibtn].subfield) ? \
 								cntxt->cgi[cntxt->cgibtn].subfield : "")
 
 /*********************************************************************
@@ -295,6 +301,17 @@ int cgi_save_files(					/* return : 0 if Ok, other on error */
 ** Description : output CGI data in a trace file
 *********************************************************************/
 void cgi_trace_input(EVA_context *cntxt);
+
+/*********************************************************************
+** Function : cgi_read_urlencoded
+** Description : read CGI data in www-form-urlencoded format
+*********************************************************************/
+int cgi_read_urlencoded(	/* return : 0 on success, other on error */
+	EVA_context *cntxt		/* in : 
+								cntxt->input : CGI input to process
+							   out : 
+								cntxt->cgi : table of read & parsed CGI inputs */
+);
 
 /*********************************************************************
 ** Function : cgi_read_data

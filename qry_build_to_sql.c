@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : qry_build_to_sql.c
-** Description : functions for building SQL expressions from filters and field expressions
+** Description : utility functions for converting to filters to relational expressions
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
@@ -25,26 +31,39 @@ int qry_filter_rel_to_sql(		/* return : 0 on success, other on error */
 	DynTable fltobj = { 0 };
 	DynTable resdata = { 0 };
 	char *reltype = DYNTAB_FIELD_VAL(flt_data, FILTER_RELTYPE);
-	char *fltop = DYNTAB_FIELD_VAL(flt_data, FILTER_RELWITH);
-	int b_not = DYNTAB_FIELD_VAL(flt_data, FILTER_NOT)[0] != 0;
+	char *fltop = DYNTAB_FIELD_VAL(flt_data, FILTER_REL_OP);
+	char *fltrel = DYNTAB_FIELD_VAL(flt_data, FILTER_RELWITH);
 	DYNTAB_FIELD(&fltobj, flt_data, LISTOBJ);
 	DYNTAB_FIELD(&fltval, flt_data, FILTER_LINKFIELD);
 
 	/* Add relation type, field, & NOT operator if applicable */
-	DYNBUF_ADD(sqlexpr, !strcmp("_EVA_RELREVERSE", reltype) ? "[<-" : "[", 0, NO_CONV);
-	if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-	DYNBUF_ADD_STR(sqlexpr, "]");
+	DYNBUF_ADD_STR(sqlexpr, "[FIRST(");
+	if(!strcmp("_EVA_RELREVERSE", reltype)) DYNBUF_ADD_STR(sqlexpr, "<-");
+	if(!fltfield->nbrows)
+	{
+		if(strcmp("_EVA_RELREVERSE", reltype)) DYNBUF_ADD_STR(sqlexpr, "->");
+	}
+	else
+		if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
+	DYNBUF_ADD_STR(sqlexpr, ")]");
 
-	if(*fltop)
+	if(!strcmp(fltop, "_EVA_ISEMPTY") || !strcmp(fltop, "_EVA_ISNOTEMPTY"))
+	{
+		/* Empty / not empty relation */
+		if(!strcmp(fltop, "_EVA_ISEMPTY")) DYNBUF_ADD_STR(sqlexpr, "=''")
+		else DYNBUF_ADD_STR(sqlexpr, "<>''");
+	}
+	else if(*fltrel)
 	{
 		/* Relation to field/expression of given object : evaluate field expression */
 		if(form_eval_valtype(cntxt, &resdata, fltop, &fltobj, &fltval)) STACK_ERROR;
-		if(b_not) DYNBUF_ADD_STR(sqlexpr, " NOT");
+		if(*fltop) DYNBUF_ADD_STR(sqlexpr, " NOT");
 		DYNBUF_ADD_STR(sqlexpr, " IN(");
+		if(!resdata.nbrows) DYNBUF_ADD_STR(sqlexpr, "'',");
 		if(qry_values_list(cntxt, &resdata, 0, sqlexpr)) STACK_ERROR;
 		DYNBUF_ADD_STR(sqlexpr, ")");
 	}
-	else 
+	else
 	{
 		/* Relation to objects matching other filter */
 		DYNTAB_FIELD(&fltval, flt_data, FILTERS);
@@ -88,11 +107,11 @@ int qry_filter_val_to_sql(			/* return : 0 on success, other on error */
 
 	/* Set match mode & values depending on comparison type */
 #define USE_STD_VAL(tag, b, a, o) if(!strcmp("_EVA_"#tag, fltop)) { bef = b; aft = a; oper = o; }
-	USE_STD_VAL(DIFFERENT, "NOT IN (", ")", NULL) else
-	USE_STD_VAL(SMALLER, "<GREATER(", ")", NULL) else
-	USE_STD_VAL(SMALLEREQUAL, "<=GREATER(", ")", 0) else
-	USE_STD_VAL(GREATER, ">LEAST(", ")", NULL) else
-	USE_STD_VAL(GREATEREQUAL, ">=LEAST(", ")", NULL) else
+	USE_STD_VAL(DIFFERENT, " NOT IN (", ")", NULL) else
+	USE_STD_VAL(SMALLER, "<GREATEST('',", ")", NULL) else
+	USE_STD_VAL(SMALLEREQUAL, "<=GREATEST('',", ")", 0) else
+	USE_STD_VAL(GREATER, ">LEAST('',", ")", NULL) else
+	USE_STD_VAL(GREATEREQUAL, ">=LEAST('',", ")", NULL) else
 	USE_STD_VAL(BEGINWITH, " LIKE '", "%'", " OR ") else
 	USE_STD_VAL(NOT_BEGINWITH, " NOT LIKE '", "%'", " OR ") else
 	USE_STD_VAL(CONTAIN, " LIKE '%", "%'", " AND ") else
@@ -100,7 +119,7 @@ int qry_filter_val_to_sql(			/* return : 0 on success, other on error */
 	USE_STD_VAL(LIKE, " LIKE '", "'", " OR ") else
 	USE_STD_VAL(NOT_LIKE, " NOT LIKE '", "'", " AND ")	else
 	USE_STD_VAL(ISEMPTY, "=''", "", "")	else
-	USE_STD_VAL(ISNOTEMPTY, "<>''", "", "")	
+	USE_STD_VAL(ISNOTEMPTY, "<>''", "", "")
 #undef USE_STD_VAL
 	else if(!strcmp("_EVA_INTERVAL", fltop) || !strcmp("_EVA_NOT_INTERVAL", fltop))
 	{
@@ -110,18 +129,18 @@ int qry_filter_val_to_sql(			/* return : 0 on success, other on error */
 		/* Evaluate min comparison values */
 		DYNTAB_FIELD(&fltval, flt_data, FILTER_VAL_MIN);
 		if(form_eval_valtype(cntxt, &resdata, valtype, &fltobj, &fltval)) STACK_ERROR;
-		DYNBUF_ADD_STR(sqlexpr, "([");
+		DYNBUF_ADD_STR(sqlexpr, "([FIRST(");
 		if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-		DYNBUF_ADD_STR(sqlexpr, "]>LEAST(");
+		DYNBUF_ADD_STR(sqlexpr, ")]>LEAST(");
 		if(qry_values_list(cntxt, &resdata, b_num ? 0 : 5, sqlexpr)) STACK_ERROR;
 		DYNBUF_ADD_STR(sqlexpr, ")");
 
 		/* Evaluate max comparison values */
 		DYNTAB_FIELD(&fltval, flt_data, FILTER_VAL_MAX);
 		if(form_eval_valtype(cntxt, &resdata, valtype, &fltobj, &fltval)) STACK_ERROR;
-		DYNBUF_ADD_STR(sqlexpr, " AND [");
+		DYNBUF_ADD_STR(sqlexpr, " AND [FIRST(");
 		if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-		DYNBUF_ADD_STR(sqlexpr, "]<=GREATEST(");
+		DYNBUF_ADD_STR(sqlexpr, ")]<=GREATEST(");
 		if(qry_values_list(cntxt, &resdata, b_num ? 0 : 5, sqlexpr)) STACK_ERROR;
 		DYNBUF_ADD_STR(sqlexpr, "))");
 	}
@@ -131,13 +150,13 @@ int qry_filter_val_to_sql(			/* return : 0 on success, other on error */
 	{
 		/* Evaluate comparison value if applicable */
 		if((!oper || *oper) && form_eval_valtype(cntxt, &resdata, valtype, &fltobj, &fltval)) STACK_ERROR;
-		
+
 		/* Combine values if applicable */
 		if(oper && *oper) for(i = 0; !i || i < resdata.nbrows; i++)
 		{
-			DYNBUF_ADD_STR(sqlexpr, "[");
+			DYNBUF_ADD_STR(sqlexpr, "[FIRST(");
 			if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-			DYNBUF_ADD_STR(sqlexpr, "]");
+			DYNBUF_ADD_STR(sqlexpr, ")]");
 			if(i) DYNBUF_ADD3(sqlexpr, " ", oper, 0, NO_CONV, " ");
 			DYNBUF_ADD(sqlexpr, bef, 0, NO_CONV);
 			DYNBUF_ADD_CELL(sqlexpr, &resdata, i, 0, NO_CONV);
@@ -146,9 +165,9 @@ int qry_filter_val_to_sql(			/* return : 0 on success, other on error */
 		else
 		{
 			/* Add list of values */
-			DYNBUF_ADD_STR(sqlexpr, "[");
+			DYNBUF_ADD_STR(sqlexpr, "[FIRST(");
 			if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-			DYNBUF_ADD_STR(sqlexpr, "]");
+			DYNBUF_ADD_STR(sqlexpr, ")]");
 			DYNBUF_ADD(sqlexpr, bef, 0, NO_CONV);
 			if(!oper && qry_values_list(cntxt, &resdata, b_num ? 0 : 5, sqlexpr)) STACK_ERROR;
 			DYNBUF_ADD(sqlexpr, aft, 0, NO_CONV);
@@ -184,17 +203,23 @@ int qry_filter_to_sql(				/* return : 0 on success, other on error */
 	{
 		/* List of predefined objects */
 		DYNTAB_FIELD(&fltobj, flt_data, LISTOBJ);
-		DYNBUF_ADD_STR(sqlexpr, "[_EVA_FORMSTAMP.IdObj] IN(");
+		DYNBUF_ADD_STR(sqlexpr, "[MIN(_EVA_FORMSTAMP.IdObj)] IN(");
 		if(dyntab_to_dynbuf(&fltobj, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
 		DYNBUF_ADD_STR(sqlexpr, ")");
 	}
 	else if(!strcmp("_EVA_FILTER_FORM", flttype))
 	{
 		/* Objects created/edited with one or more forms */
+		unsigned long i;
 		DYNTAB_FIELD(&fltobj, flt_data, FILTER_FORM);
-		DYNBUF_ADD_STR(sqlexpr, "[_EVA_FORMSTAMP] IN(");
-		if(dyntab_to_dynbuf(&fltobj, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-		DYNBUF_ADD_STR(sqlexpr, ")");
+		if(fltobj.nbrows > 1) DYNBUF_ADD_STR(sqlexpr, "(");
+		for(i = 0; i < fltobj.nbrows; i++)
+		{
+			if(i) DYNBUF_ADD_STR(sqlexpr, " OR ");
+			DYNBUF_ADD_CELL(sqlexpr, &fltobj, i, 0, NO_CONV);
+			DYNBUF_ADD_STR(sqlexpr, " IN ([_EVA_FORMSTAMP])");
+		}
+		if(fltobj.nbrows > 1) DYNBUF_ADD_STR(sqlexpr, ")");
 	}
 	else if(!strcmp("_EVA_FILTER_CTRLVAL", flttype))
 	{
@@ -226,7 +251,7 @@ int qry_filter_to_sql(				/* return : 0 on success, other on error */
 	else if(!strcmp("_EVA_FILTER_SQLCOND", flttype))
 	{
 		/* Evaluate variables in expression && add to result expresion */
-		if(qry_eval_sqlexpr_var(cntxt, sqlexpr, DYNTAB_FIELD_VAL(flt_data, FILTER_COND), flt_data)) STACK_ERROR;
+		if(qry_eval_sqlexpr_var(cntxt, sqlexpr, DYNTAB_FIELD_VAL(flt_data, FILTER_COND), flt_data, NULL)) STACK_ERROR;
 	}
 
 	RETURN_OK_CLEANUP;
@@ -256,7 +281,7 @@ int qry_filterlist_to_sql(			/* return : 0 on success, other on error */
 		if(i) DYNBUF_ADD3(sqlexpr, " ", oper, 0, NO_CONV, " ");
 
 		/* Read filter data */
-		if(qry_obj_field(cntxt, &fltdata, DYNTAB_TOULRC(idflt, i, 0), NULL)) STACK_ERROR;
+		if(qry_cache_idobj(&fltdata, DYNTAB_TOULRC(idflt, i, 0))) STACK_ERROR;
 
 		/* Add SQL to expression */
 		if(qry_filter_to_sql(cntxt, sqlexpr, &fltdata)) STACK_ERROR;

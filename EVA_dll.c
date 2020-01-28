@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : EVA_dll.c
 ** Description : Windows interface for EVA data access
 **        Note : library files must be compiled with the _EVA_DLL macro defined (compiler definition)
@@ -8,7 +14,6 @@
 
 #define STRICT
 
-#include <windows.h>
 #include "eva.h"
 
 EVA_context _cntxt;
@@ -76,7 +81,6 @@ long __stdcall DB_connect(			/* return : 0 if Ok, 1 on error */
 	if(server_adr && !*server_adr) server_adr = NULL;
 
 	/* Return if same as current connection */
-	cntxt->val_FORMSTAMP = 1;
 	cntxt->sql_trace = DEBUG_SQL_RES;
 	if(!STRCMPNUL(db_name, cntxt->dbname) && !STRCMPNUL(server_adr, cntxt->srvaddr) && cntxt->sql_session) return 0;
 
@@ -196,7 +200,7 @@ long __stdcall Get_field_value(				/* return : 0 if Ok, 1 on error */
 
 	/* Read field values from object data */
 	dyntab_free(&ValuesCache);
-	b_err = b_err || dyntab_filter_field(&ValuesCache, 0, &ObjCache, field, 0, 1, NULL);
+	b_err = b_err || dyntab_filter_field(&ValuesCache, 0, &ObjCache, field, ~0UL, NULL);
 
 	/* Output value to result if found */
 	b_err = return_dyntab_value(res, sz_max, &ValuesCache, 0, 0, NULL, NULL, nbval) || b_err;
@@ -393,7 +397,7 @@ long __stdcall Get_table_data(				/* return : 0 if Ok, 1 on error */
 	}
 	if(!selobj) selobj = "";
 	else if(*selobj == '*')
-		b_err = b_err || qry_obj_field(cntxt, &ctrl->val, idobj, dyntab_field_val(&ctrl->attr, "_EVA_FIELD", 0, 1, 0));
+		b_err = b_err || qry_obj_field(cntxt, &ctrl->val, idobj, DYNTAB_FIELD_VAL(&ctrl->attr, FIELD));
 	else if(!b_err && *selobj)
 		b_err = b_err || dyntab_from_list(&ctrl->val, selobj, strlen(selobj), ",", 0, 0);
 	b_err = b_err || table_word_search(cntxt, 0);
@@ -607,30 +611,25 @@ int qry_search_form_txt(					/* return : 0 on success, other on error */
 	if(sql && form && *form)
 	{
 		/* Search for forms with given label */
-		unsigned long val_FORMSTAMP, val_LABEL, val_CONTROL, val_FORM;
-		if(sql_id_value(cntxt, add_sz_str("_EVA_FORMSTAMP"), &val_FORMSTAMP) ||
-			sql_id_value(cntxt, add_sz_str("_EVA_LABEL"), &val_LABEL) ||
-			sql_id_value(cntxt, add_sz_str("_EVA_CONTROL"), &val_CONTROL) ||
-			sql_id_value(cntxt, add_sz_str("_EVA_FORM"), &val_FORM)) STACK_ERROR;
 		DYNBUF_ADD3_INT(&sql1,
 			"SELECT DISTINCT TLink.IdObj FROM TLink \n"
 			"INNER JOIN TVal ON TVal.IdValue=TLink.IdValue \n"
 			"INNER JOIN TLink AS TLink0 ON TLink0.IdObj=TLink.IdObj \n"
 			"INNER JOIN TLink AS TLink1 ON TLink1.IdObj=TLink.IdObj \n"
 			"WHERE TLink0.DateDel IS NULL \n"
-			"AND TLink0.IdField=", val_FORMSTAMP, " \n");
+			"AND TLink0.IdField=", IDVALUE(FORMSTAMP), " \n");
 		DYNBUF_ADD3_INT(&sql1,
 			"AND TLink0.IdRelObj=", OBJ_FORM_CONTROL, " \n");
 		DYNBUF_ADD3(&sql1,
 			"AND TLink.DateDel IS NULL \n"
 			"AND TVal.TxtValue='", form, 0, SQL_NO_QUOTE, "' \n");
 		DYNBUF_ADD3_INT(&sql1,
-			"AND TLink.IdField=", val_LABEL, " \n");
+			"AND TLink.IdField=", IDVALUE(LABEL), " \n");
 		DYNBUF_ADD3_INT(&sql1,
 			"AND TLink1.DateDel IS NULL \n"
-			"AND TLink1.IdValue=", val_FORM, " \n");
+			"AND TLink1.IdValue=", IDVALUE(FORM), " \n");
 		DYNBUF_ADD3_INT(&sql1,
-			"AND TLink1.IdField=", val_CONTROL, " \n");
+			"AND TLink1.IdField=", IDVALUE(CONTROL), " \n");
 		if(sql_exec_query(cntxt, sql1->data) || sql_get_table(cntxt, id_list, 2)) STACK_ERROR;
 
 		/* If form was found - add condition on form */
@@ -638,7 +637,7 @@ int qry_search_form_txt(					/* return : 0 on success, other on error */
 		{
 			DYNBUF_ADD3_INT(&sql,
 				"AND TLink0.DateDel IS NULL \n"
-				"AND TLink0.IdField=", val_FORMSTAMP, " \n");
+				"AND TLink0.IdField=", IDVALUE(FORMSTAMP), " \n");
 			DYNBUF_ADD3_CELL(&sql,
 				"AND TLink0.IdRelObj=", id_list, 0, 0, NO_CONV, NULL);
 		}

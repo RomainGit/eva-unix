@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_input_field.c
-** Description : HTML handling functions for INPUT controls of type FIELD
+** Description : handling functions for INPUT controls of type FIELD
 **      Author : Alain BOUTE
 **     Created : Sept 22 2003
 *********************************************************************/
@@ -21,18 +27,28 @@ int ctrl_add_input_field(			/* return : 0 on success, other on error */
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	unsigned long i;
 
+	/* Set default font */
+	if(!*CTRL_ATTR_VAL(FONTFACE)) ctrl->FONTFACE = "Courier";
+
 	switch(form->step)
 	{
-	case CtrlRead:
-		/* Format each value */
-		if(!*CTRL_ATTR_VAL(FONTFACE)) ctrl->FONTFACE = "Courier";
+	case InputCheck:
+		/* Set fields as uppercase */
 		for(i = 0; i < ctrl->val.nbrows; i++)
 		{
 			char *val = dyntab_val(&ctrl->val, i, 0);
 			size_t sz = strcspn(val, "-><()[]{}=,.");
 			if(val[sz]) continue;
 			setcase(3, val, 0);
-			while(*val) { if(!isalnum(*val)) *val = '_'; val++; }
+			while(*val)
+			{
+				if(!isalnum(*val)) 
+				{
+					*val = '_';
+					ctrl->b_modified = 1;
+				}
+				val++;
+			}
 		}
 		break;
 
@@ -40,6 +56,7 @@ int ctrl_add_input_field(			/* return : 0 on success, other on error */
 		/* Handle as text control */
 		if(ctrl_add_text(cntxt, i_ctrl)) STACK_ERROR;
 	}
+
 
 	RETURN_OK_CLEANUP;
 }

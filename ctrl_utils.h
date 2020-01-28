@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_utils.h
 ** Description : HTML controls handling utilities
 **      Author : Alain BOUTE
@@ -10,13 +16,13 @@
 ** Macro : ATTR_VAL
 ** Description : return the 1st value of an attribute in a control
 *********************************************************************/
-#define	ATTR_VAL(ctrl, txt) dyntab_field_val(&((ctrl)->attr), "_EVA_"#txt, 0, 1, 0)
+#define	ATTR_VAL(ctrl, txt) ((ctrl) ? DYNTAB_FIELD_VAL(&((ctrl)->attr), txt) : "")
 
 /*********************************************************************
 ** Macro : ATTR_CELL
 ** Description : return the 1st value of an attribute in a control
 *********************************************************************/
-#define	ATTR_CELL(ctrl, txt) dyntab_field_cell(&((ctrl)->attr), "_EVA_"#txt, 0, 1, 0)
+#define	ATTR_CELL(ctrl, txt) ((ctrl) ? DYNTAB_FIELD_CELL(&((ctrl)->attr), txt) : NULL)
 
 /*********************************************************************
 ** Macro : CTRL_ATTR_VAL
@@ -34,20 +40,19 @@
 ** Macro : ATTR_OPTIONAL
 ** Description : read an optionnal attribute in a control
 *********************************************************************/
-#define	ATTR_OPTIONAL(res, field, ctrl) { dyntab_free(&(res)); \
-	DYNTAB_FIELD(&(res), &((ctrl)->attr), field); }
+#define	ATTR_OPTIONAL(res, field, ctrl) DYNTAB_FIELD(&(res), &((ctrl)->attr), field)
 
 /*********************************************************************
-** Macro : CTRL_OPTIONAL
+** Macro : CTRL_ATTR
 ** Description : read an optionnal attribute in a control
 *********************************************************************/
-#define	CTRL_OPTIONAL(res, txt) ATTR_OPTIONAL(res, txt, ctrl)
+#define	CTRL_ATTR(res, txt) ATTR_OPTIONAL(res, txt, ctrl)
 
 /*********************************************************************
-** Macro : CTRL_READ_ATTR_TAB
+** Macro : CTRL_ATTR_TAB
 ** Description : read a control attribute with lines reordering
 *********************************************************************/
-#define	CTRL_READ_ATTR_TAB(res, txt) { ATTR_OPTIONAL(res, txt, ctrl); \
+#define	CTRL_ATTR_TAB(res, txt) { ATTR_OPTIONAL(res, txt, ctrl); \
 										if(dyntab_order_lines(&res)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
@@ -73,7 +78,7 @@
 *********************************************************************/
 #define	CTRL_OPTIONAL_NULLIF(res, txt, val) \
 { \
-	CTRL_OPTIONAL(res, txt) \
+	CTRL_ATTR(res, txt) \
 	if(res.nbrows < 2 && !dyntab_txt_cmp(add_sz_str(val), &res, 0, 0)) dyntab_free(&res); \
 }
 
@@ -93,7 +98,7 @@
 *********************************************************************/
 #define	CTRL_MANDATORY(res, txt, container) \
 { \
-	CTRL_OPTIONAL(res, txt) \
+	CTRL_ATTR(res, txt) \
 	if(!res.nbrows) RETURN_ERROR("Contrôle" #container " incorrect : pas de valeur pour " #txt, 1, NULL); \
 }
 
@@ -102,7 +107,7 @@
 ** Description : set a default value for an attribute in a control
 *********************************************************************/
 #define	CTRL_SETATTRDEF(val, txt) { \
-	if(!dyntab_field_cell(&ctrl->attr, "_EVA_"#txt, 0, 1, 0))  \
+	if(!dyntab_field_cell(&ctrl->attr, "_EVA_"#txt, 0, 0))  \
 		CTRL_SETATTR(val, sizeof(val)-1, txt); }
 
 /*********************************************************************
@@ -129,7 +134,7 @@
 ** Description : set a default value for an attribute in a control
 *********************************************************************/
 #define	CTRL_DEFVAL_CELL(tab, row, col, tag) { \
-	if(!dyntab_field_cell(&ctrl->attr, "_EVA_"#tag, 0, 1, 0))  \
+	if(!dyntab_field_cell(&ctrl->attr, "_EVA_"#tag, 0, 0))  \
 		CTRL_SETATTR(dyntab_val(tab, row, col), dyntab_sz(tab, row, col), txt); }
 
 /*********************************************************************
@@ -137,7 +142,7 @@
 ** Description : get an attribute value in a control with default value
 *********************************************************************/
 #define	CTRL_ATTR_DEFVAL(res, val, txt) { \
-	CTRL_OPTIONAL(res, txt); \
+	CTRL_ATTR(res, txt); \
 	if(!res.nbrows) DYNTAB_SET(&res, 0, 0, val); }
 
 /*********************************************************************
@@ -162,6 +167,15 @@
 int ctrl_from_cginame(				/* return : control index in cntxt->form->ctrl or 0 if no match */
 	EVA_context *cntxt,				/* in : execution context data */
 	char *cginame, size_t sz		/* in : searched CGI name */
+);
+
+/*********************************************************************
+** Function : ctrl_read_baseobj
+** Description : complete derived control with base objects data
+*********************************************************************/
+int ctrl_read_baseobj(				/* return : control index in cntxt->form->ctrl or 0 if no match */
+	EVA_context *cntxt,				/* in : execution context data */
+	DynTable *ctrldata				/* in/out : control data to complete */
 );
 
 /*********************************************************************
@@ -197,15 +211,6 @@ void ctrl_del_value(
 );
 
 /*********************************************************************
-** Function : ctrl_renumber_values
-** Description : renumber values indexes of a control
-*********************************************************************/
-void ctrl_renumber_values(
-	EVA_ctrl *ctrl,						/* in : control to process */
-	int b_keepold						/* in : keep old indexes if 1, else make new indexes starting at 1 */
-);
-
-/*********************************************************************
 ** Function : ctrl_set_format_attr
 ** Description : read control format attributes in ctrl->attr or form / default form
 *********************************************************************/
@@ -229,8 +234,7 @@ int ctrl_set_common_attr(			/* return : 0 on success, other on error */
 *********************************************************************/
 int ctrl_add_new(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_parent,			/* in : parent control index in cntxt->form->ctrl */
-	unsigned long *i_list,			/* in/out : start / end position in list */
+	unsigned long idctrl,			/* in : IdObj of control to add */
 	unsigned long *i_ctrl			/* out : index of new control in cntxt->form->ctrl */
 );
 
@@ -352,6 +356,15 @@ int ctrl_primary_handler(			/* return : 0 on success, other on error */
 );
 
 /*********************************************************************
+** Function : put_showhelp
+** Description : output html code for javascript call to ShowHelp
+*********************************************************************/
+int put_showhelp(					/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in : execution context data */
+	DynBuffer **html				/* in/out : HTML output buffer */
+);
+
+/*********************************************************************
 ** Function : ctrl_parse_access
 ** Description : parse access check keywords
 *********************************************************************/
@@ -360,6 +373,28 @@ void ctrl_parse_access(
 	char *exec,						/* in : control execution mode */
 	char *objcreat,					/* in : create object access */
 	char *objdel					/* in : delete object access */
+);
+
+/*********************************************************************
+** Function : ctrl_check_condlist
+** Description : evaluate a condition table line
+*********************************************************************/
+int ctrl_check_condlist(			/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	int *res,						/* out : 0 if contion false, non zero else */
+	DynTable *cond,					/* in : table of conditions to process (IdObj) */
+	unsigned long line				/* in : table line to process (AND combination on columns of line)
+											if ~0UL : process all lines (AND combination on column 0) */
+);
+
+/*********************************************************************
+** Function : ctrl_check_condseq
+** Description : evaluate a condition sequence - return matched line
+*********************************************************************/
+int ctrl_check_condseq(				/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	DynTable *cond,					/* in : table of conditions to process (IdObj) */
+	unsigned long *match			/* out : index of first true condition - cond->nbrows if no match */
 );
 
 /*********************************************************************
@@ -373,25 +408,35 @@ int ctrl_check_access(				/* return : 0 on success, other on error */
 );
 
 /*********************************************************************
+** Function : build_open_btn_name
+** Description : build CGI name for an open button
+*********************************************************************/
+size_t build_open_btn_name(				/* return : length of opname */
+	EVA_context *cntxt,					/* in/out : execution context data */
+	char *opname,						/* out : button CGI name (64 chars min) */
+	unsigned long id_form,				/* in : form id to open */
+	unsigned long id_obj,				/* in : object id to open */
+	int loc,							/* in : opened window location */
+	int mode							/* in : opened window display mode */
+);
+
+/*********************************************************************
 ** Function : html_put_open_btn
 ** Description : output an open button
 *********************************************************************/
 int html_put_open_btn(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
-	DynBuffer *name,					/* in : CGI base button name - B# is used if NULL */
-	DynBuffer *name_end,				/* in : end of button name - OPENOBJ=id_obj is used if NULL */
+	char *opname,						/* out : button CGI name */
 	DynBuffer *label,					/* in : form label */
 	DynBuffer *objname,					/* in : object label */
 	DynBuffer *notes,					/* in : object notes */
 	DynBuffer *img,						/* in : symbol for normal image */
 	DynBuffer *imgsel,					/* in : symbol for selected image */
-	char *action, size_t sz_action,		/* in : action label for tooltip */
-	unsigned long id_form,				/* in : form id */
-	unsigned long id_obj,				/* in : object id */
-	unsigned long num,					/* in : num index */
-	unsigned long line,					/* in : line index */
-	int loc,							/* in : window location */
-	int b_disabled						/* in : button is disabled if not 0 */
+	unsigned long id_form,				/* in : form id to open */
+	unsigned long id_obj,				/* in : object id to open */
+	int loc,							/* in : opened window location */
+	int b_disabled,						/* in : button is disabled if not 0 */
+	int mode							/* in : open mode */
 );
 
 /*********************************************************************
@@ -402,10 +447,8 @@ int ctrl_add_symbol_btn(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	EVA_ctrl *ctrl,						/* in : related control */
 	DynTableCell *val,					/* in : value associated with button */
-	DynBuffer *name_end,				/* in : end of button name - OPENOBJ=id_obj is used if NULL */
 	DynTable *data,						/* in : object data to be opened by the button */
 	unsigned long beg,					/* in : first line to process in data */
-	char *action, size_t sz_action,		/* in : action label for tooltip */
 	char *bg_color,						/* in : output cell separators with given color if not NULL */
 	char *dispmode						/* in : display mode */
 );

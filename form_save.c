@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 ** File : form_save.c
 ** Description : forms save & close functions
 ** Author : Alain BOUTE
@@ -10,7 +16,7 @@
 
 /*********************************************************************
 ** Function : form_btn_do_save
-** Description : handles form data save before & after button clicks
+** Description : handles form data save before button clicks
 *********************************************************************/
 #define ERR_FUNCTION "form_btn_do_save"
 #define ERR_CLEANUP	
@@ -25,7 +31,7 @@ int form_btn_do_save(				/* return : 0 on success, other on error */
 	char *confirm = CTRL_ATTR_VAL(CONFIRM);
 
 	/* Save form data if applicable */
-	if(*save)
+	if(*save && form->prevstep != HtmlView)
 	{
 		int b_done = BUTN_SAVE_NEXT;
 		if(form_save_dialog(cntxt, i_ctrl, confirm, BUTN_SAVE_NEXT, &b_done)) STACK_ERROR;
@@ -61,41 +67,62 @@ int form_check_keys(					/* return : 0 if Ok, other on error */
 	DynTable keyfields = {0};
 	DynTable keytype = {0};
 	DynTable keymsg = {0};
+	DynTable keycond = {0};
 	DynTable field = {0};
 	DynTable value = {0};
 	DynTable duplicates = {0};
 	DynTable data = {0};
 	DynBuffer *msg = {0};
 	QryBuild flt = {0};
-	unsigned long i, j, k;
+	unsigned long i, j, k, id;
+	DynTableCell *c;
 	DynBuffer **html = form->html;
 	form->html = &form->html_err;
 
 	/* Read form key fields */
-	CTRL_READ_ATTR_TAB(keyfields, KEY_FIELDS);
-	CTRL_READ_ATTR_TAB(keytype, KEY_TYPE);
-	CTRL_READ_ATTR_TAB(keymsg, KEY_MSG);
+	CTRL_ATTR_TAB(keyfields, KEY_FIELDS);
+	CTRL_ATTR_TAB(keytype, KEY_TYPE);
+	CTRL_ATTR_TAB(keymsg, KEY_MSG);
+	CTRL_ATTR_TAB(keycond, KEY_COND);
 
 	/* For each key (group of fields on same line) */
 	for(i = 0; i < keyfields.nbrows; i++)
 	{
-		/* Initialize filter with AND condition & not current object */
+		/* Check key condition if any */
 		int b_error;
+		char *ktype = dyntab_val(&keytype, i, 0);
+		DynTableCell *c = dyntab_cell(&keycond, i, 0);
+		if(c && c->txt && c->len)
+		{
+			if(ctrl_eval_fieldexpr(cntxt, ctrl, &data, c->txt)) CLEAR_ERROR;
+			for(j = 0; j < data.nbrows; j++)
+			{
+				char *v = dyntab_val(&data, j, 0);
+				if(*v && strcmp("0", v)) break;
+			}
+
+			/* Skip key if condition not matched */
+			if(j >= data.nbrows) continue;
+		}
+
+		/* Initialize filter with FORMSTAMP condition */
 		qry_build_free(&flt);
 		dyntab_free(&field);
 		M_FREE(msg);
 		DYNTAB_ADD_TXTID(&field, 0, 0, "_EVA_FORMSTAMP", cntxt->val_FORMSTAMP);
 		dyntab_free(&value);
-		DYNTAB_ADD_CELL(&value, 0, 0, &form->id_form, 0, 0);
+		if(form->id_formsave)
+			DYNTAB_ADD_INT(&value, 0, 0, form->id_formsave)
 		if(qry_add_filter(cntxt, &flt, RelNone, &field, RelList, &value)) STACK_ERROR;
 
 		/* Build query for each key field */
-		for(j = 0; j < keyfields.nbcols; j++) if(dyntab_sz(&keyfields, i, j))
+		for(j = 0; j < keyfields.nbcols; j++)
+			if(dyntab_sz(&keyfields, i, j))
 		{
 			char *fld;
 			MatchMode match = Like;
 
-			/* Split fields - multiple fields of same type are allowed */
+			/* Check field type on 1st field - multiple fields of same type are allowed */
 			dyntab_from_list(&field, DYNTAB_VAL_SZ(&keyfields, i, j), ",", 0, 2);
 			fld = dyntab_val(&field, 0, 0);
 
@@ -109,9 +136,28 @@ int form_check_keys(					/* return : 0 if Ok, other on error */
 			/* If control is a relation : use appropriate match mode */
 			if(k < form->nb_ctrl && !strcmp(form->ctrl[k].TYPE, "_EVA_RELATION")) match = RelList;
 
-			if(form_get_field_values(cntxt, &value, dyntab_val(&keyfields, i, j), DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj)) ||
-				qry_add_filter(cntxt, &flt, RelNone, &field, match, &value)) STACK_ERROR;
+			/* Read values for fields */
+			if(form_get_field_values(cntxt, &value, dyntab_val(&keyfields, i, j), DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj))) STACK_ERROR;
+
+			/* Handle empty value */
+			if(!value.nbrows)
+			{
+				/* Ignore value if primary key */
+				if(!*ktype || !strcmp(ktype, "_EVA_KEY")) continue;
+				else
+				{
+					/* Ignore key else */
+					flt.nbnode = 0;
+					break;
+				}
+			}
+
+			/* Add filter node for values */
+			if(qry_add_filter(cntxt, &flt, RelNone, &field, match, &value)) STACK_ERROR;
 		}
+
+		/* Ignore key if no field */
+		if(flt.nbnode < 2) continue;
 		
 		/* Exclude current object if not new */
 		if(dyntab_sz(&form->id_obj, 0, 0))
@@ -122,75 +168,105 @@ int form_check_keys(					/* return : 0 if Ok, other on error */
 
 		/* Query for objects matching key filter & set error depending on result & error setting for key */
 		if(qry_filter_objects(cntxt, &value, &flt)) STACK_ERROR;
-		b_error = value.nbrows ? !strcmp(dyntab_val(&keytype, i, 0), "_EVA_KEY_WARN") ? 1 : 6 : 0;
+		b_error = value.nbrows ? !strcmp(ktype, "_EVA_KEY_WARN") ? 1 : 6 : 0;
+		if(!b_error) continue;
 		form->error |= b_error;
+		dyntab_cell(&keyfields, i, 0)->col = b_error;
 
 		/* Add found objects to duplicates list */
 		for(j = 0; j < value.nbrows; j++) 
 		{
+			/* Search object in duplicates */
+			id = DYNTAB_TOULRC(&value, j, 0);
 			for(k = 0; k < duplicates.nbrows && dyntab_cmp(&duplicates, k, 0, &value, j, 0); k++);
-			if(k == duplicates.nbrows)
-			{
-				DYNTAB_ADD_CELL(&duplicates, duplicates.nbrows, 0, &value, j, 0);
-				dyntab_cell(&duplicates, k, 0)->row = i;
-				dyntab_cell(&keyfields, i, 0)->col = b_error;
-			}
+
+			/* If object not found : add to duplicates */
+			if(k == duplicates.nbrows) DYNTAB_ADD_CELL(&duplicates, k, 0, &value, j, 0);
+
+			/* Associate key with duplicate */
+			if(i) dyntab_add(&duplicates, k, i, NULL, 0, NO_CONV);
+			dyntab_cell(&duplicates, k, i)->IdObj = id;
 		}
 	}
 
-	/* Output duplicates table if applicable */
+	/* Handle duplicates if applicable */
 	if(duplicates.nbrows)
 	{
-		/* Output table header */
+		int b_show_dup = !CTRL_ATTR_CELL(NO_DUPLICATE_DISPLAY);
 		char printbuf[1024];
-		unsigned long iprev = keyfields.nbrows;
+		char datecr[32] = {0}, *errtyp;
+
+		/* Output table header for duplicates message */
 		dynbuf_print3(form->html,
-			"<table border=1 rules=rows cellspacing=0 cellpadding=5 width=100%% bgcolor=#DDDDDD>"
-			"<tr><td><font size=+1 color=#%s><b>%s</b></font></td>"
-			"<td colspan=2 align=center><u>%s</u></td></tr>",
+			"<table border=1 rules=rows cellspacing=0 cellpadding=5 width=100%% bgcolor=#FFFFFF>"
+			"<tr><td colspan=2 align=center><font size=+1><font color=#%s><b>Doublons %s</b></font><br>"
+			"<u>La fiche que vous voulez enregistrer %s</u></font></td></tr>",
 			form->error & 4 ? "FF0000" : "FF8844",
-			form->error & 4 ? "Erreur de doublons" : "Risque de doublons",
-			form->error & 4 ?
-				"La fiche que vous voulez enregistrer existe déjà" : 
-				"La fiche que vous voulez enregistrer ressemble à une ou plusieurs fiches existantes"
+			form->error & 4 ? "interdits" : "déconseillés",
+			form->error & 4 ? "existe déjà" : "ressemble à d'autres fiches"
 			);
-		
-		/* Output duplicates by key line */
-		for(i = 0; i < duplicates.nbrows && i < 5; i++)
+
+		/* Output keys & messages */
+		for(i = 0; i < keyfields.nbrows; i++)
 		{
-			/* Add start of line or object separator as applicable */
-			DynTableCell *c = dyntab_cell(&duplicates, i, 0);
-			char datecr[32] = {0};
-			unsigned long idobj = DYNTAB_TOULRC(&duplicates, i, 0);
-			dynbuf_print(form->html, "%s", c->row != iprev ? "<tr><td colspan=2>" : "<br>");
-
-			/* Add object open button & creation infos */
-			DYNBUF_ADD_STR(form->html, "<table border=0><tr>");
-			if(qry_obj_idfield(cntxt, &data, idobj, 0) ||
-				ctrl_add_symbol_btn(cntxt, ctrl, c, NULL, &data, 0, NULL, 0, "", "SYMBOL+LABEL+OBJNOTES"))
-				STACK_ERROR;
-			if(form_eval_fieldexpr(cntxt, &data, 0, idobj, add_sz_str("_EVA_FORMSTAMP.DateCr"), NULL, 0)) STACK_ERROR;
-			datetxt_to_format(cntxt, datecr, dyntab_val(&data, 0, 0), "");
-			if(*datecr)
+			j = dyntab_cell(&keyfields, i, 0)->col;
+			if(j)
 			{
-				if(form_eval_fieldexpr(cntxt, &data, 0, idobj, add_sz_str("_EVA_FORMSTAMP.IdWhoCr->_EVA_USERNAME"), NULL, 0)) STACK_ERROR;
-				dynbuf_print2(form->html, "</td><td width=10></td><td><font size=-1><i>Fiche créée le %s par %s</i></font>",
-								datecr, dyntab_val(&data, 0, 0));
-			}
-			DYNBUF_ADD_STR(form->html, "</tr></table>");
-
-			/* Add end of line if applicable */
-			iprev = c->row;
-			c = dyntab_cell(&duplicates, i + 1, 0);
-			if(!c || c->row != iprev)
-			{
-				dynbuf_print3(form->html, "</td><td><font size=-1>Doublons sur les champs <b><u>%s</u></b>%s%s</font></td></tr>", 
-					dyntab_val(&keymsg, iprev, 1),
-					dyntab_sz(&keymsg, iprev, 0) ? "<br><br>" : "",
-					dyntab_val(&keymsg, iprev, 0));
+				errtyp = j & 4 ? "interdits" : "déconseillés";
+				dynbuf_print(form->html, "<tr><td valign=top>Doublons %s sur le(s) champs <b><u>", errtyp);
+				DYNBUF_ADD_CELL(form->html, &keymsg, i, 1, TO_HTML)
+				DYNBUF_ADD_STR(form->html, "</u></b></td><td valign=top><i>");
+				DYNBUF_ADD_CELL(form->html, &keymsg, i, 0, TO_HTML)
+				DYNBUF_ADD_STR(form->html, "</i></td></tr>");
 			}
 		}
-		DYNBUF_ADD_STR(form->html, "</td></tr></table>");
+		dynbuf_print3(form->html, "</table><p align=center>Il y a %lu fiche%s qui ressemble%s à celle que vous voulez enregistrer</p>",
+			duplicates.nbrows, duplicates.nbrows > 1 ? "s" : "", duplicates.nbrows > 1 ? "nt" : "");
+
+		/* If output duplicates objects  */
+		if(b_show_dup)
+		{
+			DYNBUF_ADD_STR(form->html, "<table border=1 rules=rows cellpadding=0 width=100%><tr>"
+										"<th>Ouvrir</th><th>Fiche</th><th>Création</th><th>Doublon sur le(s) champs</th></tr>");
+			for(i = 0; i < duplicates.nbrows; i++)
+			{
+				c = dyntab_cell(&duplicates, i, 0);
+				id = strtoul(c->txt, NULL, 10);
+
+				/* Add object open button */
+				DYNBUF_ADD_STR(form->html, "<tr>");
+				if(qry_obj_idfield(cntxt, &data, id, 0) ||
+					ctrl_add_symbol_btn(cntxt, ctrl, c, &data, 0, "", "SYMBOL+LABEL+OBJNOTES"))
+					STACK_ERROR;
+
+				/* Add object creation infos */
+				if(form_eval_fieldexpr(cntxt, &data, 0, id, add_sz_str("_EVA_FORMSTAMP.DateCr"), NULL, 0)) STACK_ERROR;
+				datetxt_to_format(cntxt, datecr, dyntab_val(&data, 0, 0), "");
+				if(*datecr)
+				{
+					if(form_eval_fieldexpr(cntxt, &data, 0, id, add_sz_str("_EVA_FORMSTAMP.IdWhoCr->_EVA_USERNAME"), NULL, 0)) STACK_ERROR;
+					dynbuf_print2(form->html, "</td><td valign=top><font size=-1><i>Fiche créée le %s par %s</i></font></td><td>",
+									datecr, dyntab_val(&data, 0, 0));
+				}
+
+				/* Add associated keys */
+				id = 0;
+				for(j = 0; j < keyfields.nbrows; j++)
+				{
+					c = dyntab_cell(&duplicates, i, j);
+					if(c && c->IdObj)
+					{
+						if(id) DYNBUF_ADD_STR(form->html, " + ");
+						id = dyntab_cell(&keyfields, j, 0)->col;
+						dynbuf_print(form->html, "<font color=%s><b>", id & 4 ? "FF0000" : "FF8844");
+						DYNBUF_ADD_CELL(form->html, &keymsg, j, 1, TO_HTML)
+						DYNBUF_ADD_STR(form->html, "</b></font>");
+					}
+				}
+				DYNBUF_ADD_STR(form->html, "</td></tr>");
+			}
+			DYNBUF_ADD_STR(form->html, "</table>");
+		}
 	}
 	form->html = html;
 
@@ -205,7 +281,9 @@ int form_check_keys(					/* return : 0 if Ok, other on error */
 *********************************************************************/
 #define ERR_FUNCTION "form_save"
 #define ERR_CLEANUP	DYNTAB_FREE(id_obj); \
-					DYNTAB_FREE(cgival)
+					DYNTAB_FREE(cgival); \
+					DYNTAB_FREE(srcctrl); \
+					M_FREE(buf)
 int form_save(					/* return : 0 on success, other on error */
 	EVA_context *cntxt			/* in/out : execution context data */
 ){
@@ -214,10 +292,13 @@ int form_save(					/* return : 0 on success, other on error */
 	unsigned long idobj = DYNTAB_TOUL(&cntxt->form->id_obj);
 	DynTable cgival = {0};
 	DynTable id_obj = {0};
+	DynTable srcctrl = {0};
+	DynBuffer *buf = NULL;
 
 	/* Call handler in save mode for all controls & add form stamp */
 	form->step = FormSave;
 	if(ctrl_add_child(cntxt, 0, NULL)) STACK_ERROR;
+	if(form->id_formsave)
 	{
 		char txt[32];
 		if(qry_add_obj_field_val(cntxt, &form->id_obj, "_EVA_FORMSTAMP",
@@ -229,9 +310,11 @@ int form_save(					/* return : 0 on success, other on error */
 	if(form->b_newobj)
 	{
 		/* Retrieve caller data */
+		CGIData *cgi = cntxt->cgi + cntxt->cgibtn;
 		int b_alt = !dyntab_cmp(&cntxt->alt_form, 0, 0, &cntxt->form->id_form, 0, 0) &&
 					DYNTAB_TOUL(&cntxt->alt_obj) == 0;
 		unsigned long idobj0, idform0, idctrl, num = 0, line = 0;
+		char *ctrltyp;
 		dyntab_from_list(&cgival, DYNTAB_VAL_SZ(&form->call_data, 0, 0), "/", 0, 6);
 		idform0 = DYNTAB_TOULRC(&cgival, 0, 0);
 		idobj0 = DYNTAB_TOULRC(&cgival, 1, 0);
@@ -239,16 +322,17 @@ int form_save(					/* return : 0 on success, other on error */
 		sscanf(dyntab_val(&cgival, 3, 0), "%lu.%lu", &num, &line);
 
 		/* Look for control type */
-		if(qry_obj_field(cntxt, &cgival, idctrl, "_EVA_CONTROL")) STACK_ERROR;
-		if(!strcmp(dyntab_val(&cgival, 0, 0), "_EVA_INPUT"))
+		if(qry_cache_idobj_field(cntxt, &srcctrl, idctrl, NULL, 0) || ctrl_read_baseobj(cntxt, &srcctrl)) STACK_ERROR;
+		ctrltyp = DYNTAB_FIELD_VAL(&srcctrl, CONTROL);
+		if(!strcmp(ctrltyp, "_EVA_INPUT"))
 		{
 			/* Relation : add new value (for relations direct add function) */
-			if(qry_obj_field(cntxt, &cgival, idctrl, "_EVA_FIELD")) STACK_ERROR;
+			DYNTAB_FIELD(&cgival, &srcctrl, FIELD);
 		}
-		else if(!strcmp(dyntab_val(&cgival, 0, 0), "_EVA_BUTTON"))
+		else if(!strcmp(ctrltyp, "_EVA_BUTTON"))
 		{
 			/* Button : look for storage field for new objects */
-			if(qry_obj_field(cntxt, &cgival, idctrl, "_EVA_NEWOBJ_FIELD")) STACK_ERROR;
+			DYNTAB_FIELD(&cgival, &srcctrl, NEWOBJ_FIELD);
 		}
 		else
 			dyntab_free(&cgival);
@@ -256,23 +340,56 @@ int form_save(					/* return : 0 on success, other on error */
 		/* Storage field found : add new value with object id */
 		if(dyntab_sz(&cgival, 0, 0))
 		{
+			DynTableCell *fld = dyntab_cell(&cgival, 0, 0);
 			DynTableCell *c;
 			DYNTAB_ADD_INT(&id_obj, 0, 0, idobj);
 			c = dyntab_cell(&id_obj, 0, 0);
 			c->Line = line;
 			c->Num = num;
-			if(cgi_set_field_values(cntxt, idform0, idobj0,
-											DYNTAB_VAL_SZ(&cgival, 0, 0), &id_obj, NULL, 0))
+			if(cgi_set_field_values(cntxt, idform0, idobj0, fld->txt, fld->len, &id_obj, NULL, 0))
 				STACK_ERROR;
+			cgi = cntxt->cgi + cntxt->cgibtn;
+
+			/* Handle control status : close search */
+			if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL,  idform0, idobj0, fld->txt, "STATUS", 0, 0)) STACK_ERROR;
+			if(cgival.nbrows)
+			{
+				unsigned long sts = 0;
+				int len = 0;
+				sscanf(cgival.cell->txt, "%lx%n", &sts, &len);
+				snprintf(cgival.cell->txt, len, "%lx", sts & ~(TblCtrl_opensearch | TblCtrl_opensel));
+			}
 		}
 
 		/* Update new object id in context (main form or alt) */
 		DYNTAB_ADD_CELL(b_alt ? &cntxt->alt_obj : &cntxt->id_obj, 0, 0, &form->id_obj, 0, 0);
+		if(cgi->name[0] == 'B' && !cgi->IdObj && cgi->IdForm == idform) cgi->IdObj = idobj;
 	}
 
 	/* Clear CGI form inputs */
-	if(cgi_clear_form_inputs(cntxt, idform, form->b_newobj ? 0 : idobj, form->b_newobj ? 0 : 1)) STACK_ERROR;
+	cgi_clear_form_inputs(cntxt, idform, form->b_newobj ? 0 : idobj, form->b_newobj ? 0 : 1);
+
+	/* Handle new object */
+	if(form->b_newobj)
+	{
+		/* Rebuild CGI name && clear variables temp values */
+		unsigned long i;
+		for(i = 0; i < form->nb_ctrl; i++)
+			if(form->ctrl[i].cginame && 
+				cgi_build_basename(cntxt, &form->ctrl[i].cginame, i, *form->ctrl[i].cginame->data))
+				STACK_ERROR;
+		DYNTAB_FREE(form->varsvalues);
+	}
+	else
+		qry_uncache_idobj(cntxt, idobj);
 	form->b_reload = 1;
+
+	/* Keep selected tab & form status */
+	if(form_tab_selection(cntxt, 0)) STACK_ERROR;
+	form->step = HtmlEdit;
+	dyntab_free(&form->dlg_ctrl);
+	if(form_status_data(cntxt, &buf)) STACK_ERROR;
+	if(cgi_add_input(cntxt, NULL, DYNBUF_VAL_SZ(form->ctrl->cginame), DYNBUF_VAL_SZ(buf))) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -307,8 +424,7 @@ int form_save_dialog_end(			/* return : 0 on success, other on error */
 
 	case BUTN_RESTORE:
 		/* Clear all CGI form data & set form reload flag */
-		if(cgi_clear_form_inputs(cntxt, DYNTAB_TOUL(&form->id_form), 
-									DYNTAB_TOUL(&form->id_obj), 1)) STACK_ERROR;
+		cgi_clear_form_inputs(cntxt, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), 1);
 		form->b_reload = 1;
 
 	default:
@@ -319,7 +435,8 @@ int form_save_dialog_end(			/* return : 0 on success, other on error */
 		form_free_html(cntxt);
 
 		/* Update form status in CGI data */
-		for(i = 0; i < cntxt->nb_cgi && strcmp(form->ctrl->cginame->data, cntxt->cgi[i].name); i++);
+		for(i = 0; i < cntxt->nb_cgi && (!form->ctrl->cginame ||
+				strcmp(form->ctrl->cginame->data, cntxt->cgi[i].name)); i++);
 		if(i < cntxt->nb_cgi)
 		{
 			CGIData *cgi = cntxt->cgi + i;
@@ -329,7 +446,9 @@ int form_save_dialog_end(			/* return : 0 on success, other on error */
 			cgi->value_sz = buf->cnt;
 		}
 	}
-	if(cntxt->cgi) cntxt->cgi[cntxt->cgibtn].name[0] = 0;
+	if(cntxt->cgi && cntxt->cgi[cntxt->cgibtn].subfield &&
+		!strncmp(cntxt->cgi[cntxt->cgibtn].subfield, add_sz_str("FORM")))
+			cntxt->cgi[cntxt->cgibtn].name[0] = 0;
 
 	RETURN_OK_CLEANUP;
 }
@@ -353,15 +472,21 @@ int form_save_dialog_output(		/* return : 0 on success, other on error */
 	DynBuffer *name = NULL;
 	form->html = &form->html_top;
 
-	/* Set dialog message in form->html_tab */
+	/* Output dialog message header */
 	DYNBUF_ADD3(form->html, 
-			"<table border=0 cellspacing=0 cellpadding=5 width=100% bgcolor=#DDDDDD><tr>\n"
-			"<td align=center><b><font size=+1>", ctrl->LABEL, 0, NO_CONV, "</font></b></td>"
-			"<td align=center><font size=-1><i>");
+			"<table border=0 cellspacing=0 cellpadding=0 width=100% bgcolor=#FFFFFF><tr>\n"
+			"<td align=center><font size=-1>Vous avez cliqué sur <b><font color=#FFAA00>", ctrl->LABEL, 0, NO_CONV, "</font> - ");
 	DYNBUF_ADD(form->html, (
 				(clicbtn && *clicbtn & BUTN_SAVE) ? "Confirmation avant enregistrement" :
 													"Confirmation avant fermeture"), 0, TO_HTML);
-	DYNBUF_ADD_STR(form->html, "</i></font></td><td width=10></td><td align = center>");
+	DYNBUF_ADD_STR(form->html, "</td></tr></table>");
+	DYNBUF_ADD3(form->html, 
+			"<table border=0 cellspacing=0 cellpadding=5 width=100% bgcolor=#DDDDDD><tr>\n"
+			"<td align=center><b><font size=+1 color=#", 
+			(clicbtn && *clicbtn & BUTN_CLOSE) ? "000000>Fiche modifiée" :
+			(form->error & 2) ? "FF0000>Erreur bloquante" :
+			"FFAA00>Vérifiez les données",0, NO_CONV,
+			"</b></font></td><td width=10></td><td align = center>");
 
 	/* Add goback / close button */
 	CTRL_CGINAMEBTN(&name, NULL, add_sz_str("FORMGOBACKOBJ"));
@@ -387,7 +512,7 @@ int form_save_dialog_output(		/* return : 0 on success, other on error */
 	if(form->html_tabs)
 	{
 		DYNBUF_ADD_STR(form->html, 
-			"<table border=1 rules=rows cellspacing=0 cellpadding=2 width=100%><tr>")
+			"<table border=0 cellspacing=0 cellpadding=2 width=100% height=200><tr>")
 		DYNBUF_ADD_BUF(form->html, form->html_tabs, NO_CONV);
 		DYNBUF_ADD_STR(form->html, "</tr></table>\n");
 		M_FREE(form->html_tabs);
@@ -395,8 +520,8 @@ int form_save_dialog_output(		/* return : 0 on success, other on error */
 	form->nextstep = HtmlSaveDlg;					   
 
 	/* Output bottom of form */
-	DYNBUF_ADD_STR(form->html, 
-		"<table border=0 cellspacing=0 cellpadding=2 width=100%><tr>")
+	DYNBUF_ADD_STR(form->html,
+				"<table border=0 cellspacing=0 cellpadding=2 width=100%><tr>");
 	
 	/* Output error message if blocking error */
 	if(form->error & form->savedlg_outmode & 2 || form->error & 4)
@@ -493,8 +618,7 @@ int form_save_dialog(				/* return : 0 on success, other on error */
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	DynTable cgival = {0};
 	int b_nodlg = 0, actionbtn = 0;
-	int b_first = !(ctrl->cginame && ctrl->cginame->data &&
-		!strcmp(dyntab_val(&form->dlg_ctrl, 0, 0), ctrl->cginame->data));
+	int b_first = form->prevstep != HtmlSaveDlg;
 
 	/* End dialog & return if no save */
  	if(!strcmp(confirm, "_EVA_NOSAVE") || (clicbtn && *clicbtn == BUTN_CLOSE && form->prevstep == HtmlView))
@@ -503,16 +627,17 @@ int form_save_dialog(				/* return : 0 on success, other on error */
 		RETURN_OK;
 	}
 
-	/* Check duplicates */	
 	form->error = 0;
-	if(dyntab_sz(&form->id_obj, 0, 0)) form->b_modified = 0;
-	if(form_check_keys(cntxt)) STACK_ERROR;
-
-	if(form->error < 4 && strcmp(confirm, "_EVA_NOSAVE"))
+	if(strcmp(confirm, "_EVA_NOSAVE"))
 	{
 		/* Check data for each input control */
 		form->step = InputCheck;
+		if(dyntab_sz(&form->id_obj, 0, 0)) form->b_modified = 0;
 		if(ctrl_add_child(cntxt, 0, NULL)) STACK_ERROR;
+
+		/* Check duplicates if no fatal error or close unchanged form */	
+		if(form->error < 2 && !(b_first && !form->b_modified && clicbtn && *clicbtn & BUTN_CLOSE) &&
+			form_check_keys(cntxt)) STACK_ERROR;
 	}
 
 	if(b_first)
@@ -553,6 +678,9 @@ int form_save_dialog(				/* return : 0 on success, other on error */
 		if(cgival.nbrows) form->savedlg_outmode |= 4;
 		CTRL_GET_CGI_SUBFIELD("WARN");
 		if(cgival.nbrows) form->savedlg_outmode |= 1;
+
+		/* Determine if confirm dialog needed */
+		b_nodlg = (actionbtn || form->prevstep != HtmlSaveDlg) && form->error < 2;
 	}
 
 	/* Disable save if errors */
@@ -563,11 +691,11 @@ int form_save_dialog(				/* return : 0 on success, other on error */
 	}
 
 	/* If dialog applicable */
-	if(!b_nodlg && form->error < 4)
+	form->step = HtmlSaveDlg;
+	if(!b_nodlg)
 	{
 		/* Output selected controls in form->html_tabs */
 		form->html = &form->html_tabs;
-		form->step = HtmlSaveDlg;
 		if(ctrl_add_child(cntxt, 0, NULL)) STACK_ERROR;
 
 		/* Handle if no selected control */

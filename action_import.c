@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : action_import.c
 ** Description : handling fonctions for import actions
 **      Author : Alain BOUTE
@@ -12,7 +18,7 @@
 ** TypeDef : ImportRelSpec
 ** Description : import relation specification
 *********************************************************************/
-typedef struct _ImportRelSpec 
+typedef struct _ImportRelSpec
 {
 	unsigned long id;
 	int b_key;
@@ -26,7 +32,7 @@ typedef struct _ImportRelSpec
 ** TypeDef : ImportSpec
 ** Description : import parameters & results
 *********************************************************************/
-typedef struct _ImportSpec 
+typedef struct _ImportSpec
 {
 	DynTable data;					/* table holding file data : fields title line + 1 row per record */
 	DynTable formstamp;				/* form stamp for new objects */
@@ -45,6 +51,8 @@ typedef struct _ImportSpec
 *********************************************************************/
 #define ERR_FUNCTION "import_tabrc_file"
 #define ERR_CLEANUP DYNTAB_FREE(id_obj); \
+					DYNTAB_FREE(val); \
+					DYNTAB_FREE(newval); \
 					DYNTAB_FREE(srchval); \
 					DYNTAB_FREE(relobj); \
 					DYNTAB_FREE(relform); \
@@ -62,6 +70,7 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 ){
 	DynTable id_obj = { 0 };
 	DynTable val = { 0 };
+	DynTable newval = { 0 };
 	DynTable srchval = { 0 };
 	DynTable relobj = { 0 };
 	DynTable relform = { 0 };
@@ -89,7 +98,7 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 		}
 
 		/* Check if field is a relation */
-		else if(relfldsrc) for(i = 0; i < relfldsrc->nbrows; i++) 
+		else if(relfldsrc) for(i = 0; i < relfldsrc->nbrows; i++)
 			if(!dyntab_cmp(data, 0, j, relfldsrc, i, 0))
 			{
 				/* If field is a relation : retrieve related field id */
@@ -100,7 +109,7 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 			}
 
 		/* Check if field is in primary key */
-		if(keyfields && !b_update) for(i = 0; i < keyfields->nbrows; i++) 
+		if(keyfields && !b_update) for(i = 0; i < keyfields->nbrows; i++)
 			if(!dyntab_cmp(data, 0, j, keyfields, i, 0))
 			{
 				/* If field is in primary keys : store key data column in cell->col */
@@ -115,7 +124,7 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 	}
 
 	/* Loop on data lines */
-	for(i = 1; i < data->nbrows; i++) 
+	for(i = 1; i < data->nbrows; i++)
 	{
 		/* If update mode : check target object formstamp */
 		int b_new = 1;
@@ -134,7 +143,7 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 			b_new = 0;
 		}
 		/* Else : check primary keys - search for existing object */
-		else if(keyfields->nbrows)
+		else if(keyfields && keyfields->nbrows)
 		{
 			/* Initialize filter with AND condition & destination form */
 			qry_build_free(&flt);
@@ -154,7 +163,12 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 
 			/* Query for objects matching key filter */
 			if(qry_filter_objects(cntxt, &id_obj, &flt)) STACK_ERROR;
-			b_new = id_obj.nbrows != 1;
+			b_new = !id_obj.nbrows;
+			if(!b_new)
+			{
+				idobj = DYNTAB_TOUL(&id_obj);
+				id_obj.nbrows = 1;
+			}
 		}
 
 		/* Create new object if applicable */
@@ -162,28 +176,32 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 		{
 			printf("++++");
 			if(qry_add_new_obj(cntxt, &id_obj, idformstamp)) STACK_ERROR;
+			idobj = DYNTAB_TOUL(&id_obj);
 		}
 		else printf("====");
 		printf(" %lu/%lu : %s, %s, %s, %s<br>\n", i, data->nbrows - 1, dyntab_val(data, i, 0), dyntab_val(data, i, 1), dyntab_val(data, i, 2), dyntab_val(data, i, 3));
 		fflush(stdout);
 
-		/* Loop on data columns : add object data */
+		/* Loop on data columns : update object data - all fields if new - non key fields else */
 		for(j = b_update ? 1 : 0; j < data->nbcols; j++) if(b_new || !fields[j].b_key)
 		{
-			/* Handle update mode */
+			/* Get field values */
 			dyntab_from_list(&val, DYNTAB_VAL_SZ(data, i, j), dyntab_val(multvalsep, 0, 0), 0, 2);
+
+			/* Handle update mode */
 			if(b_update)
 			{
 				if(fields[j].modif == F_RelObj)
 					for(k = 0; k < val.nbrows; k++) dyntab_cell(&val, k, 0)->b_relation = 1;
-				if(qry_update_idobj_idfield(cntxt, idobj, fields[j].id, &val, 1)) STACK_ERROR;
+				if(qry_update_idobj_idfield(cntxt, idobj, fields[j].id, &val, 2)) STACK_ERROR;
 				continue;
 			}
 
 			/* Loop on multiple values : add each value */
+			DYNTAB_FREE(newval);
 			for(k = 0; k < val.nbrows; k++)
 			{
-				/* Strip spaces at beginning & end of value */
+				/* Initialize value */
 				DynTableCell cell = {0};
 				cell.txt = dyntab_val(&val, k, 0);
 				cell.len = dyntab_sz(&val, k, 0);
@@ -196,17 +214,17 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 				/* If field is not relation */
 				if(!fields[j].id_relfld && !fields[j].i_rel)
 				{
-					cell.IdObj = DYNTAB_TOUL(&id_obj);
 					cell.IdField = fields[j].id;
+					cell.field = dyntab_val(data, 0, j);
 					cell.b_relation = (char)(fields[j].modif == F_RelObj);
-					if(qry_add_val(cntxt, &cell, b_new ? 0 : 1, NULL)) STACK_ERROR;
+					DYNTAB_ADD_CELLP(&newval, newval.nbrows, 0, &cell);
 				}
 				else if(fields[j].i_rel >= 0)
 				{
 					/* Search for related object */
 					DYNTAB_SET_CELLP(&srchval, 0, 0, &cell);
 					DYNTAB_SET_CELL(&relform, 0, 0, relformdest, fields[j].i_rel, 0);
-
+					DYNTAB_FREE(relobj);
 					if(qry_field_value(cntxt, &relobj, fields[j].l_relfld, Exact, &srchval, &relform) ||
 						(!relobj.nbrows &&
 							qry_field_value(cntxt, &relobj, fields[j].l_relfld, Like, &srchval, &relform)))
@@ -224,6 +242,8 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 					}
 
 					/* Add relation */
+					cell.IdField = fields[j].id;
+					cell.field = dyntab_val(data, 0, j);
 					cell.b_relation = 1;
 					cell.IdValue = 0;
 					cell.IdField = fields[j].id;
@@ -234,26 +254,29 @@ int import_tabrc_file(				/* return : 0 on success, other on error */
 						cell.IdObj = DYNTAB_TOUL(&relobj);
 						cell.txt = dyntab_val(&id_obj, 0, 0);
 						cell.len = dyntab_sz(&id_obj, 0, 0);
-								
+
 						/* Read maximum value number */
 						sprintf(sql, "SELECT MAX(Num) FROM TLink WHERE IdObj=%lu AND IdField=%lu AND DateDel IS NULL",
 									cell.IdObj, cell.IdField);
 						if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, &srchval, 2)) STACK_ERROR;
 						cell.Num = DYNTAB_TOUL(&srchval) + 1;
+						if(qry_add_val(cntxt, &cell, b_new ? 0 : 1, NULL)) STACK_ERROR;
 					}
 					else
 					{
 						/* Add relation in imported object if direct relation */
-						cell.IdObj = DYNTAB_TOUL(&id_obj);
 						cell.txt = dyntab_val(&relobj, 0, 0);
 						cell.len = dyntab_sz(&relobj, 0, 0);
 						cell.Num = k + 1;
+						DYNTAB_ADD_CELLP(&newval, newval.nbrows, 0, &cell);
 					}
-					if(qry_add_val(cntxt, &cell, b_new ? 0 : 1, NULL)) STACK_ERROR;
-					DYNTAB_FREE(relobj);
 				}
 			}
-			DYNTAB_FREE(val);
+
+			/* Update field values in object */
+			if((!fields[j].id_relfld && !fields[j].i_rel ||
+				strcmp("_EVA_RELREVERSE", dyntab_val(reltype, fields[j].i_rel, 0))) &&
+				qry_update_idobj_idfield(cntxt, idobj, fields[j].id, &newval, b_new ? 0 : 2)) STACK_ERROR;
 		}
 	}
 
@@ -374,7 +397,7 @@ int import_objdata_check(			/* return : 0 on success, other on error */
 					{
 						DynTableCell *c1 = dyntab_cell(&curobjdata, r, 0);
 						DynTableCell *c2 = dyntab_cell(&dbobjdata, r, 0);
-						if(c1->Num != c2->Num || c1->Line != c2->Line || 
+						if(c1->Num != c2->Num || c1->Line != c2->Line ||
 							STRCMPNUL(c1->txt, c2->txt) || STRCMPNUL(c1->field, c2->field))
 							break;
 					}
@@ -442,8 +465,8 @@ int import_objdata_check(			/* return : 0 on success, other on error */
 		c->Num = DYNTAB_TOULRC(objdata, i, 4);
 		c->Line = DYNTAB_TOULRC(objdata, i, 5);
 
-		/* Add up to 30 filter conditions */
-		if(flt.nbnode < 30)
+		/* Add up to 29 filter conditions (32 tables max in MySQL) */
+		if(flt.nbnode < 29)
 		{
 			QryBuilNode *node = flt.node + flt.nbnode;
 			unsigned long join = flt.nbnode;
@@ -509,7 +532,6 @@ int cgi_select_files(				/* return : 0 on success, other on error */
 	}
 
 	/* Output page header */
-	cntxt->jsfunc = 1;
 	cntxt->cgiencodemultipart = 1;
 	put_html_page_header(cntxt, NULL, "Importer des données", NULL, 3);
 	cntxt->form->html = &buf;
@@ -535,7 +557,7 @@ int cgi_select_files(				/* return : 0 on success, other on error */
 		DYNTAB_ADD_CELLP(&libfiles, libfiles.nbrows, 0, NULL);
 		dyntab_sort(&libfiles, qsort_col0);
 		CTRL_CGINAMESUBFIELD(&name, NULL, "SELFILES");
-		if(put_html_list(cntxt, name, &libfiles, &cgival, 1, 0, 0, 0, 0)) STACK_ERROR;
+		if(put_html_list(cntxt, name, &libfiles, &cgival, 1, 0, 0, 0, 0, NULL)) STACK_ERROR;
 	}
 
 	/* Output import & goback buttons */
@@ -555,7 +577,7 @@ int cgi_select_files(				/* return : 0 on success, other on error */
 
 /*********************************************************************
 ** Function : import_objdata_file
-** Description : import data from an object records file 
+** Description : import data from an object records file
 *********************************************************************/
 #define ERR_FUNCTION "import_objdata_file"
 #define ERR_CLEANUP	M_FREE(name); \
@@ -589,7 +611,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	if(!files) return 0;
 
 	/* Read selected files if absent - return if none selected */
-	if(chdir(cntxt->path) || chdir("..") || chdir("objlib")) RETURN_ERR_DIRECTORY(1);
+	if(chdir(cntxt->rootdir) || chdir("objlib")) RETURN_ERR_DIRECTORY;
 	if(!files->nbrows && cgi_select_files(cntxt, i_ctrl, files)) STACK_ERROR;
 	if (!files->nbrows) RETURN_OK;
 
@@ -601,7 +623,6 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	DYNTAB_ADD_INT(&objFORM, 0, 0, OBJ_FORM_CONTROL);
 
 	/* Output page header */
-	cntxt->jsfunc = 1;
 	put_html_page_header(cntxt, NULL, "Importer des données", NULL, 3);
 	cntxt->form->html = &buf;
 	html = &buf;
@@ -647,7 +668,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 		}
 		else
 		{
-			RETURN_ERROR("Référence à un formulaire non unique", 
+			RETURN_ERROR("Référence à un formulaire non unique",
 						ERR_PUT_TXT("Formulaire : ", dyntab_val(&forms, i, 1), dyntab_sz(&forms, i, 1)));
 		}
 	}
@@ -667,7 +688,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	{
 		if(import_objdata_check(cntxt, &objdata, &id_list)) STACK_ERROR;
 		for(j = 1, k0 = k, k = 0; j < objdata.nbrows; j++)
-			if(dyntab_cell(&objdata, j, 0)->col == 1) k++; 
+			if(dyntab_cell(&objdata, j, 0)->col == 1) k++;
 		printf(" (%lu:%lu)\n", i, k);
 	}
 	printf("</pre></font>");
@@ -679,7 +700,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	{
 		unsigned long cnt[5] = {0}, status = dyntab_sz(&form->id_obj, 0, 0) ? 3 : 2;
 		DYNBUF_ADD3_CELL(html, "<tr><td>", &forms, i, 1, NO_CONV, "</td>");
-		for(j = 1; j < objdata.nbrows; j++) 
+		for(j = 1; j < objdata.nbrows; j++)
 		{
 			DynTableCell *val = dyntab_cell(&objdata, j, 0);
 			/* val->col values mean :
@@ -688,21 +709,21 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 				3: object exist and is unique
 				4: object exist with multiple instance */
 			if(val->col) status = val->col;
-			if(!strcmp("_EVA_FORMSTAMP", dyntab_val(&objdata,j, 1)) && 
+			if(!strcmp("_EVA_FORMSTAMP", dyntab_val(&objdata,j, 1)) &&
 				!dyntab_cmp(&forms, i, 0, &objdata,j, 2))
 			{
 				cnt[0]++;
 				cnt[status ? status : 2]++;
 			}
 		}
-		for(j = 0; j < 5; j++) 
+		for(j = 0; j < 5; j++)
 			DYNBUF_ADD3_INT(html, "<td align=center>", cnt[j], "</td>");
 		DYNBUF_ADD_STR(html, "</tr>");
 	}
 	DYNBUF_ADD_STR(html, "<tr><td align=right><b>Total</td>");
 	{
 		unsigned long cnt[5] = {0}, status = dyntab_sz(&form->id_obj, 0, 0) ? 3 : 2;
-		for(j = 1; j < objdata.nbrows; j++) 
+		for(j = 1; j < objdata.nbrows; j++)
 		{
 			DynTableCell *val = dyntab_cell(&objdata, j, 0);
 			if(val->col) status = val->col;
@@ -712,7 +733,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 				cnt[status ? status : 2]++;
 			}
 		}
-		for(j = 0; j < 5; j++) 
+		for(j = 0; j < 5; j++)
 			DYNBUF_ADD3_INT(html, "<td align=center><b>", cnt[j], "</td>");
 	}
 	DYNBUF_ADD_STR(html, "</table>");
@@ -800,7 +821,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	if(put_html_button(cntxt, "NOP", "Revenir", "_eva_btn_gobackobj_fr.gif", "_eva_btn_gobackobj_fr_s.gif",
 							"Retourne à la page précédente", 0, 0)) STACK_ERROR;
 	DYNBUF_ADD_STR(html, "</td><td align=center>");
-	DYNBUF_ADD3_CELL(&name, "B$#.DELOBJLIB=", files, 0, 0, NO_CONV, "$1");
+	DYNBUF_ADD3_CELL(&name, "B$#.DELOBJLIB=", files, 0, 0, HTML_NO_QUOTE, "$1");
 	if(put_html_button(cntxt, name->data, "Supprimer le fichier", "_eva_btn_delfile_fr.gif", "_eva_btn_delfile_fr_s.gif",
 							"Supprimer le fichier qui vient d'être importé", 0, 0)) STACK_ERROR;
 	DYNBUF_ADD_STR(html, "</td></tr></table><br>");
@@ -847,7 +868,7 @@ int action_import(					/* return : 0 on success, other on error */
 	char *btn = CGI_CLICK_BTN_SUBFIELD;
 
 	/* Read import basic parameters */
-	DYNTAB_FIELD(&file, &form->objdata, FILE);
+	if(form_get_field_values(cntxt, &file, "_EVA_FILE", 0, 0)) STACK_ERROR;
 	DYNTAB_FIELD(&formdest, &form->objdata, FORM);
 
 	/* If flat file import */
@@ -861,10 +882,10 @@ int action_import(					/* return : 0 on success, other on error */
 		{
 			/* Search existing objects with destination formstamp */
 			char qry[1024];
-			printf("Préparation à l'effacement des fiches ...", filename);
+			printf("Préparation à l'effacement des fiches ...");
 			fflush(stdout);
 			sprintf(qry,
-				"SELECT DISTINCT IdObj FROM TLINK WHERE IdField=%lu AND IdRelObj=%s", 
+				"SELECT DISTINCT IdObj FROM TLINK WHERE IdField=%lu AND IdRelObj=%s",
 						cntxt->val_FORMSTAMP, dyntab_val(&formdest, 0, 0));
 			if(sql_exec_query(cntxt, qry)) STACK_ERROR;
 
@@ -907,7 +928,7 @@ int action_import(					/* return : 0 on success, other on error */
 
 		cntxt->b_terminate = 15;
 	}
-	else 
+	else
 	{
 		/* Import EVA controls format file */
 		if(import_objdata_file(cntxt, i_ctrl, &file)) STACK_ERROR;

@@ -1,14 +1,18 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_input_color.c
-** Description : HTML handling functions for INPUT controls of type COLOR
+** Description : handling functions for INPUT controls of type COLOR
 **      Author : Alain BOUTE
 **     Created : Feb 9 2003
 *********************************************************************/
 
 #include "eva.h"
 
-#define X_SIZE	10	/*	color cell width for color table button */
-#define Y_SIZE	10	/*	color cell height for color table button */
 /*********************************************************************
 ** Function : ctrl_add_input_color
 ** Description : handles INPUT controls of type COLOR
@@ -22,99 +26,54 @@ int ctrl_add_input_color(			/* return : 0 on success, other on error */
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	DynBuffer *name = NULL;
-	unsigned long i, x , y;
-	unsigned int r, g, b, v[] = { 0, 64, 128, 192, 255 };
-	char rgb[16];
-	char *btn = i_ctrl == form->i_ctrl_clic ? CGI_CLICK_BTN_SUBFIELD : "";
-	CGIData *cgi = cntxt->cgi ? cntxt->cgi + cntxt->cgibtn : NULL;
+	unsigned long i;
 
 	switch(form->step)
 	{
-	case CtrlRead:
-		if(strcmp(btn, "SETCOLOR")) break;
-
-		/* Read click coordinates */
-		y = (cgi && cgi->value) ? strtoul(cgi->value, NULL, 10) : 0;
-		x = (cntxt->cgibtn && (cgi - 1)->value) ? strtoul((cgi - 1)->value, NULL, 10) : 0;
-		if(y > Y_SIZE * 5)
-		{
-			r = g = b = (unsigned int)(x / X_SIZE / 24.0 * 255);
-		}
-		else
-		{
-			b = v[y / Y_SIZE];
-			g = v[x / (X_SIZE * 5)];
-			r = v[x % (X_SIZE * 5) / X_SIZE];
-		}
-		sprintf(rgb, "%02X%02X%02X", r, g, b);
-		dyntab_del_numline(&ctrl->val, cgi->Num, cgi->Line);
-		DYNTAB_ADD_NL(&ctrl->val, ctrl->val.nbrows, 0, rgb, 6, cgi->Num, cgi->Line, 1);
-		ctrl->b_modified = 1;
-		break;
-
 	case HtmlPrint:
 	case HtmlView:
-		/* Output control header */
-		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
-
-		/* Output each value */
-		for(i = 0; i < ctrl->val.nbrows; i++)
-		{
-			/* Separate multiple values with a line break */
-			if(i) DYNBUF_ADD_STR(form->html, "<br>");
-
-			/* Output transparent image with color background */
-			if(dyntab_sz(&ctrl->val, i, 0) == 6)
-			{
-				DYNBUF_ADD3_CELL(form->html, "<table border=1 cellpadding=0 cellspacing=0 bgcolor=#", &ctrl->val, i, 0, NO_CONV, ">"
-												"<tr><td width=50 height=20>&nbsp;</td></tr></table>");
-			}
-		}
-
-		/* Output control footer */
-		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
-		break;
-
 	case HtmlEdit:
-		/* Set default values */
-		ctrl->LINES = 1;
-		ctrl->COLUMNS = 6;
-
 		/* Output control header */
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
 
+		/* Handle empty value in view mode */
+		if(form->step != HtmlEdit && !ctrl->val.nbrows && *ctrl->LABEL_NOSEL) DYNBUF_ADD(form->html, ctrl->LABEL_NOSEL, 0, TO_HTML);
+
 		/* Output each value */
-		for(i = 0; i < (ctrl->val.nbrows ? ctrl->val.nbrows : 1); i++)
+		for(i = 0; !i || i < ctrl->val.nbrows; i++)
 		{
 			/* Separate multiple values with a line break */
 			if(i) DYNBUF_ADD_STR(form->html, "<br>");
 
-			/* Output color button & text input for RGB value */
-			DYNBUF_ADD_STR(form->html, "<table border=0 cellpadding=0 cellspacing=0");
-			if(dyntab_sz(&ctrl->val, i, 0) == 6) DYNBUF_ADD3_CELL(form->html, " bgcolor=#", &ctrl->val, i, 0, NO_CONV, "");
-			DYNBUF_ADD_STR(form->html, "><tr>");
+			/* Output table for color display */
+			DYNBUF_ADD_STR(form->html, "<table border=1 cellpadding=0 cellspacing=0><tr>");
+
+			/* Output color cell */
+			DYNBUF_ADD_STR(form->html, "<td width=50 height=20");
+			if(dyntab_sz(&ctrl->val, i, 0))
+				DYNBUF_ADD3_CELL(form->html, " bgcolor=#", &ctrl->val, i, 0, NO_CONV, "")
+			else
+				DYNBUF_ADD_STR(form->html, " background=/img/bg_rayures_grises.gif");
+
+			/* Handle edit mode */
 			if(form->step == HtmlEdit)
 			{
-				DYNBUF_ADD_STR(form->html, "<td>");
-				if(!strcmp(btn, "RGB"))
-				{
-					CTRL_CGINAMEBTN(&name, dyntab_cell(&ctrl->val, i, 0), add_sz_str("SETCOLOR"));
-					if(put_html_button(cntxt, name->data, NULL, "_eva_colortable.jpg", NULL, 
-						"Cliquez pour choisir la couleur", 0, 2)) STACK_ERROR;
-				}
-				else
-				{
-					CTRL_CGINAMEBTN(&name, dyntab_cell(&ctrl->val, i, 0), add_sz_str("RGB"));
-					if(put_html_button(cntxt, name->data, NULL, "_eva_colorcell.gif", "_eva_colorcell_s.gif",
-						"Cliquez pour choisir une couleur ou entrez le code RGB de la couleur dans le texte de droite", 0, 0)) STACK_ERROR;
-					DYNBUF_ADD_STR(form->html, "</td><td>");
-					if(ctrl_add_text_value(cntxt, ctrl, i, NULL, 0, NULL)) STACK_ERROR;
-				}
+				CTRL_CGINAMEVAL(&name, i);
+				cntxt->jsColorInput = 1;
+				if(cntxt->jsenabled)
+					DYNBUF_ADD3_BUF(form->html, " onClick=\"showColor(this,'", name, NO_CONV, "')\"");
+			}
+			DYNBUF_ADD_STR(form->html, "></td><td>");
+
+			/* Output value or text input if edit mode */
+			if(form->step == HtmlEdit)
+			{
+				DYNBUF_ADD3_CELL(form->html, "<input type=text size=6 value='", &ctrl->val, i, 0, HTML_NO_QUOTE, "' name='");
+				DYNBUF_ADD_BUF(form->html, name, NO_CONV);
+				DYNBUF_ADD_STR(form->html, "'>");
 			}
 			else
-			{
-				DYNBUF_ADD3_CELL(form->html, "<td width=70 height=20>&nbsp</td><td>", &ctrl->val, i, 0, NO_CONV, "");
-			}
+				DYNBUF_ADD_CELL(form->html, &ctrl->val, i, 0, TO_HTML);
 			DYNBUF_ADD_STR(form->html, "</td></tr></table>");
 		}
 

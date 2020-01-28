@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_output_stats.c
 ** Description : handling functions for output controls of type LIST/STATS (tables of statistics)
 **      Author : Alain BOUTE
@@ -23,15 +29,15 @@ int ctrl_calc_output_fieldval_tooltip(		/* return : 0 on success, other on error
 	DynBuffer **html = cntxt->form->html;
 
 	DYNBUF_ADD_STR(html, "[");
-	DYNBUF_ADD(html, pvf->label, 0, HTML_NO_QUOTE);
+	DYNBUF_ADD(html, pvf->label, 0, HTML_TOOLTIP);
 	DYNBUF_ADD_STR(html, "=");
 	if(dyntab_sz(&pvf->labels, i, 0))
 	{
 		if(put_value_fmt(cntxt, &tmp, DYNTAB_VAL_SZ(&pvf->labels, i, 0), pvf->dispfmt)) STACK_ERROR;
-		DYNBUF_ADD_BUF(html, tmp, HTML_NO_QUOTE);
+		DYNBUF_ADD_BUF(html, tmp, HTML_TOOLTIP);
 	}
 	else
-		DYNBUF_ADD_CELL(html, &pvf->emptyval, 0, 0, HTML_NO_QUOTE);
+		DYNBUF_ADD_CELL(html, &pvf->emptyval, 0, 0, HTML_TOOLTIP);
 	DYNBUF_ADD_STR(html, "]");
 
 	RETURN_OK_CLEANUP;
@@ -61,9 +67,10 @@ int ctrl_calc_output_pvt_val(		/* return : 0 on success, other on error */
 	int b_row = i < ROWCNT;
 	int b_col = j < COLCNT;
 	char *fmt = pv->data ? pv->data->dispfmt : "";
+	int always_list = DYNTAB_FIELD_CELL(pv->srcdata, PVTLIST_ALWAYS) != NULL;
 
 	DYNBUF_ADD_STR(html, "&nbsp;");
-	if(b_vallinks) 
+	if(b_vallinks)
 	{
 
 		/* Prepare title for link to objects list */
@@ -74,21 +81,22 @@ int ctrl_calc_output_pvt_val(		/* return : 0 on success, other on error */
 		if(b_row && b_col) DYNBUF_ADD_STR(html, " ¤ ");
 		if(b_col && ctrl_calc_output_fieldval_tooltip(cntxt, pv->col, j)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "\n");
-		if(c->IdObj == 1)
+		if(c->IdObj == 1&& !always_list)
 		{
 			DYNBUF_ADD_STR(html, "Cliquez pour ouvrir la fiche");
 		}
 		else
 			DYNBUF_ADD_STR(html, "Cliquez pour voir la liste des fiches");
 		DYNBUF_ADD_STR(html, "'");
+		if(put_showhelp(cntxt, html)) STACK_ERROR;
 
 		/* Prepare button name for link to objects list */
-		if(c->IdObj > 1)
+		if(c->IdObj > 1 || always_list)
 		{
 			char rc[64];
 			if(ctrl_cgi_name(cntxt, ctrl, NULL, 1, &name, 'B',
 					rc, sprintf(rc, "PVTLIST=%lu,%lu,%lu,%lu,%lu,%lu",
-									pv->srcdata->cell->IdObj, 
+									pv->srcdata->cell->IdObj,
 									pv->data ? pv->data - pv->datas : 0,
 									pv->row ? pv->row - pv->rows : 0,
 									pv->col ? pv->col - pv->cols : 0,
@@ -110,7 +118,7 @@ int ctrl_calc_output_pvt_val(		/* return : 0 on success, other on error */
 	{
 		DYNBUF_ADD_CELL(html, pv->res, i, j, TO_HTML);
 	}
-	else 
+	else
 		DYNBUF_ADD(html, number_space_thousands(dyntab_val(pv->res, i, j), pv->data ? pv->data->decimals : 0), 0, TO_HTML);
 	if(b_vallinks) DYNBUF_ADD_STR(html, "</a>");
 	DYNBUF_ADD_STR(html, "&nbsp;");
@@ -125,7 +133,7 @@ int ctrl_calc_output_pvt_val(		/* return : 0 on success, other on error */
 ** Description : output title of a pivot table
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_calc_output_title"
-#define ERR_CLEANUP M_FREE(name)	
+#define ERR_CLEANUP M_FREE(name)
 int ctrl_calc_output_title(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
@@ -140,16 +148,15 @@ int ctrl_calc_output_title(			/* return : 0 on success, other on error */
 		char tmp[32];
 		sprintf(tmp, "EXPORTPVT=%lu", pv->srcdata->cell->IdObj);
 		if(ctrl_cgi_name(cntxt, ctrl, NULL, 1, &name, 'B', tmp, strlen(tmp))) STACK_ERROR;
-		DYNBUF_ADD_STR(html, "<table noborder width=100%><tr>");
-		if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, NULL, pv->srcdata, 0,
-								add_sz_str("Cliquez pour modifier l'indicateur"), "", "LABEL+SYMBOL+OBJNOTES"))
+		DYNBUF_ADD_STR(html, "<table width=100%><tr><td class=NoBorder>");
+		if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, pv->srcdata, 0, NULL, "LABEL+OBJNOTES"))
 			STACK_ERROR;
-		DYNBUF_ADD_STR(html, "</td><td align=right>");
-		if(!pv->rowcolclic && put_html_button(cntxt, name->data, "Exporter", "_eva_excel_icon_small.gif", "_eva_excel_icon_small_s.gif", 
+		DYNBUF_ADD_STR(html, "</td><td align=right class=NoBorder>");
+		if(!pv->rowcolclic && put_html_button(cntxt, name->data, "Exporter", "_eva_excel_icon_small.gif", "_eva_excel_icon_small_s.gif",
 			"Cliquez pour obtenir le tableau de statistiques au format Excel", 0, 0)) STACK_ERROR;
-		DYNBUF_ADD_STR(html, "</tr></table>");
+		DYNBUF_ADD_STR(html, "</td></tr></table>");
 	}
-	else 
+	else
 		DYNBUF_ADD(html, pv->label, 0, TO_HTML);
 
 	RETURN_OK_CLEANUP;
@@ -204,6 +211,7 @@ int ctrl_calc_prepare_objlist(			/* return : 0 on success, other on error */
 	if(!pvf || !dyntab_sz(&pvf->expr, 0, 0)) RETURN_OK;
 
 	/* Handle relation to base table */
+	/* TODO use FROM clause if relation to SQL expression */
 	switch(pvf->relmode) {
 	case RelReverse:
 		DYNBUF_ADD_STR(&expr, "<-");
@@ -212,9 +220,11 @@ int ctrl_calc_prepare_objlist(			/* return : 0 on success, other on error */
 		DYNBUF_ADD_STR(&expr, "->");
 	}
 
-	/* Add column for field in display table definition */
-	DYNBUF_ADD_CELL(&expr, &pvf->expr, 0, 0, NO_CONV);
-	DYNTAB_ADD_FIELD_NL(disptbldata, disptbldata->nbrows, 0, expr->data, expr->cnt, "_EVA_DISPLAYFIELDS", 0, 1, 1, *col);
+	/* Add column for field in display table definition - TODO use FROM clause if relation to SQL expression */
+	if(qry_eval_sqlexpr_var(cntxt, &expr, dyntab_val(&pvf->expr, 0, 0), &pvf->srcdata, NULL)) CLEAR_ERROR;
+	DYNTAB_ADD_FIELD_NL(disptbldata, disptbldata->nbrows, 0,
+		(pvf->relmode && strchr(dyntab_val(&pvf->expr, 0, 0), '[')) ?
+			"***" : expr->data, 0, "_EVA_DISPLAYFIELDS", 0, 1, 1, *col);
 	DYNTAB_ADD_FIELD_NL(disptbldata, disptbldata->nbrows, 0, pvf->label, 0, "_EVA_DISPLAYLABELS", 0, 1, 1, *col);
 	if(pvf->dispfmt && pvf->dispfmt[0])
 		DYNTAB_ADD_FIELD_NL(disptbldata, disptbldata->nbrows, 0, pvf->dispfmt, 0, "_EVA_DISPLAYFORMAT", 0, 1, 1, *col);
@@ -260,8 +270,8 @@ int ctrl_calc_output_pvtcell_objlist(	/* return : 0 on success, other on error *
 	/* Build clicked value objects list */
 	DYNBUF_ADD_STR(&sql,
 		"-- ctrl_calc_stats - Build clicked value objects list\n"
-		"CREATE TEMPORARY TABLE IdList TYPE=HEAP\n");
-	if(pv->basetable) 
+		"CREATE TEMPORARY TABLE IdList ENGINE=MEMORY\n");
+	if(pv->basetable)
 	{
 		DYNBUF_ADD3(&sql,
 			"SELECT DISTINCT ", pv->basetable, 0, NO_CONV, ".IdObj ");
@@ -296,7 +306,7 @@ int ctrl_calc_output_pvtcell_objlist(	/* return : 0 on success, other on error *
 	if(ctrl_calc_output_title(cntxt, i_ctrl, pv)) STACK_ERROR;
 	CTRL_CGINAMEBTN(&name, NULL, add_sz_str("PVTLISTOFF"));
 	DYNBUF_ADD_STR(html, "</td><td align=right>");
-	if(put_html_button(cntxt, name->data, NULL, "_eva_btn_gobacktable_fr.gif", "_eva_btn_gobacktable_fr_s.gif", 
+	if(put_html_button(cntxt, name->data, NULL, "_eva_btn_gobacktable_fr.gif", "_eva_btn_gobacktable_fr_s.gif",
 		"Affiche le tableau de statistiques complet\n"
 		"Vous pouvez aussi utiliser le bouton 'Page précédente' de votre navigateur (plus rapide)" , 0, 0)) STACK_ERROR;
 	DYNBUF_ADD_STR(html, "</td></tr><tr>");
@@ -314,17 +324,20 @@ int ctrl_calc_output_pvtcell_objlist(	/* return : 0 on success, other on error *
 		unsigned long col = 1;
 		DYNTAB_ADD_FIELD_NL(&disptbldata, disptbldata.nbrows, 0, "_EVA_SYMBOL_LABEL", 0, "_EVA_OPENBUTTON", 0, 1, 1, 0);
 		DYNTAB_ADD_FIELD_NL(&disptbldata, disptbldata.nbrows, 0, "_EVA_SEARCHONLOAD", 0, "_EVA_TABLESEARCH", 0, 1, 1, 0);
+		DYNTAB_ADD_FIELD_NL(&disptbldata, disptbldata.nbrows, 0, "1", 0, "_EVA_EXPORTLIST", 0, 1, 1, 0);
+		DYNTAB_ADD_FIELD_NL(&disptbldata, disptbldata.nbrows, 0, "1", 0, "_EVA_TABLE_NOTITLESHRINK", 0, 1, 1, 0);
 		if(ctrl_calc_prepare_objlist(cntxt, &disptbldata, &col, pv->row) ||
 			ctrl_calc_prepare_objlist(cntxt, &disptbldata, &col, pv->col) ||
 			ctrl_calc_prepare_objlist(cntxt, &disptbldata, &col, pv->data)) STACK_ERROR;
 	}
 	else
-		if(qry_obj_field(cntxt, &disptbldata, pv->objlist, NULL)) STACK_ERROR;
+		if(qry_obj_field(cntxt, &disptbldata, pv->objlist, NULL) || ctrl_read_baseobj(cntxt, &disptbldata)) STACK_ERROR;
 	if(table_read_controls(cntxt, i_ctrl, disptbldata.nbrows ? &disptbldata : NULL) ) STACK_ERROR;
 	ctrl->objtbl->from_idlist = 1;
 	ctrl->objtbl->lines = 40;
+	ctrl->LABEL = pv->label;
 	if(table_process_controls(cntxt, i_ctrl)) STACK_ERROR;
-	if(table_put_html_obj_list(cntxt, i_ctrl)) STACK_ERROR;
+	if(!cntxt->b_terminate && table_put_html_obj_list(cntxt, i_ctrl)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -348,36 +361,38 @@ int ctrl_calc_output_field_label(	/* return : 0 on success, other on error */
 	DynBuffer **html = cntxt->form->html;
 	DynTable objdata = {0};
 	char printbuf[1024];
-	size_t len = dyntab_sz(&pvf->labels, i, 0);
-	char *txt = dyntab_val(&pvf->labels, i, 0);
 	DynTableCell *c = dyntab_cell(&pvf->labels, i, 0);
 	unsigned long id_obj = c ? c->IdObj : 0;
-	if(!len) txt = dyntab_val(&pvf->emptyval, 0, 0);
+	if(!c || !c->len) c = dyntab_cell(&pvf->emptyval, 0, 0);
 	DYNBUF_ADD_STR(html, "<font size=-1>");
 	if(pvf->dispfmt && !strcmp(pvf->dispfmt, "_EVA_RELATION") && id_obj && !pv->exportparams)
 	{
 		if(qry_obj_field(cntxt, &objdata, id_obj, NULL)) STACK_ERROR;
+		/* TODO - use code from ctrl_add_symbol_btn to handle multiple formstamps */
 		if(qry_obj_label(cntxt, &objnotes, NULL, &objnotes, NULL, &objnotes, NULL, NULL, NULL, 0, &objdata, 0)) STACK_ERROR;
 		dynbuf_print3(html, "<a href='javascript:ol(%lu,0,%lu,%lu);'",
 						dyntab_cell(&pvf->labels, i, 0)->IdObj,
 						DYNTAB_TOUL(&cntxt->form->id_form),
 						DYNTAB_TOUL(&cntxt->form->id_obj));
-		DYNBUF_ADD3_BUF(html, " title='", objnotes, HTML_NO_QUOTE, "'>");
-		DYNBUF_ADD3_CELL(html, "", &pvf->labels, i, 0, TO_HTML, "</a>");
+		DYNBUF_ADD3_BUF(html, " title='", objnotes, HTML_TOOLTIP, "'");
+		if(put_showhelp(cntxt, html)) STACK_ERROR;
+		DYNBUF_ADD3_CELL(html, ">", &pvf->labels, i, 0, TO_HTML, "</a>");
 	}
-	else
+	else if(c && c->txt)
 	{
 		char *fmt = pvf->dispfmt;
 		DYNBUF_ADD_STR(html, "<b>");
 		if(fmt && !strcmp(fmt, "_EVA_DATE"))
 		{
 			char *unit = pvf->dispunit ? pvf->dispunit : "";
-			if(!strcmp(unit, "_EVA_DAY")) fmt = i ? "_EVA_DayLong" : "_EVA_LongDay";
-			else if(!strcmp(unit, "_EVA_HOUR"))	fmt = i ? "_EVA_Time" : "_EVA_LongTime";
-			datetxt_to_format(cntxt, printbuf, txt, fmt);
+			if(!strcmp(unit, "_EVA_DAY"))
+				fmt = (i && !strncmp(c->txt, dyntab_val(&pvf->labels, i - 1, 0), 6)) ? "_EVA_DayLong" : "_EVA_LongDay";
+			else if(!strcmp(unit, "_EVA_HOUR"))
+				fmt = (i && !strncmp(c->txt, dyntab_val(&pvf->labels, i - 1, 0), 8)) ? "_EVA_Time" : "_EVA_LongTime";
+			datetxt_to_format(cntxt, printbuf, c->txt, fmt);
 			DYNBUF_ADD(html, printbuf, 0, TO_HTML);
 		}
-		else if(put_value_fmt(cntxt, html, txt, len, fmt)) STACK_ERROR;
+		else if(put_value_fmt(cntxt, html, c->txt, c->len, fmt)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "</b>");
 	}
 	DYNBUF_ADD_STR(html, "</font></td>");
@@ -408,22 +423,24 @@ int ctrl_calc_output_field_title(	/* return : 0 on success, other on error */
 	DynTable values = {0};
 
 	/* Output field label */
-	if(!pvf) 
+	if(!pvf || pvf == pv->data && (!pv->row && pv->nbdata > 1))
 	{
 		/* No field : empty label */
 		DYNBUF_ADD_STR(html, "&nbsp;");
 		RETURN_OK;
 	}
-	if(pvf->srcdata.nbrows && !pv->exportparams)
+	if(!DYNTAB_FIELD_CELL(&pvf->srcdata, MASK_ITEM))
 	{
-		/* Indicator / control : output label as open object link */
-		if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, NULL, &pvf->srcdata, 0,
-								add_sz_str("Cliquez pour modifier l'indicateur"), NULL, "LABEL+OBJNOTES"))
-			STACK_ERROR;
+		if(pvf->srcdata.nbrows && !pv->exportparams)
+		{
+			/* Indicator / control : output label as open object link if not masked */
+			if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, &pvf->srcdata, 0, NULL, "LABEL+OBJNOTES"))
+				STACK_ERROR;
+		}
+		else
+			/* No description data for indicator : output label */
+			DYNBUF_ADD(html, pvf->label, 0, TO_HTML);
 	}
-	else 
-		/* No description data for indicator : output label */
-		DYNBUF_ADD(html, pvf->label, 0, TO_HTML);
 
 	/* Output calendar control if applicable */
 	if(pvf->b_calendar == 2 && !pv->exportparams)
@@ -453,7 +470,7 @@ int ctrl_calc_output_field_title(	/* return : 0 on success, other on error */
 ** Description : output a pivot table value cell
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_calc_output_pvtcell"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int ctrl_calc_output_pvtcell(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
@@ -463,28 +480,30 @@ int ctrl_calc_output_pvtcell(		/* return : 0 on success, other on error */
 ){
 	EVA_form *form = cntxt->form;
 	DynBuffer **html = form->html;
+	int b_multi_data = pv->nbdata > 1 && !pv->row;
+	int b_last_data = pv->data == &pv->datas[pv->nbdata - 1];
 
 	/* Output cell header */
-	DYNBUF_ADD_STR(html, "<td nowrap");
+	DYNBUF_ADD_STR(html, "<td");
 	DYNBUF_ADD(html, (pv->data && pv->data->decimals > 0) ? " align=right" : " align=center", 0, NO_CONV);
-	if(i < ROWCNT && j < COLCNT)
+	if((b_multi_data ? !b_last_data : i < ROWCNT) && j < COLCNT)
 	{
 		/* Output values */
-		DYNBUF_ADD_STR(html, "><font size=-1>");
+		DYNBUF_ADD_STR(html, "><nobr><font size=-1>");
 		if(dyntab_sz(pv->res, i, j))
 		{
 			if(ctrl_calc_output_pvt_val(cntxt, i_ctrl, pv, i, j)) STACK_ERROR;
 		}
 		else
-			DYNBUF_ADD_STR(html, "&nbsp;"); 
+			DYNBUF_ADD_STR(html, "&nbsp;");
 		DYNBUF_ADD_STR(html, "</font>");
 	}
 	else
 	{
 		/* Output totals */
-		if(i >= ROWCNT) DYNBUF_ADD_STR(html, " bgcolor=#EEEEEE");
-		DYNBUF_ADD_STR(html, "><b>");
-		if(i != ROWCNT || j != COLCNT) DYNBUF_ADD_STR(html, "<font size=-1>");
+		if(b_multi_data ? b_last_data : i >= ROWCNT) DYNBUF_ADD_STR(html, " bgcolor=#EEEEEE");
+		DYNBUF_ADD_STR(html, "><nobr><b>");
+		if((b_multi_data ? !b_last_data : i != ROWCNT) || j != COLCNT) DYNBUF_ADD_STR(html, "<font size=-1>");
 		if(i <= ROWCNT && j <= COLCNT)
 		{
 			if(ctrl_calc_output_pvt_val(cntxt, i_ctrl, pv, i, j)) STACK_ERROR;
@@ -506,7 +525,7 @@ int ctrl_calc_output_pvtcell(		/* return : 0 on success, other on error */
 ** Description : output title row(s) for all column fields
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_calc_output_coltitle"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int ctrl_calc_output_coltitle(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
@@ -542,9 +561,10 @@ int ctrl_calc_output_coltitle(		/* return : 0 on success, other on error */
 			{
 				pv->col = pv->cols + icol;
 				pv->res = &pv->restbl[0][0][icol];
+
+				/* Output unstacked label on last row only */
 				if(!pv->col->b_stackcols && i == pv->maxcols)
 				{
-					/* Output unstacked label on last row only */
 					unsigned long j;
 					for(j = 0; j < COLCNT; j++)
 					{
@@ -552,9 +572,11 @@ int ctrl_calc_output_coltitle(		/* return : 0 on success, other on error */
 						if(ctrl_calc_output_field_label(cntxt, pv, pv->col, j)) STACK_ERROR;
 					}
 				}
-				if(i >= pv->maxcols - COLCNT && i < pv->maxcols)
+
+				/* Output stacked labels or totals */
+				if(pv->col->b_stackcols && i >= pv->maxcols - COLCNT && i < pv->maxcols)
 				{
-					/* Output field label for this title row */
+					/* Output stacked label for this title row */
 					unsigned long j = i + COLCNT - pv->maxcols;
 					if(j) DYNBUF_ADD3_INT(html, "<td width=30 bgcolor=#EEEEEE rowspan=", pv->maxcols - i + 1, ">&nbsp;</td>");
 					DYNBUF_ADD3(html, "<td bgcolor=#", bgcolor, 0, NO_CONV, "");
@@ -568,10 +590,10 @@ int ctrl_calc_output_coltitle(		/* return : 0 on success, other on error */
 					for(j = 0; !j || pv->row && j < pv->row->totals.nbrows; j++)
 					{
 						DYNBUF_ADD3(html, "<td align=center bgcolor=#", "EEEEEE", 0, NO_CONV, ">");
-						DYNBUF_ADD3(html, "<font size=-1><b>", 
-							(pv->row && dyntab_sz(&pv->row->totals, j, 0 )) ? 
-								dyntab_val(&pv->row->totals, j, 0 ) : "Total", 0,
-							TO_HTML, "</b></font></td>");
+						DYNBUF_ADD3(html, "<font size=-1><b>",
+								(pv->row && dyntab_sz(&pv->row->totals, j, 0 )) ?
+									dyntab_val(&pv->row->totals, j, 0 ) : "Total", 0,
+								TO_HTML, "</b></font></td>");
 					}
 				}
 			}
@@ -604,7 +626,7 @@ int ctrl_calc_output_coltitle(		/* return : 0 on success, other on error */
 				DYNBUF_ADD3(html, "<td align=center bgcolor=#", "EEEEEE", 0, NO_CONV, ">");
 				DYNBUF_ADD3(html,
 					"<font size=-1><b>",
-						(pv->row && dyntab_sz(&pv->row->totals, i, 0 )) ? 
+						(pv->row && dyntab_sz(&pv->row->totals, i, 0 )) ?
 							dyntab_val(&pv->row->totals, i, 0 ) : "Total", 0, TO_HTML,
 					"</b></font></td>");
 			}
@@ -622,7 +644,7 @@ int ctrl_calc_output_coltitle(		/* return : 0 on success, other on error */
 ** Description : output rows for a row field & all columns fields
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_calc_output_rowfield"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int ctrl_calc_output_rowfield(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
@@ -631,21 +653,37 @@ int ctrl_calc_output_rowfield(		/* return : 0 on success, other on error */
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	unsigned long irow = pv->row ? pv->row - pv->rows : 0;
-	unsigned long i, j, idata = 0, icol;
+	unsigned long idata = pv->data ? pv->data - pv->datas : 0;
+	unsigned long i, j, icol;
 	DynBuffer **html = form->html;
 	char printbuf[1024];
+	PivotTableField *pvf, *pvg;
 
-	/* Output export params if applicable */
-	if(pv->exportparams)
-		dynbuf_print6(&pv->exportparams, "Table\t%s\t%lu\t%s\t%lu\t%s\t%lu\n",
-		pv->row ? pv->row->label : "", pv->row ? pv->row->labels.nbrows : 0,
-		pv->col ? pv->col->label : "", pv->col ? pv->col->labels.nbrows : 0,
-		pv->data ? pv->data->label : "", pv->data ? pv->data->decimals : 0);
+	/* Return if no object selected */
+	if(pv->b_empty)
+	{
+		DYNBUF_ADD_STR(html, "<tr><td>-</td><td align=center>0</td>");
+		RETURN_OK;
+	}
+
+	/* Get min / max values for each column field */
+	if(pv->row) for(icol = 0; !icol || icol < pv->nbcol; icol++)
+	{
+		pv->col = pv->nbcol ? pv->cols + icol : NULL;
+		pvf = pv->col ? pv->col : pv->row;
+		pvf->resmin = 0; pvf->resmax = 0;
+		for(j = 0; j < ROWCNT; j++)
+		{
+			double val = atof(dyntab_val(&pv->restbl[idata][irow][icol], j, COLCNT));
+			if(val > pvf->resmax) pvf->resmax = val;
+			else if(val < pvf->resmin) pvf->resmin = val;
+		}
+	}
 
 	/* Output rows */
 	for(i = 0; i < pv->maxrows; i++)
 	{
-		char *bgcolor = i < ROWCNT ? table_row_bgcolor(cntxt, ctrl->objtbl, i) : "EEEEEE";
+		char *bgcolor = i < ROWCNT ? table_row_bgcolor(cntxt, ctrl->objtbl, i, NULL) : "EEEEEE";
 		DYNBUF_ADD_STR(html, "<tr");
 		if(*bgcolor) DYNBUF_ADD3(html, " bgcolor=#", bgcolor, 0, NO_CONV, "");
 		DYNBUF_ADD_STR(html, ">");
@@ -665,18 +703,86 @@ int ctrl_calc_output_rowfield(		/* return : 0 on success, other on error */
 					if(ctrl_calc_output_field_label(cntxt, pv, pv->row, i)) STACK_ERROR;
 				}
 				else
-					DYNBUF_ADD3(html,
-							"<td align=right><font size=-1><b>",
-								(pv->col && dyntab_sz(&pv->col->totals, i - ROWCNT, 0 )) ? 
+				{
+					DYNBUF_ADD_STR(html, "<td align=right><font size=-1>");
+					if(i == ROWCNT && pv->row && pv->row->labels.nbrows > 2 && pv->tblnotes != TblNote_minimal)
+						DYNBUF_ADD3_INT(html, "", pv->row->labels.nbrows, " lignes - ");
+					DYNBUF_ADD3(html, "<b>",
+								(pv->col && dyntab_sz(&pv->col->totals, i - ROWCNT, 0 )) ?
 								dyntab_val(&pv->col->totals, i - ROWCNT, 0 ) : (i - ROWCNT) ? "%" : "Total", 0, NO_CONV,
 							"</b></font></td>");
+				}
 			}
 
 			/* Output cells */
 			for(j = 0; j < pv->res->nbcols; j++)
 				if(ctrl_calc_output_pvtcell(cntxt, i_ctrl, pv, i, j)) STACK_ERROR;
+
+			/* Set params for in-table graph */
+			pvf = pv->col ? pv->col : pv->row;
+			pvg = (pv->row && pv->row->graph_pos) ? pv->row : pv->data;
+			if(pvg && !pvg->graph_color) pvg->graph_color = "8080FF";
+			if(pvg && pvg->graph_size < 10) pvg->graph_size = 40;
+
+			/* Output in-table graph for row values */
+			if((icol + 1 == pv->nbcol || !pv->nbcol) && !pv->exportparams && pvg && pvg->graph_pos &&
+				!strcmp(pvg->graph_pos, "_EVA_TOTAL") && pvf && pvf->resmax > pvf->resmin)
+			{
+				double val = atof(dyntab_val(pv->res, i, COLCNT));
+				unsigned long w = (unsigned long)(pvg->graph_size * (val - pvf->resmin) / (pvf->resmax - pvf->resmin));
+				DYNBUF_ADD_STR(html, "<td>");
+				if( i < ROWCNT && w)
+				{
+					dynbuf_print3(html,
+						"<table noborder height=16 cellpadding=0 cellspacing=0 bgcolor=#%s width=%lu><tr>"
+						"<td><font size=-1 color=%s></font></td></tr></table>", pvg->graph_color, w, pvg->graph_color);
+				}
+				DYNBUF_ADD_STR(html, "</td>");
+			}
+
 		}
 		DYNBUF_ADD_STR(html, "</tr>");
+	}
+
+	/* Output in-table graph for each column field */
+	if(!pv->exportparams && pv->nbcol && (!pv->nbrow || irow + 1 == pv->nbrow))
+	{
+		DYNBUF_ADD_STR(html, "<tr><td></td>");
+		for(icol = 0; icol < pv->nbcol; icol++)
+		{
+			int b_graph = 0;
+			pv->col = pv->cols + icol;
+			pv->col->resmin = 0; pv->col->resmax = 0;
+			pvg = (pv->col->graph_pos) ? pv->col : pv->data;
+			if(pvg && !pvg->graph_color) pvg->graph_color = "8080FF";
+			if(pvg && pvg->graph_size < 10) pvg->graph_size = 40;
+
+			/* Get maximum value for column field totals */
+			pv->res = &pv->restbl[idata][irow][icol];
+			for(j = 0; j < COLCNT; j++)
+			{
+				double val = atof(dyntab_val(pv->res, ROWCNT, j));
+				if(val > pv->col->resmax) pv->col->resmax = val;
+				else if(val < pv->col->resmin) pv->col->resmin = val;
+			}
+			b_graph = pvg && pvg->graph_pos && !strcmp(pvg->graph_pos, "_EVA_TOTAL") && pv->col->resmax > pv->col->resmin;
+
+			/* Output graph for column field */
+			for(j = 0; j < pv->res->nbcols; j++)
+			{
+				double val = atof(dyntab_val(pv->res, ROWCNT, j));
+				unsigned long h = b_graph ? (unsigned long)(pvg->graph_size * (val - pv->col->resmin) / (pv->col->resmax - pv->col->resmin)) : 0;
+				DYNBUF_ADD_STR(html, "<td valign=bottom>");
+				if(h && j < COLCNT)
+				{
+					dynbuf_print2(html,
+						"<table noborder cellpadding=0 cellspacing=0 width=100%%><tr>"
+						"<td height=%lu bgcolor=#%s></td></tr></table>", h, pvg->graph_color);
+				}
+				DYNBUF_ADD_STR(html, "</td>");
+			}
+
+		}
 	}
 
 	RETURN_OK_CLEANUP;
@@ -739,7 +845,8 @@ int ctrl_output_listobj_lblnote(	/* return : 0 on success, other on error */
 	unsigned long i;
 	if(!html || !val || !val->nbrows || !val->cell || !val->cell->txt) return 0;
 
-	if(title) DYNBUF_ADD3(html, "<u>", title, 0, TO_HTML, "</u>");
+	if(title) DYNBUF_ADD3(html, "<br><u>", title, 0, TO_HTML, "</u>");
+	DYNBUF_ADD_STR(html, "<ul>");
 	for(i = 0; i < val->nbrows; i++)
 	{
 		DYNBUF_ADD_STR(html, "<li>");
@@ -747,6 +854,7 @@ int ctrl_output_listobj_lblnote(	/* return : 0 on success, other on error */
 			ctrl_output_pvt_lblnote(cntxt, 6, &valdata)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "</li>");
 	}
+	DYNBUF_ADD_STR(html, "</ul>");
 
 	RETURN_OK_CLEANUP;
 }
@@ -777,9 +885,9 @@ int ctrl_output_pvt_notes(			/* return : 0 on success, other on error */
 		char *expr = DYNTAB_FIELD_VAL(data, FIELD);
 
 		/* Output label & notes */
-		DYNBUF_ADD_STR(html, "<u><b>");
+		DYNBUF_ADD_STR(html, "<br><u><b>");
 		if(title) DYNBUF_ADD(html, title, 0, TO_HTML);
-		DYNBUF_ADD3_CELLP(html, " [", DYNTAB_FIELD_CELL(data, LABEL), TO_HTML, "]</b></u><br>");
+		DYNBUF_ADD3_CELLP(html, " [", DYNTAB_FIELD_CELL(data, LABEL), TO_HTML, "]</b></u>");
 		if(ctrl_output_pvt_lblnote(cntxt, 4, data)) STACK_ERROR;
 
 		/* Output fields label or formula */
@@ -789,7 +897,7 @@ int ctrl_output_pvt_notes(			/* return : 0 on success, other on error */
 			if(ctrl_output_listobj_lblnote(cntxt, "Champ de saisie", &val)) STACK_ERROR;
 		}
 		else if(*expr)
-			DYNBUF_ADD3(html, "<u>Valeur calculee</u> : <font face='Courier new'>", expr, 0, TO_HTML, "</font><br>");
+			DYNBUF_ADD3(html, "<br><u>Valeur calculee</u> : <font face='Courier new'>", expr, 0, TO_HTML, "</font>");
 
 		/* Output forms label */
 		DYNTAB_FIELD(&val, data, FORMS);
@@ -817,7 +925,7 @@ int ctrl_output_pvt_notes(			/* return : 0 on success, other on error */
 ** Description : output results of a pivot table
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_calc_output_pvtres"
-#define ERR_CLEANUP DYNTAB_FREE(val)
+#define ERR_CLEANUP
 int ctrl_calc_output_pvtres(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
@@ -825,18 +933,10 @@ int ctrl_calc_output_pvtres(		/* return : 0 on success, other on error */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	DynTable val = {0};
 	unsigned long i;
 	unsigned long irow = 0, icol, idata = 0;
 	DynBuffer **html = form->html;
 	char printbuf[1024];
-
-	/* Return if no object selected
-	if(!pv->nbobj)
-	{
-		DYNBUF_ADD_STR(html, "Pas de fiche correspondante");
-		RETURN_OK;
-	}  */
 
 	/* Scan column labels for each column field to determine stacking mode */
 	pv->totcols = (pv->nbrow ? 1 : 0);
@@ -860,52 +960,107 @@ int ctrl_calc_output_pvtres(		/* return : 0 on success, other on error */
 	if(pv->exportparams) pv->b_stackcols = 0;
 
 	/* Output table header */
-	ctrl->BORDER = 1;
+	if(!(ctrl->TABLE_STYLE && *ctrl->TABLE_STYLE)) ctrl->BORDER = 1;
 	if(table_read_controls(cntxt, i_ctrl, NULL) ||
 		ctrl_put_table_header(cntxt, ctrl)) STACK_ERROR;
 
 	/* Output title */
-	DYNBUF_ADD3_INT(html, "</tr><tr bgcolor=#FFFFFF><td colspan=", pv->totcols, ">");
-	if(ctrl_calc_output_title(cntxt, i_ctrl, pv)) STACK_ERROR;
+	DYNBUF_ADD3_INT(html, "</tr><tr bgcolor=#FFFFFF><td colspan=", pv->totcols + 2, ">");
+	if(pv->tblnotes != TblNote_minimal && ctrl_calc_output_title(cntxt, i_ctrl, pv)) STACK_ERROR;
 	DYNBUF_ADD_STR(html, "</td></tr>");
 
-	/* Output fields by row */
-	pv->data = pv->nbdata ? pv->datas : NULL;
-	for(irow = 0; !irow || irow < pv->nbrow; irow++)
+	/* Loop on data fields */
+	for(idata = 0; !idata || idata < pv->nbdata; idata++)
 	{
-		/* Output data & column headers if applicable */
-		pv->row = pv->nbrow ? pv->rows + irow : NULL;
-		if((pv->exportparams || !irow) && (pv->nbdata || pv->nbcol))
+		/* Loop on row fields */
+		pv->data = pv->nbdata ? pv->datas + idata : NULL;
+		for(irow = 0; !irow || irow < pv->nbrow; irow++)
 		{
-			if(pv->exportparams && irow) DYNBUF_ADD3_INT(html, "<tr><td colspan=", pv->maxcols, ">&nbsp;</tr>");
-			DYNBUF_ADD_STR(html, "<tr bgcolor=#EEEEEE><td align=center valign=middle><font size=-1>");
-			if(ctrl_calc_output_field_title(cntxt, i_ctrl, pv, pv->data)) STACK_ERROR;
-			DYNBUF_ADD_STR(html, "&nbsp;</font></td>");
-			for(icol = 0; icol < pv->nbcol; icol++)
+			/* Output data & column headers if applicable */
+			pv->row = pv->nbrow ? pv->rows + irow : NULL;
+			if((pv->data ? !idata : (pv->exportparams || !irow)) && (pv->nbdata || pv->nbcol))
 			{
-				pv->col = pv->cols + icol;
-				pv->res = &pv->restbl[idata][irow][icol];
-				dynbuf_print2(html, "<td align=center valign=bottom rowspan=%lu colspan=%lu><b>",
-					pv->col->b_stackcols ? pv->maxcols - COLCNT + 1 : pv->b_stackcols ? pv->maxcols + 1 : 1,
-					pv->res->nbcols);
-				if(ctrl_calc_output_field_title(cntxt, i_ctrl, pv, pv->col)) STACK_ERROR;
-				DYNBUF_ADD_STR(html, "</b></td>");
+				if(pv->exportparams && irow) DYNBUF_ADD3_INT(html, "<tr><td colspan=", pv->maxcols, ">&nbsp;</td></tr>");
+				DYNBUF_ADD_STR(html, "<tr bgcolor=#EEEEEE><td align=center valign=middle><font size=-1>");
+				if(pv->tblnotes != TblNote_minimal)
+				{
+					if(ctrl_calc_output_field_title(cntxt, i_ctrl, pv, pv->data)) STACK_ERROR;
+					DYNBUF_ADD_STR(html, "&nbsp;</font></td>");
+				}
+				for(icol = 0; icol < pv->nbcol; icol++)
+				{
+					pv->col = pv->cols + icol;
+					pv->res = &pv->restbl[idata][irow][icol];
+					dynbuf_print2(html, "<td align=center valign=bottom rowspan=%lu colspan=%lu><b>",
+						(!pv->b_stackcols || irow) ? 1 :
+						pv->col->b_stackcols ? pv->maxcols - COLCNT + 1 : pv->b_stackcols ? pv->maxcols + 1 : 1,
+						pv->res->nbcols);
+					if(ctrl_calc_output_field_title(cntxt, i_ctrl, pv, pv->col)) STACK_ERROR;
+					DYNBUF_ADD_STR(html, "</b></td>");
+				}
+				DYNBUF_ADD_STR(html, "</tr>");
 			}
-			DYNBUF_ADD_STR(html, "</tr>");
-		}
 
-		/* Output columns labels */
-		pv->row = pv->nbrow ? pv->rows + irow : NULL;
-		if(ctrl_calc_output_coltitle(cntxt, i_ctrl, pv)) STACK_ERROR;
+			/* Output columns titles if rows present */
+			if(!idata || pv->row)
+			{
+				/* Output columns labels */
+				pv->row = pv->nbrow ? pv->rows + irow : NULL;
+				if(ctrl_calc_output_coltitle(cntxt, i_ctrl, pv)) STACK_ERROR;
 
-		/* Output columns fields for the row field */
-		pv->maxrows = pv->restbl[idata][irow][0].nbrows;
-		for(icol = 1; icol < pv->nbcol; icol++)
-		{
-			pv->res = &pv->restbl[idata][irow][icol];
-			if(pv->res->nbrows > pv->maxrows) pv->maxrows = pv->res->nbrows;
+				/* Output columns fields for the row field */
+				pv->maxrows = pv->restbl[idata][irow][0].nbrows;
+				for(icol = 1; icol < pv->nbcol; icol++)
+				{
+					pv->res = &pv->restbl[idata][irow][icol];
+					if(pv->res->nbrows > pv->maxrows) pv->maxrows = pv->res->nbrows;
+				}
+			}
+
+			/* If no rows : output data totals for each column field */
+			if(!pv->row && pv->nbdata > 1)
+			{
+				/* Output line header & data label */
+				DYNBUF_ADD3(html, "<tr bgcolor=#", table_row_bgcolor(cntxt, ctrl->objtbl, idata, NULL), 0, NO_CONV, "><td align=right><font size=-1>");
+				if(idata == pv->nbdata - 1)	DYNBUF_ADD_STR(html, "<b>");
+				if(pv->data->srcdata.nbrows && !pv->exportparams)
+				{
+					if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, &pv->data->srcdata, 0, NULL, "LABEL+OBJNOTES")) STACK_ERROR;
+				}
+				else
+					DYNBUF_ADD(html, pv->data->label, 0, TO_HTML);
+				if(idata == pv->nbdata - 1)	DYNBUF_ADD_STR(html, "</b>");
+				DYNBUF_ADD_STR(html, "</td>");
+
+				/* Output cells */
+				for(icol = 0; !icol || icol < pv->nbcol; icol++)
+				{
+					pv->res = &pv->restbl[idata][irow][icol];
+					for(i = 0; i < pv->res->nbcols; i++)
+						if(ctrl_calc_output_pvtcell(cntxt, i_ctrl, pv, 0, i)) STACK_ERROR;
+				}
+			}
+			else
+				/* Output rows fields for the data field */
+				if(ctrl_calc_output_rowfield(cntxt, i_ctrl, pv)) STACK_ERROR;
+
+			/* Output export params if applicable */
+			if(pv->exportparams) for(icol = 0; !icol || icol < pv->nbcol; icol++)
+			{
+				pv->col = pv->nbcol ? pv->cols + icol : NULL;
+				pv->res = &pv->restbl[idata][irow][icol];
+				dynbuf_print6(&pv->exportparams, "Table\t%lu\t%s\t%s\t%s\t%lu\t%lu",	irow,
+					pv->row ? pv->row->label : "",
+					pv->row ? (pv->row->basefmt && *pv->row->basefmt) ? pv->row->basefmt : pv->row->dispfmt : "",
+					pv->row ? pv->row->graphtyp : "", pv->row ? pv->row->labels.nbrows : 0, pv->res->nbrows);
+				dynbuf_print6(&pv->exportparams, "\t%lu\t%s\t%s\t%s\t%lu\t%lu",	icol,
+					pv->col ? pv->col->label : "",
+					pv->col ? (pv->col->basefmt && *pv->col->basefmt) ? pv->col->basefmt : pv->col->dispfmt : "",
+					pv->col ? pv->col->graphtyp : "", pv->col ? pv->col->labels.nbrows : 0, pv->res->nbcols);
+				dynbuf_print3(&pv->exportparams, "\t%lu\t%s\t%d\n",
+					idata, pv->data ? pv->data->label : "", pv->data ? pv->data->decimals : 0);
+			}
 		}
-		if(ctrl_calc_output_rowfield(cntxt, i_ctrl, pv)) STACK_ERROR;
 	}
 	DYNBUF_ADD_STR(html, "</table>");
 
@@ -921,18 +1076,16 @@ int ctrl_calc_output_pvtres(		/* return : 0 on success, other on error */
 		if(pv->tblnotes & TblNote_dynamic)
 		{
 			EVA_ctrl ct = {0};
-			DYNTAB_FIELD(&val, pv->srcdata, LABEL_CALC);
-			for(i = 0; i < val.nbrows; i++)
+			for(i = 0; i < pv->dynnotes.nbrows; i++)
 			{
-				unsigned long cnt = html ? (*html)->cnt : 0;
-				if(qry_obj_field(cntxt, &ct.attr, DYNTAB_TOULRC(&val, i, 0), NULL) ||
-					ctrl_set_format_attr(cntxt, ctrl)) STACK_ERROR;
-				ctrl->LABELPOS = "_EVA_NONE";
-				ctrl->POSITION = "_EVA_SameCell";
-				if(ctrl_format_pos(cntxt, ctrl, 1) ||
+				if(qry_obj_field(cntxt, &ct.attr, DYNTAB_TOULRC(&pv->dynnotes, i, 0), NULL) ||
+					ctrl_read_baseobj(cntxt, &ct.attr) ||
+					ctrl_set_format_attr(cntxt, &ct)) STACK_ERROR;
+				ct.LABELPOS = "_EVA_NONE";
+				ct.POSITION = "_EVA_SameCell";
+				if(ctrl_format_pos(cntxt, &ct, 1) ||
 					ctrl_output_exprval(cntxt, &ct, 1) ||
-					ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
-				if(html && cnt < (*html)->cnt) DYNBUF_ADD_STR(html, "<br>");
+					ctrl_format_pos(cntxt, &ct, 0)) STACK_ERROR;
 				DYNTAB_FREE(ct.attr);
 				DYNTAB_FREE(ct.val);
 				DYNTAB_FREE(ct.allval);
@@ -942,11 +1095,11 @@ int ctrl_calc_output_pvtres(		/* return : 0 on success, other on error */
 
 		/* Output table contents */
 		DYNBUF_ADD_STR(html, "<font size=-1>");
-		if(pv->tblnotes & (TblNote_note | TblNote_detail)) 
+		if(pv->tblnotes & (TblNote_note | TblNote_detail))
 		{
 			ctrl_output_pvt_notes(cntxt, "Détail du tableau", pv->tblnotes & TblNote_detail ? 1 : 0,pv->srcdata);
 			if(pv->tblnotes & TblNote_detail)
-				dynbuf_print2(html, "<u>Valeurs affichées</u> : <b>%s de [%s]</b><br><br>", 
+				dynbuf_print2(html, "<br><u>Valeurs affichées</u> : <b>%s de [%s]</b><br>",
 									!strcmp("VALCOUNT", function) ? "Nombre de valeurs" :
 									!strcmp("VALCOUNT1", function) ? "Nombre de valeurs distinctes" :
 									!strcmp("SUM", function) ? "Somme des valeurs" :
@@ -956,11 +1109,11 @@ int ctrl_calc_output_pvtres(		/* return : 0 on success, other on error */
 																	"Nombre de fiches",
 									pv->data ? pv->data->label : pv->row ? pv->row->label : pv->col ? pv->col->label : "tout");
 		}
-		if(pv->row && pv->tblnotes & (TblNote_rownote | TblNote_rowdetail)) 
+		if(pv->row && pv->tblnotes & (TblNote_rownote | TblNote_rowdetail))
 			ctrl_output_pvt_notes(cntxt, "Lignes", pv->tblnotes & TblNote_rowdetail ? 3 : 0,&pv->row->srcdata);
-		if(pv->col && pv->tblnotes & (TblNote_colnote | TblNote_coldetail)) 
+		if(pv->col && pv->tblnotes & (TblNote_colnote | TblNote_coldetail))
 			ctrl_output_pvt_notes(cntxt, "Colonnes", pv->tblnotes & TblNote_coldetail ? 3 : 0,&pv->col->srcdata);
-		if(pv->data && pv->tblnotes & (TblNote_datanote | TblNote_datadetail)) 
+		if(pv->data && pv->tblnotes & (TblNote_datanote | TblNote_datadetail))
 			ctrl_output_pvt_notes(cntxt, "Données", pv->tblnotes & TblNote_datadetail ? 3 : 0,&pv->data->srcdata);
 		DYNBUF_ADD_STR(html, "</font></td></tr></table>");
 	}
@@ -1035,8 +1188,12 @@ int get_current_obj_field_data(		/* return : 0 on success, other on error */
 	else
 	{
 		/* Field is not given : use CGI data of current object */
+		unsigned long i;
 		if(cgi_filter_values(cntxt, objdata, 'D', ~0UL,
 				DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), NULL, "", 0, 0)) STACK_ERROR;
+		for(i = objdata->nbrows; i > 0; i--)
+			if(!dyntab_sz(objdata, i - 1, 0))
+				dyntab_del_rows(objdata, i - 1, 1);
 
 		/* Check for new object */
 		if(!form->objdata.nbrows)
@@ -1066,29 +1223,38 @@ int pivottable_add_sr_options(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	PivotTableField *pvf,				/* in/out : field definition */
 	DynTable *options					/* in : options list to read from */
-){							
+){
 	DynTable values = {0};
 	unsigned long i, j, cnt = 0;
 	DynTableCell *empty = NULL;
 
+	/* Read options labels & values in a single table (default order is used : label & value for each option) */
 	if(qry_listobj_field(cntxt, &values, options, "_EVA_LABEL,_EVA_VALUE")) STACK_ERROR;
+
 	for(i = 0; i < values.nbrows; i++)
 	{
 		DynTableCell *c = dyntab_cell(&values, i, 0);
-		DynTableCell *cprev = i ? c - 1 : NULL, *cnext = (i + 1 < values.nbrows) ? c + 1 : NULL;
+		DynTableCell *cprev = i ? c - 1 : NULL;
+		DynTableCell *cnext = (i + 1 < values.nbrows) ? c + 1 : NULL;
+
+		/* If label / value pair found */
 		if(cnext && c->IdObj == cnext->IdObj)
 		{
+			/* Add to search & replace table */
 			DynTableCell *l = c, *v = cnext;
 			j = pvf->sr_src.nbrows > pvf->sr_dest.nbrows ? pvf->sr_src.nbrows : pvf->sr_dest.nbrows;
 			DYNTAB_ADD_CELLP(&pvf->sr_src, j, 0, v);
 			DYNTAB_ADD_CELLP(&pvf->sr_dest, j, 0, l);
 		}
+		/* Count options without value */
 		else if((!cprev || c->IdObj != cprev->IdObj) && (!cnext || c->IdObj != cnext->IdObj))
 		{
 			cnt ++;
 			empty = c;
 		}
 	}
+
+	/* Use option with empty value if applicable */
 	if(!pvf->emptyval.nbrows && pvf->sr_src.nbrows > 1 && empty && cnt == 1)
 		DYNTAB_ADD_CELLP(&pvf->emptyval, 0, 0, empty);
 
@@ -1107,7 +1273,7 @@ int pivottable_set_indic_fmt_from_ctrl(	/* return : 0 on success, other on error
 	EVA_context *cntxt,					/* in/out : execution context data */
 	PivotTableField *pvf,				/* in/out : field definition */
 	DynTable *attr						/* in : control data to read from */
-){							
+){
 	DynTable options = {0};
 	char *ctrltyp = DYNTAB_FIELD_VAL(attr, TYPE);
 	char *ctrlfmt = DYNTAB_FIELD_VAL(attr, FORMAT);
@@ -1121,7 +1287,7 @@ int pivottable_set_indic_fmt_from_ctrl(	/* return : 0 on success, other on error
 	else if((!pvf->dispfmt || !pvf->dispfmt[0]) && !strcmp(ctrltyp, "_EVA_NUMBER"))
 	{
 		pvf->dispfmt = "_EVA_NUMBER";
-		if(!strcmp(ctrlfmt, "_EVA_MONEY")) pvf->decimals = 2;
+		if(!STRCMPCASE(ctrlfmt, "_EVA_MONEY")) pvf->decimals = 2;
 		if(!pvf->sortmode || !pvf->sortmode[0]) pvf->sortmode = "_EVA_NUMBER";
 	}
 	else if((!pvf->dispfmt || !pvf->dispfmt[0]) && !strcmp(ctrltyp, "_EVA_DATE"))
@@ -1130,11 +1296,14 @@ int pivottable_set_indic_fmt_from_ctrl(	/* return : 0 on success, other on error
 		pvf->b_calendar = 2;
 		pvf->maxlabels = 12;
 	}
-	else if(!strcmp(ctrltyp, "_EVA_LIST") && !pvf->optsrc.nbrows)
+	else if(!strcmp(ctrltyp, "_EVA_LIST") && !pvf->optsrc.nbrows && pvf->datatable[0] != 'D')
 	{
 		/* List : use options label/value as transform table */
 		DYNTAB_FIELD(&options, attr, CTRLTREE);
 		if((!pvf->dispfmt || !pvf->dispfmt[0]) && pivottable_add_sr_options(cntxt, pvf, &options)) STACK_ERROR;
+
+		/* Add list options to labels if show no match */
+		if(pvf->b_shownomatch && form_eval_fieldexpr(cntxt, &pvf->labels, 0, attr->cell->IdObj, add_sz_str("_EVA_CTRLTREE->_EVA_LABEL"), attr, 0)) STACK_ERROR;
 	}
 
 	RETURN_OK_CLEANUP;
@@ -1154,7 +1323,7 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 	unsigned long i_ctrl	,			/* in : control index in cntxt->form->ctrl */
 	PivotTable *pv,						/* in : pivot table definition */
 	PivotTableField *pvf				/* in/out : field definition */
-){							
+){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	DynTable cgival = {0};
@@ -1176,6 +1345,10 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 		/* Set display format depending on control type */
 		if(pivottable_set_indic_fmt_from_ctrl(cntxt, pvf, &pvf->srcdata)) STACK_ERROR;
 		pvf->b_showemptyval = 1;
+
+		/* Read displayed data contents & totals */
+		DYNTAB_ADD_STR(&pvf->percent, 0, 0, "_EVA_TOTAL");
+		pvf->graph_pos = "_EVA_TOTAL";
 	}
 	else
 	{
@@ -1194,6 +1367,7 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 
 		/* Read display options */
 		pvf->clicmode = DYNTAB_FIELD_VAL(&pvf->srcdata, CLICMODE);
+		if(!strcmp(pvf->clicmode, "_EVA_NONE")) pvf->clicmode = "";
 		pvf->objlist = strtoul(DYNTAB_FIELD_VAL(&pvf->srcdata, PVTLIST_CTRL), NULL, 10);
 		pvf->dispfmt = DYNTAB_FIELD_VAL(&pvf->srcdata, FORMAT);
 		pvf->dispunit = DYNTAB_FIELD_VAL(&pvf->srcdata, DATEUNIT);
@@ -1201,15 +1375,15 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 		c = DYNTAB_FIELD_CELL(&pvf->srcdata, DATEREF);
 		if(c)
 		{
-			if(!form_eval_fieldexpr(cntxt, &data, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), c->txt, c->len, NULL, 0))
+			if(!ctrl_eval_fieldexpr(cntxt, ctrl, &data, c->txt))
 				snprintf(add_sz_str(pvf->dateref), "%s", dyntab_val(&data, 0, 0));
 			else
 				CLEAR_ERROR;
 		}
-		if(!*pvf->dateref) snprintf(add_sz_str(pvf->dateref), "%s", cntxt->timestamp);
+		if(!*pvf->dateref) strcpy(pvf->dateref, cntxt->timestamp);
 		pvf->trunc = DYNTAB_FIELD_VAL(&pvf->srcdata, TRUNC);
 		pvf->sortmode = DYNTAB_FIELD_VAL(&pvf->srcdata, SORTMODE);
-		pvf->b_sortdesc = DYNTAB_FIELD_VAL(&pvf->srcdata, SORTDESC)[0] != 0;
+		pvf->b_sortdesc = atoi(DYNTAB_FIELD_VAL(&pvf->srcdata, SORTDESC)) != 0;
 		DYNTAB_FIELD(&pvf->emptyval, &pvf->srcdata, EMPTYLABEL);
 		pvf->b_showemptyval = DYNTAB_FIELD_VAL(&pvf->srcdata, NOEMPTYVAL)[0] == 0;
 		pvf->b_shownomatch = DYNTAB_FIELD_VAL(&pvf->srcdata, SHOWNOMATCH)[0] != 0;
@@ -1218,15 +1392,42 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 		if(c && dyntab_from_list(&pvf->slices, c->txt, c->len, "/", 0, 2)) RETURN_ERR_MEMORY;
 		DYNTAB_FIELD_TAB(&pvf->sr_src, &pvf->srcdata, SUBST_SRC);
 		DYNTAB_FIELD_TAB(&pvf->sr_dest, &pvf->srcdata, SUBST_DEST);
+		DYNTAB_FIELD_TAB(&pvf->sr_pos, &pvf->srcdata, SUBST_POS);
+		pvf->graphtyp = DYNTAB_FIELD_VAL(&pvf->srcdata, GRAPH_TYPE);
+		if(!strcmp(pvf->graphtyp, "_EVA_GRAPH_PERSO"))
+		{
+			if(form_eval_fieldexpr(cntxt, &pvf->graphfile, 0, pvf->srcdata.cell->IdObj, add_sz_str("_EVA_GRAPH_PERSO->_EVA_FILE_SERVER_NAME"), &pvf->srcdata, 0)) STACK_ERROR;
+			pvf->graphtyp = dyntab_val(&pvf->graphfile, 0, 0);
+		}
 		pvf->maxlabels = atoi(DYNTAB_FIELD_VAL(&pvf->srcdata, PERIODS));
 		pvf->timeway = DYNTAB_FIELD_VAL(&pvf->srcdata, TIMEWAY);
-		pvf->b_calendar = (pvf->maxlabels && !strcmp(pvf->dispfmt, "_EVA_DATE")) ? 
+		pvf->b_calendar = (pvf->maxlabels && !strcmp(pvf->dispfmt, "_EVA_DATE")) ?
 									DYNTAB_FIELD_CELL(&pvf->srcdata, CALENDAR) ? 2 : 1 : 0;
 
-		/* Add list options to search & replace table */
-		DYNTAB_FIELD(&data, &pvf->srcdata, OPTIONS_LIST);
-		if(qry_listobj_field(cntxt, &cgival, &data, "_EVA_CTRLTREE")) STACK_ERROR;
-		if(pivottable_add_sr_options(cntxt, pvf, &cgival)) STACK_ERROR;
+		/* Handle list options */
+		DYNTAB_FIELD(&pvf->optsrc, &pvf->srcdata, OPTIONS_LIST);
+		if(pvf->optsrc.nbrows)
+		{
+			/* If list options present - check control type */
+			if(qry_listobj_field(cntxt, &data, &pvf->optsrc, "_EVA_CONTROL")) STACK_ERROR;
+			if(!dyntab_txt_cmp(add_sz_str("_EVA_CALC"), &data, 0, 0))
+			{
+				/* Calc-ed value : add result to labels */
+				if(form_eval_valtype(cntxt, &pvf->labels, "_EVA_EXPRVAL", &pvf->optsrc, NULL)) CLEAR_ERROR;
+			}
+			else
+			{
+				/* Other : get control tree */
+				if(qry_listobj_field(cntxt, &data, &pvf->optsrc, "_EVA_CTRLTREE")) STACK_ERROR;
+
+				/* Add list options to labels if show no match */
+				if(pvf->b_shownomatch && qry_listobj_field(cntxt, &pvf->labels, &data, "_EVA_LABEL")) STACK_ERROR;
+
+				/* Add list options to search & replace table */
+				if(pivottable_add_sr_options(cntxt, pvf, &data)) STACK_ERROR;
+			}
+			dyntab_group(&pvf->labels, "DISTINCT");
+		}
 
 		/* Read labels stacking option for columns */
 		txt = DYNTAB_FIELD_VAL(&pvf->srcdata, STACKLABELS);
@@ -1239,6 +1440,13 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 			pvf->stackcols_limit = strtoul(DYNTAB_FIELD_VAL(&pvf->srcdata, STACK_THRESHOLD), NULL, 10);
 			if(!pvf->stackcols_limit) pvf->stackcols_limit = 10;
 		}
+
+		/* Read graph options */
+		pvf->graph_pos = DYNTAB_FIELD_VAL(&pvf->srcdata, HTML_GRAPH_POS);
+		if(!*pvf->graph_pos) pvf->graph_pos = NULL;
+		pvf->graph_color = DYNTAB_FIELD_VAL(&pvf->srcdata, GRAPH_COLOR);
+		if(!*pvf->graph_color) pvf->graph_color = NULL;
+		pvf->graph_size = strtoul(DYNTAB_FIELD_VAL(&pvf->srcdata, GRAPH_MAX_SIZE), NULL, 10);
 	}
 	/* Read calendar inputs if applicable */
 	if(pvf->b_calendar == 2)
@@ -1248,7 +1456,7 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 		if(pvf && pvf->srcdata.cell) snprintf(add_sz_str(idindic), "%lu", pvf->srcdata.cell->IdObj);
 		if(*idindic) DYNBUF_ADD(&ctrl->cginame, idindic, 0, NO_CONV);
 		ctrl->FIELD = idindic;
-		if(ctrl_get_calendar_input(cntxt, i_ctrl, pvf->startdate, &pvf->dispunit, &pvf->maxlabels))
+		if(ctrl_get_calendar_input(cntxt, i_ctrl, CtlDateAll, pvf->startdate, &pvf->dispunit, &pvf->maxlabels))
 			STACK_ERROR;
 		ctrl->FIELD = "";
 		ctrl->cginame->cnt = cnt;
@@ -1258,7 +1466,7 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 	/* Read indicator value expression */
 	if(pvf->selctrl.nbrows)
 	{
-		if(qry_listobj_field(cntxt, &pvf->expr, &pvf->selctrl, "_EVA_FIELD")) STACK_ERROR;
+		if(qry_listobj_field(cntxt, &pvf->expr, &pvf->selctrl, "_EVA_FIELD,_EVA_SRCFIELD")) STACK_ERROR;
 		if(qry_listobj_field(cntxt, &data, &pvf->selctrl, NULL)) STACK_ERROR;
 
 		/* Set default format from control */
@@ -1268,6 +1476,10 @@ int pivottable_get_indic_definition(	/* return : 0 on success, other on error */
 		DYNTAB_FIELD(&pvf->expr, &pvf->srcdata, FIELD);
 	if(!pvf->expr.nbrows) DYNTAB_ADD_STR(&pvf->expr, 0, 0, "");
 	if(!pvf->emptyval.nbrows) DYNTAB_ADD_STR(&pvf->emptyval, 0, 0, "(non renseigné)");
+
+	/* Store base format */
+	pvf->basefmt = pvf->dispfmt;
+	if(!pvf->basefmt) pvf->basefmt = "";
 
 	RETURN_OK_CLEANUP;
 }
@@ -1286,7 +1498,7 @@ int pivottable_get_field_definition(	/* return : 0 on success, other on error */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
 	PivotTable *pv,						/* in/out : pivot table definition */
 	char *pos							/* in : field position to read (ROW | COL | DATA) */
-){							
+){
 	char field[64];
 	char *srctype;
 	DynTable idlist = {0};
@@ -1298,21 +1510,21 @@ int pivottable_get_field_definition(	/* return : 0 on success, other on error */
 
 	/* Read source type & basic field expression*/
 	sprintf(field, "_EVA_SEL%s", pos);
-	srctype = dyntab_field_val(pv->srcdata, field, 0, 1, 0);
+	srctype = dyntab_field_val(pv->srcdata, field, ~0UL, 0);
 	if(!strcmp(srctype, "_EVA_SIMPLE"))
 	{
 		/* Simple source type : read prefixed label & expression */
 		pvf->pos = pos;
 		sprintf(field, "_EVA_%sEXPR", pos);
-		if(dyntab_filter_field(&pvf->expr, 0, pv->srcdata, field, 0, 1, NULL)) RETURN_ERR_MEMORY;
+		if(dyntab_filter_field(&pvf->expr, 0, pv->srcdata, field, ~0UL, NULL)) RETURN_ERR_MEMORY;
 		sprintf(field, "_EVA_%sLABEL", pos);
-		pvf->label = dyntab_field_val(pv->srcdata, field, 0, 1, 0);
+		pvf->label = dyntab_field_val(pv->srcdata, field, ~0UL, 0);
 		if(!strcmp(pos, "DATA"))
-			pvf->decimals = atoi(dyntab_field_val(pv->srcdata, "_EVA_DECIMALS", 0, 1, 0));
+			pvf->decimals = atoi(DYNTAB_FIELD_VAL(pv->srcdata, DECIMALS));
 		else
 		{
 			sprintf(field, "_EVA_%sTRUNC", pos);
-			pvf->trunc = dyntab_field_val(pv->srcdata, field, 0, 1, 0);
+			pvf->trunc = dyntab_field_val(pv->srcdata, field, ~0UL, 0);
 		}
 		pvf->stackcols_limit = 10;
 		if(*pos == 'D') DYNTAB_FIELD(&pvf->function, pv->srcdata, FUNCTION);
@@ -1322,7 +1534,7 @@ int pivottable_get_field_definition(	/* return : 0 on success, other on error */
 	{
 		/* Current object : read corresponding object data - return if empty */
 		sprintf(field, "_EVA_SEL%s_FIELD", pos);
-		if(get_current_obj_field_data(cntxt, dyntab_field_val(pv->srcdata, field, 0, 1, 0),
+		if(get_current_obj_field_data(cntxt, dyntab_field_val(pv->srcdata, field, ~0UL, 0),
 											&pvf->srcdata, &idlist)) STACK_ERROR;
 		if(!pvf->srcdata.nbrows) RETURN_OK;
 		pvf->pos = pos;
@@ -1334,7 +1546,7 @@ int pivottable_get_field_definition(	/* return : 0 on success, other on error */
 		/* Existing indicator : read corresponding object data - return if empty */
 		unsigned long i;
 		sprintf(field, "_EVA_SEL%s_OBJ", pos);
-		if(dyntab_filter_field(&idlist, 0, pv->srcdata, field, 0, 1, NULL)) RETURN_ERR_MEMORY;
+		if(dyntab_filter_field(&idlist, 0, pv->srcdata, field, ~0UL, NULL)) RETURN_ERR_MEMORY;
 		if(!dyntab_sz(&idlist, 0, 0)) dyntab_free(&idlist);
 		if(!pvf->srcdata.nbrows && !idlist.nbrows) RETURN_OK;
 
@@ -1345,7 +1557,7 @@ int pivottable_get_field_definition(	/* return : 0 on success, other on error */
 			PivotTableField *pvf1 = pvftbl + *pvfnb + i;
 			pvf1->pos = pos;
 			snprintf(add_sz_str(pvf1->datatable), "%s%lu", pos, i);
-			if(!pvf1->srcdata.nbrows && 
+			if(!pvf1->srcdata.nbrows &&
 				qry_obj_field(cntxt, &pvf1->srcdata, DYNTAB_TOULRC(&idlist, i, 0), NULL) ||
 				pivottable_get_indic_definition(cntxt, i_ctrl, pv, pvf1)) STACK_ERROR;
 		}
@@ -1400,20 +1612,23 @@ int pvt_load_definition(			/* return : 0 on success, other on error */
 	/* Use template object data if applicable */
 	if(srcobj)
 	{
-		if(qry_obj_field(cntxt, &data, srcobj, NULL)) STACK_ERROR;
+		if(qry_cache_idobj(&data, srcobj)) STACK_ERROR;
 		if(qry_complete_data(cntxt, pvtdata, &data, NULL, NULL)) STACK_ERROR;
 	}
 
 	/* Initialize pivot table structure */
-	pv->label = DYNTAB_FIELD_VAL(pvtdata, LABEL);
 	pv->srcdata = pvtdata;
+	pv->label = DYNTAB_FIELD_VAL(pvtdata, LABEL);
 
 	/* Read notes contents */
+	DYNTAB_FIELD(&pv->dynnotes, pvtdata, LABEL_CALC);
+	if(!pv->dynnotes.nbrows) DYNTAB_FIELD(&pv->dynnotes, &cntxt->form->objdata, LABEL_CALC);
 	{
 		char *notes = DYNTAB_FIELD_VAL(pvtdata, EXTRA_NOTES);
-		pv->tblnotes = (DYNTAB_FIELD_CELL(pvtdata, LABEL_CALC) ? TblNote_dynamic : 0) |
+		pv->tblnotes = (pv->dynnotes.nbrows ? TblNote_dynamic : 0) |
 					   (!strcmp(notes, "_EVA_NOTES") ? TblNote_allnote :
 						!strcmp(notes, "_EVA_DETAIL") ? TblNote_alldetail :
+						!strcmp(notes, "_EVA_MINIMAL") ? TblNote_minimal :
 						!strcmp(notes, "_EVA_NONE") ? 0 : TblNote_note);
 	}
 
@@ -1425,7 +1640,13 @@ int pvt_load_definition(			/* return : 0 on success, other on error */
 	}
 	else if(!strcmp(srctype, "_EVA_CURRENTOBJ"))
 	{
-		/* Current object : get data from given field TODO */
+		/* Current object : get data from given field */
+		DYNTAB_FIELD(&data, pvtdata, SELFILTER_FIELD);
+		if(form_eval_valtype(cntxt, &pv->filters, srctype, NULL, &data))
+		{
+			CLEAR_ERROR;
+			DYNTAB_ADD_INT(&pv->filters, 0, 0, 0);
+		}
 	}
 	else
 	{
@@ -1458,7 +1679,7 @@ int pvt_load_definition(			/* return : 0 on success, other on error */
 	pv->objlist =strtoul(DYNTAB_FIELD_VAL(pvtdata, PVTLIST_CTRL), NULL, 10);
 	if(!pv->clicmode[0])
 	{
-		PivotTableField *pvf = (pv->data && pv->data->clicmode && pv->data->clicmode[0]) ? pv->data : 
+		PivotTableField *pvf = (pv->data && pv->data->clicmode && pv->data->clicmode[0]) ? pv->data :
 								(pv->row && pv->row->clicmode && pv->row->clicmode[0]) ? pv->row :
 								(pv->col && pv->col->clicmode && pv->col->clicmode[0]) ? pv->col : NULL;
 		if(pvf)
@@ -1467,6 +1688,7 @@ int pvt_load_definition(			/* return : 0 on success, other on error */
 			pv->objlist = pvf->objlist;
 		}
 	}
+	if(!strcmp(pv->clicmode, "_EVA_NONE")) pv->clicmode = "";
 
 	RETURN_OK_CLEANUP;
 }
@@ -1509,8 +1731,8 @@ int ctrl_output_pivottable(			/* return : 0 on success, other on error */
 	if(pvt_load_definition(cntxt, i_ctrl, pv, pvtdata)) STACK_ERROR;
 
 	/* Handle debug */
-	if(form_get_field_values(cntxt, &cgival, "_EVA_DEBUG_SQL", 0, 0)) STACK_ERROR; 
-	if(*dyntab_val(&cgival, 0, 0) == '1' || *dyntab_field_val(pvtdata, "_EVA_DEBUG_SQL", 0, 1, 0) == '1')
+	if(form_get_field_values(cntxt, &cgival, "_EVA_DEBUG_SQL", 0, 0)) STACK_ERROR;
+	if(*dyntab_val(&cgival, 0, 0) == '1' || *DYNTAB_FIELD_VAL(pvtdata, DEBUG_SQL) == '1')
 		cntxt->sql_trace = DEBUG_SQL_RES;
 
 	/* Read values list status & handle values clic */
@@ -1524,6 +1746,7 @@ int ctrl_output_pivottable(			/* return : 0 on success, other on error */
 	{
 		/* Click on 'Return to table' button - clear values list CGI data */
 		CTRL_GET_CGI_SUBFIELD("PVTLIST");
+		CTRL_GET_CGI_SUBFIELD("STATUS");
 	}
 	else
 	{
@@ -1542,6 +1765,7 @@ int ctrl_output_pivottable(			/* return : 0 on success, other on error */
 	}
 
 	/* Calc pivot table - return on error */
+	CTRL_GET_CGI_SUBFIELD("PVTLIST");
 	if(pivottable_calc(cntxt, pv))
 	{
 		DYNBUF_ADD(html, cntxt->err.text, 0, TO_HTML);
@@ -1551,25 +1775,6 @@ int ctrl_output_pivottable(			/* return : 0 on success, other on error */
 
 	/* Output pivot table */
 	if(ctrl_calc_output_pvtres(cntxt, i_ctrl, pv)) STACK_ERROR;
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : ctrl_output_stats_fields
-** Description : output statistics on selected objects
-*********************************************************************/
-#define ERR_FUNCTION "ctrl_output_stats_fields"
-#define ERR_CLEANUP	
-int ctrl_output_stats_fields(			/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in/out : execution context data */
-	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
-){
-	EVA_form *form = cntxt->form;
-	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	ctrl = 0;
 
 	RETURN_OK_CLEANUP;
 }
@@ -1589,7 +1794,7 @@ int ctrl_add_pivottable_selector(		/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl,				/* in : control index in cntxt->form->ctrl */
 	DynTable *idlist					/* in : list of pivot tables object Ids */
-){							
+){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	DynTable cgival = {0};
@@ -1635,7 +1840,7 @@ int ctrl_add_pivottable_selector(		/* return : 0 on success, other on error */
 	CTRL_CGINAMESUBFIELD(&name, NULL, "PVTSELECT");
 	if(ctrl->LINES > optlist.nbrows) ctrl->LINES = optlist.nbrows;
 	else if(!ctrl->LINES) ctrl->LINES = optlist.nbrows < 5 ? optlist.nbrows : 5;
-	if(put_html_list(cntxt, name, &optlist, &cgival, ctrl->LINES, 0, 0, 1, 1)) STACK_ERROR;
+	if(put_html_list(cntxt, name, &optlist, &cgival, ctrl->LINES, 0, 0, 1, 1, NULL)) STACK_ERROR;
 
 	/* Output page buttons */
 	DYNBUF_ADD_STR(html, "</td><td>");
@@ -1655,10 +1860,26 @@ int ctrl_add_pivottable_selector(		/* return : 0 on success, other on error */
 	if(put_html_button(cntxt, name->data, "Rapport", "btn_book.gif", "btn_book_s.gif",
 						"Produit l'ensemble des tableaux dans un document Excel et Word", 0, 12)) STACK_ERROR;
 	DYNBUF_ADD_STR(form->html, "</td></tr></table>");
- 
-	/* Call pivot table display function */
+
+	/* Read table definition data */
 	if(qry_obj_idfield(cntxt, &cgival, DYNTAB_TOULRC(&optlist, i_sel, 0), 0)) STACK_ERROR;
-	if(ctrl_output_pivottable(cntxt, i_ctrl, &cgival)) STACK_ERROR;
+
+	/* Handle table type */
+	if(!strcmp(DYNTAB_FIELD_VAL(&cgival, TYPE), "_EVA_LIST_SIMPLE"))
+	{
+		/* Output list table */
+		DynTable tmp = {0};
+		memcpy(&tmp, &ctrl->attr, sizeof(tmp));
+		memcpy(&ctrl->attr, &cgival, sizeof(tmp));
+		if(ctrl_add_symbol_btn(cntxt, ctrl, NULL, &cgival, 0, NULL, "LABEL+SYMBOL+OBJNOTES") ||
+			table_read_controls(cntxt, i_ctrl, &cgival) ||
+			table_process_controls(cntxt, i_ctrl) ||
+			table_put_html_obj_list(cntxt, i_ctrl)) CLEAR_ERROR;
+		memcpy(&ctrl->attr, &tmp, sizeof(tmp));
+	}
+	else
+		/* Call pivot table display function */
+		if(ctrl_output_pivottable(cntxt, i_ctrl, &cgival)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -1670,24 +1891,40 @@ int ctrl_add_pivottable_selector(		/* return : 0 on success, other on error */
 ** Description : output pivot table data as html & parameters file
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_export_pivottable"
-#define ERR_CLEANUP	M_FREE(export)
+#define ERR_CLEANUP	M_FREE(export); \
+					DYNTAB_FREE(data)
 int ctrl_export_pivottable(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl,			/* in : control index in cntxt->form->ctrl */
 	char *outfile,					/* out: output data file name */
-	PivotTable *pv					/* in/out : pivot table data */
+	PivotTable *pv,					/* in/out : pivot table data */
+	DynTable *pvtdata				/* in : pivot table definition data */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	DynBuffer *export = NULL;
 	FILE *f;
 	char filename[4096];
+	DynTable data = { 0 };
+	DynTableCell *c;
 
 	/* Build file name */
 	snprintf(add_sz_str(filename), "%s.htm", pv->label ? pv->label : "Statistiques");
 	file_compatible_name(filename);
+
+	/* Output pivot table params to buffer */
 	DYNBUF_ADD3(&pv->exportparams, "DataFile\t", filename, 0, NO_CONV, "\t");
-	DYNBUF_ADD3_INT(&pv->exportparams, "", pv->srcdata->cell->IdObj, "\n");
+	DYNBUF_ADD_INT(&pv->exportparams, pvtdata->cell->IdObj);
+	DYNBUF_ADD3_CELLP(&pv->exportparams, "\t", DYNTAB_FIELD_CELL(pvtdata, GRAPH_SEL), NO_CONV, "\t");
+	c = DYNTAB_FIELD_CELL(pvtdata, 2DGRAPH_TYPE);
+	if(c && !strcmp(c->txt, "_EVA_GRAPH_PERSO"))
+	{
+		if(form_eval_fieldexpr(cntxt, &data, 0, pvtdata->cell->IdObj, add_sz_str("_EVA_GRAPH_PERSO->_EVA_FILE_SERVER_NAME"), pvtdata, 0)) STACK_ERROR;
+ 		DYNBUF_ADD_CELL(&pv->exportparams, &data, 0, 0, NO_CONV);
+	}
+	else
+		DYNBUF_ADD_CELLP(&pv->exportparams, c, NO_CONV);
+	DYNBUF_ADD3_CELLP(&pv->exportparams, "\t", DYNTAB_FIELD_CELL(pvtdata, GRAPH_WORD_FMT), NO_CONV, "\n");
 
 	/* Output results to buffer */
 	form->html = &export;
@@ -1703,14 +1940,14 @@ int ctrl_export_pivottable(			/* return : 0 on success, other on error */
 
 	/* Output buffer to HTML file */
 	f = fopen(filename, "w");
-	if(!f) RETURN_ERR_DIRECTORY(ERR_PUT_TXT("Export stats : ", filename, 0));
+	if(!f) RETURN_ERR_DIRECTORY;
 	fprintf(f, "<html><body><font face=%s>%s</font></body></html>",
 				ctrl->FONTFACE, export ? export->data : "");
 	fclose(f);
 
 	/* Output parameters file */
 	f = fopen("dumpfmt.txt", "a");
-	if(!f) RETURN_ERR_DIRECTORY(ERR_PUT_TXT("Export stats : dumpfmt.txt", "", 0));
+	if(!f) RETURN_ERR_DIRECTORY;
 	fputs(pv->exportparams->data, f);
 	fputs("\n", f);
 	fclose(f);
@@ -1746,11 +1983,15 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 	switch(form->step)
 	{
 	case CtrlRead:
+		/* Ignore field name */
+		ctrl->FIELD = "";
+		if(cgi_build_basename(cntxt, &ctrl->cginame, i_ctrl, 'D')) STACK_ERROR;
+
 		/* Handle click on 'Export' buttons */
 		if(!strncmp(btn, add_sz_str("EXPORTPVT=")))
 		{
-			char fname[4096];
-			char filename[4096];
+			char fname[4096] = {0}; size_t sz_fname;
+			char filename[4096] = {0}; size_t sz_filename;
 			char htmname[4096] = {0};
 			struct stat fs = {0};
 			unsigned long i;
@@ -1769,7 +2010,7 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 				"<font face=Arial><hr><center>"
 				"<b>Export de données statistiques - %s</b></center><hr>", lbl);
 
-			/* Loop on each pivot table to output */
+			/* Loop on each table to output */
 			for(i = 0; i < idlist.nbrows; i++)
 			{
 				/* Read pivot table definition */
@@ -1783,69 +2024,87 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 					if(qry_obj_field(cntxt, &objdata, idobj, NULL)) STACK_ERROR;
 				}
 
-				/* Export pivot table to file in user directory */
-				pivottable_free(cntxt, &pv);
-				if(pvt_load_definition(cntxt, i_ctrl, &pv, &objdata)) STACK_ERROR;
-				printf("<li>%lu / %lu : %s</li>\n", i + 1, idlist.nbrows, pv.label); fflush(stdout);
-				if(ctrl_export_pivottable(cntxt, i_ctrl, htmname, &pv)) STACK_ERROR;
+				/* Output status message */
+				printf("<li>%lu / %lu : %s</li>\n", i + 1, idlist.nbrows, DYNTAB_FIELD_VAL(&objdata, LABEL)); fflush(stdout);
+
+				/* Handle table type */
+				if(!strcmp(DYNTAB_FIELD_VAL(&objdata, TYPE), "_EVA_LIST_SIMPLE"))
+				{
+					/* Export list contents */
+					DynTable tmp = {0};
+					char filename[64];
+					snprintf(add_sz_str(filename), "%lu.txt", idobj);
+					memcpy(&tmp, &ctrl->attr, sizeof(tmp));
+					memcpy(&ctrl->attr, &objdata, sizeof(tmp));
+					if(table_read_controls(cntxt, i_ctrl, NULL) ) STACK_ERROR;
+					if(table_init_obj_list(cntxt, i_ctrl, NULL)) STACK_ERROR;
+					ctrl->objtbl->line = 0;
+					ctrl->objtbl->lines = ctrl->objtbl->totlines;
+					if(table_read_obj_list(cntxt, i_ctrl, 0)) STACK_ERROR;
+					if(table_prepare_rows(cntxt, i_ctrl, "")) STACK_ERROR;
+					if(file_write_tabrc(cntxt, &ctrl->objtbl->cellval, "dump.txt")) CLEAR_ERROR;
+					memcpy(&ctrl->attr, &tmp, sizeof(tmp));
+					table_free(ctrl->objtbl);
+					M_FREE(ctrl->objtbl);
+					DYNBUF_ADD3(&pv.exportparams, "DataFile\t", filename, 0, NO_CONV, "\t");
+					DYNBUF_ADD3_INT(&pv.exportparams, "", pv.srcdata->cell->IdObj, "\n");
+				}
+				else
+				{
+					/* Export pivot table contents */
+					pivottable_free(cntxt, &pv);
+					if(pvt_load_definition(cntxt, i_ctrl, &pv, &objdata)) STACK_ERROR;
+					if(ctrl_export_pivottable(cntxt, i_ctrl, htmname, &pv, &objdata)) STACK_ERROR;
+				}
 			}
 
 			/* Launch excel file preparation */
-			printf("<li>Microsoft Office</li>\n"); fflush(stdout);
-			if(idlist.nbrows > 1) system("copy ..\\..\\..\\templates\\TableStats.doc . >exe.txt 2>exeerr.txt");
+			printf("<li>Mise au format Office</li>\n"); fflush(stdout);
 			if(office_launchproc(cntxt, "_EVA_EXCEL", "TableStats.xls")) CLEAR_ERROR;
+
+			/* Prepare file name & cleanup temp files */
 			b_err = stat("TableStatsRes.xls", &fs);
 			remove("TableStats.xls");
-			remove("TableStats.doc");
 			remove("dumpfmt.txt");
 			if(idlist.nbrows > 1)
-				snprintf(add_sz_str(fname), "%s-%s", cntxt->dbname, *lbl ? lbl : ctrl->LABEL[0] ? ctrl->LABEL : "Rapport statistique");
+				sz_fname = snprintf(add_sz_str(fname), "%s-%s", cntxt->dbname, *lbl ? lbl : ctrl->LABEL[0] ? ctrl->LABEL : "Rapport statistique");
 			else
-				snprintf(add_sz_str(fname), "%s-%s", cntxt->dbname, pv.label ? pv.label : "Tableau statistique");
-			sprintf(filename, "%s.xls", fname);
-			file_compatible_name(filename);
-			printf("\n<table bgcolor=#FFFFFF border width=100%%><tr><td align=center>"); fflush(stdout);
+				sz_fname = snprintf(add_sz_str(fname), "%s-%s", cntxt->dbname, pv.label ? pv.label : "Tableau statistique");
+
+			DYNBUF_ADD_STR(&cntxt->html, "<hr>");
 
 			/* Output error message if applicable */
 			if(b_err)
 			{
-				printf(
-					"Erreur dans Microsoft Excel - le fichier n'a pas pu être produit au format Excel<br><br>"
-					"Vous pouvez télécharger le fichier au format HTML et l'ouvrir avec Microsoft Excel sur votre poste<br><br>");
+				DYNBUF_ADD_STR(&cntxt->html,
+					"Erreur dans Microsoft Excel - le fichier n'a pas pu être produit au format Office<br><br>"
+					"Vous pouvez télécharger le fichier au format HTML et l'ouvrir avec un tableur sur votre poste<br><br>");
 				rename(htmname, "TableStatsRes.xls");
-				stat("TableStatsRes.xls", &fs);
 			}
-
-			/* Cleanup & move files */
 			remove(htmname);
-			remove(filename);
-			rename("TableStatsRes.xls", filename);
 
-			/* Output download dialog for excel file */
-			printf(
-				"Cliquez sur le lien ci-dessous pour télécharger le fichier Excel<br><br>"
-				"<font size=-1>Si vous utilisez Internet Explorer, le fichier s'ouvrira dans une nouvelle fenêtre<br>"
-				"Pour enregistrer le fichier sur votre ordinateur, cliquez avec le bouton de droite et choisissez Enregistrer la cible sous ...</font><br><br>"
-				"Fichier Excel : <a target='W%s.xls' href='../" DIRECTORY_DOCS "/%s/%s/%s'>%s.xls - %s</a><br><br>",
-				fname, cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0), filename,
-				fname, human_filesize(fs.st_size));
-
-			/* Output download dialog for word file */
-			if(!stat("TableStatsRes.doc", &fs))
+			/* Output download dialog for word file if applicable */
+			if(idlist.nbrows > 1)
 			{
 				sprintf(filename, "%s.doc", fname);
-				file_compatible_name(filename);
+				sz_filename = file_compatible_name(filename);
 				remove(filename);
 				rename("TableStatsRes.doc", filename);
-				printf(
-					"Cliquez sur le lien ci-dessous pour télécharger le fichier Word<br><br>"
-					"Fichier Word : <a target='W%s.doc' href='../" DIRECTORY_DOCS "/%s/%s/%s'>%s.doc - %s</a><br><br>",
-					fname, cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0), filename,
-					fname, human_filesize(fs.st_size));
+				if(file_output_link(cntxt, &cntxt->html,
+							add_sz_str("<b><u>Fichier document</u></b> : "),
+							fname, sz_fname, filename, sz_filename, "#user", NULL, 0, NULL, 0, 3)) STACK_ERROR;
 			}
 
-			/* Output return button */
-			puts("<input type=image name='NOP' src='../img/_eva_btn_gobackobj_fr.gif'></td></tr></table></font>");
+			/* Output download dialog for excel file */
+			sprintf(filename, "%s.xls", fname);
+			sz_filename = file_compatible_name(filename);
+			remove(filename);
+			rename("TableStatsRes.xls", filename);
+			if(file_output_link(cntxt, &cntxt->html,
+						add_sz_str("<b><u>Fichier tableur</u></b> : "),
+						fname, sz_fname, filename, sz_filename, "#user", NULL, 0, NULL, 0,
+						(b_err ? 7 : 6) | (form->b_modified ? 0 : 8))) STACK_ERROR;
+			DYNBUF_ADD_STR(&cntxt->html, "<br><br>");
 			cntxt->b_terminate = 15;
 		}
 		break;
@@ -1856,39 +2115,52 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 		if(!form->html) break;
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
 
-		if(*dyntab_field_val(&ctrl->attr, "_EVA_DEBUG_SQL", 0, 1, 0) == '1') cntxt->sql_trace = DEBUG_SQL_RES;
+		if(*CTRL_ATTR_VAL(DEBUG_SQL) == '1') cntxt->sql_trace = DEBUG_SQL_RES;
 
 		/* Call apropriate function for statistics type */
-		if(!strcmp(stats_type, "_EVA_STATS_FORM"))
+		if(!strcmp(stats_type, "_EVA_PVT_LIST"))
 		{
-			if(ctrl_output_stats_fields(cntxt, i_ctrl)) STACK_ERROR;
-		}
-		else if(!strcmp(stats_type, "_EVA_PVT_LIST"))
-		{
-			/* Pivot tables list : output each table */
+			/* Pivot tables list : output tables */
 			unsigned long i;
-			CTRL_OPTIONAL(idlist, PVT_LIST);
-			for(i = 0; i < idlist.nbrows; i++)
+			CTRL_ATTR(idlist, PVT_LIST);
+
+			/* Handle display mode */
+			if(CTRL_ATTR_CELL(DISPMODE) && idlist.nbrows > 1)
 			{
-				/* Read pivot table definition data and call display function */
-				if(qry_obj_idfield(cntxt, &objdata, DYNTAB_TOULRC(&idlist, i, 0), 0) ||
-					ctrl_output_pivottable(cntxt, i_ctrl, &objdata)) STACK_ERROR;
+				/* Selector : call selector display function */
+				if(ctrl_add_pivottable_selector(cntxt, i_ctrl, &idlist)) STACK_ERROR
+			}
+			else
+			{
+				/* No selector : read each pivot table and call display function */
+				for(i = 0; i < idlist.nbrows; i++)
+					if(qry_obj_idfield(cntxt, &objdata, DYNTAB_TOULRC(&idlist, i, 0), 0) ||
+						ctrl_output_pivottable(cntxt, i_ctrl, &objdata)) STACK_ERROR;
 			}
 		}
 		else if(!strcmp(stats_type, "_EVA_CURRENTOBJ"))
 		{
 			/* Pivot table defined with current object : check for source field */
-			char *field = CTRL_ATTR_VAL(SELOBJ_FIELD);
-			if(get_current_obj_field_data(cntxt, field, &objdata, &idlist)) STACK_ERROR;
-			if(idlist.nbrows > 1)
+			DynTableCell *c = CTRL_ATTR_CELL(SELOBJ_FIELD);
+			if(c && strpbrk(c->txt, ".-([") != NULL)
 			{
-				/* Multiple tables : handle table selection */
+				if(form_eval_fieldexpr(cntxt, &idlist, 0, 0, c->txt, c->len, NULL, 0)) STACK_ERROR;
 				if(ctrl_add_pivottable_selector(cntxt, i_ctrl, &idlist)) STACK_ERROR;
 			}
 			else
 			{
-				/* Single table : call display function with read data */
-				if(ctrl_output_pivottable(cntxt, i_ctrl, &objdata)) STACK_ERROR;
+				/* Current object : call display function with read data */
+				if(get_current_obj_field_data(cntxt, c ? c->txt : "", &objdata, &idlist)) STACK_ERROR;
+				if(idlist.nbrows > 1)
+				{
+					/* Multiple tables : handle table selection */
+					if(ctrl_add_pivottable_selector(cntxt, i_ctrl, &idlist)) STACK_ERROR;
+				}
+				else
+				{
+					/* Single table : call display function with read data */
+					if(ctrl_output_pivottable(cntxt, i_ctrl, &objdata)) STACK_ERROR;
+				}
 			}
 		}
 		else

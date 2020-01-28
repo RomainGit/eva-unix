@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_cgi.h
 ** Description : CGI handling utilities for controls
 **      Author : Alain BOUTE
@@ -26,6 +32,7 @@
 ** Description : build the complete CGI input name of a control	subfield
 *********************************************************************/
 #define	CTRL_CGINAMESUBFIELD(name, val, field) { if(ctrl_cgi_name(cntxt, ctrl, val, 1, name, 'D', add_sz_str(field))) STACK_ERROR; }
+#define	CTRL_CGINAMESUBFIELD1(name, val, txt, len) { if(ctrl_cgi_name(cntxt, ctrl, val, 1, name, 'D', txt, len)) STACK_ERROR; }
 
 /*********************************************************************
 ** Function : ctrl_cgi_name

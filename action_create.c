@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : action_create.c
 ** Description : handler for buttons & actions of type CREATE
 **				 create series of objects
@@ -45,6 +51,7 @@ int action_create_objects(			/* return : 0 on success, other on error */
 	DynTable field = {0};
 	DynTable data = {0};
 	DynTable objdata = {0};
+	DynTable lineval = {0};
 	QryBuild flt = {0};
 	DynBuffer *label = NULL;
 	unsigned long dstform = strtoul(CTRL_ATTR_VAL(CREATE_FORM), NULL, 10);
@@ -53,45 +60,95 @@ int action_create_objects(			/* return : 0 on success, other on error */
 	unsigned long i, j, k;	  
 	char *crmode = CTRL_ATTR_VAL(CREATE_MODE);
 	char *dialog = CTRL_ATTR_VAL(DIALOG);
+	char *after = CTRL_ATTR_VAL(EXEC_AFTER);
 	unsigned long limit = strtoul(CTRL_ATTR_VAL(LIMIT), NULL, 10);
 	int b_msg;
+	DynTableCell *newobjfield = CTRL_ATTR_CELL(NEWOBJ_FIELD);
 	DynTableCell *srcupdate = CTRL_ATTR_CELL(SRC_UPDATE);
+	int b_lineval = !strcmp(crmode, "_EVA_VALUES_TABLE");
+	char *confirm = CTRL_ATTR_VAL(CONFIRM);
+	int b_savetodb = *confirm && strcmp(confirm, "_EVA_NOSAVE");
 
-	//return 0;
+	/* Handle save before */
+	if(b_savetodb)
+	{
+		int b_done = BUTN_SAVE_NEXT;
+		if(form_save_dialog(cntxt, i_ctrl, confirm, BUTN_SAVE_NEXT, &b_done)) STACK_ERROR;
+		if(b_done != BUTN_SAVE_NEXT) RETURN_OK;
+	}
+
+	/* Read created values definition */
+	CTRL_ATTR_TAB(dstfield, DESTFIELD);
+	CTRL_ATTR_TAB(dstrelmod, DEST_RELMODE);
+	CTRL_ATTR_TAB(dstkey, DEST_KEY);
+	CTRL_ATTR_TAB(srcvaltyp, SRCTYPE);
+	CTRL_ATTR_TAB(srcvalobj, SRCLISTOBJ);
+	CTRL_ATTR_TAB(srcfield, SRCFIELD);
+
 
 	/* Handle create method */
 	if(!strcmp(crmode, "_EVA_RELATION"))
 	{
-		/* Create one object per object in given relation control */
-		unsigned long idctrl = strtoul(CTRL_ATTR_VAL(SRCOBJ_INPUT), NULL, 10);
+		/* Create one object per object in given relation controls */
+		CTRL_ATTR(srcobj, SRCOBJ_INPUT);
 
 		/* Read control values on current object */ 
-		if(qry_obj_field(cntxt, &data, idctrl, "_EVA_FIELD")) STACK_ERROR;
-		if(data.nbrows && form_get_field_values(cntxt, &srcobj, dyntab_val(&data, 0, 0), idform, idobj)) STACK_ERROR;
+		if(qry_listobj_field(cntxt, &data, &srcobj, "_EVA_FIELD")) STACK_ERROR;
+		if(dyntab_to_dynbuf(&data, &label, ",", 1, ",", 1, NO_CONV)) STACK_ERROR;
+		if(label && form_get_field_values(cntxt, &srcobj, label->data, idform, idobj)) STACK_ERROR;
+		M_FREE(label);
 	}
 	else if(!strcmp(crmode, "_EVA_CONDEXPR"))
 	{
 		/* Create one object per object matching given filter */
-		unsigned long idflt = strtoul(CTRL_ATTR_VAL(SELOBJ_FILTER), NULL, 10);
-
 		/* Evaluate filter */ 
-		if(qry_obj_field(cntxt, &data, idflt, NULL)) STACK_ERROR;
-		if(qry_parse_filter_nodes(cntxt, &flt, &data)) STACK_ERROR;
+		CTRL_ATTR(data, SELOBJ_FILTER);
+		if(qry_add_filter_forms(cntxt, &flt, NULL, &data)) STACK_ERROR;
 		if(qry_filter_objects(cntxt, &srcobj, &flt)) STACK_ERROR;
+	}
+	else if(b_lineval)
+	{
+		/* Create one object per line of destination values */
+		if(dyntab_resize(&lineval, 1, dstfield.nbrows)) RETURN_ERR_MEMORY;
+
+		/* Compute values for each field */
+		for(i = 0; i < dstfield.nbrows; i++)
+		{
+			/* Transfer value definition */
+			char *srctyp = dyntab_val(&srcvaltyp, i, 0);
+			if(!*srctyp) srctyp = "_EVA_VALUE";
+			DYNTAB_SET_CELL(&field, 0, 0, &srcfield, i, 0);
+			field.cell->Line = 0;
+			dyntab_free(&listobj);
+			for(k = 0; k < srcvalobj.nbcols && dyntab_sz(&srcvalobj, i, k); k++)
+				DYNTAB_SET_CELL(&listobj, k, 0, &srcvalobj, i, k);
+
+			/* Evaluate value - abort objects creation on error */
+			if(ctrl_eval_valtyp(cntxt, ctrl, &data, srctyp, &listobj, &field)) 
+			{
+				CLEAR_ERROR;
+				RETURN_OK;
+			}
+
+			/* Store result in one column of temp table & count lines */
+			for(j = 0; j < data.nbrows; j++) 
+			{
+				DynTableCell *c = dyntab_cell(&data, j, 0), *c0;
+				DYNTAB_ADD_CELLP(&lineval, j, i, c);
+				c0 = dyntab_cell(&lineval, 0, i);
+				if(!j) c0->row = data.nbrows;
+				c0->col |= c->Line ? 2 : 1;
+				if(!c->Line) continue;
+				for(k = 0; k < srcobj.nbrows && DYNTAB_TOULRC(&srcobj, k, 0) != c->Line; k++);
+				if(k == srcobj.nbrows) DYNTAB_ADD_INT(&srcobj, srcobj.nbrows, 0, c->Line);
+			}
+		}
 	}
 	else
 	{
 		/* Create a single object */
 		DYNTAB_ADD_INT(&srcobj, 0, 0, idobj);
 	}
-
-	/* Read created values definition */
-	CTRL_READ_ATTR_TAB(dstfield, DESTFIELD);
-	CTRL_READ_ATTR_TAB(dstrelmod, DEST_RELMODE);
-	CTRL_READ_ATTR_TAB(dstkey, DEST_KEY);
-	CTRL_READ_ATTR_TAB(srcvaltyp, SRCTYPE);
-	CTRL_READ_ATTR_TAB(srcvalobj, SRCLISTOBJ);
-	CTRL_READ_ATTR_TAB(srcfield, SRCFIELD);
 
 	/* Output page header if applicable */
 	b_msg = !*dialog && srcobj.nbrows > 1 ||
@@ -124,32 +181,51 @@ int action_create_objects(			/* return : 0 on success, other on error */
 		{
 			/* Get relation & key options */
 			DynTableCell *fld = dyntab_cell(&dstfield, j, 0);
-			int b_rel = dyntab_sz(&dstrelmod, j, 0) > 0;
+			int valmode = atoi(dyntab_val(&dstrelmod, j, 0));
 			int b_key = !dstkey.nbrows || dyntab_sz(&dstkey, j, 0) > 0;
 
-			/* Handle value source type & field */
-			char *srctyp = dyntab_val(&srcvaltyp, j, 0);
-			if(!*srctyp) srctyp = "_EVA_VALUE";
-			dyntab_free(&listobj);
-			if(!strcmp(srctyp, "_EVA_PROC_SELOBJ"))
+			/* Get values from temp table if already computed */
+			if(b_lineval)
 			{
-				/* Handle specific value source type : selected object */
-				DYNTAB_ADD_INT(&listobj, 0, 0, idsrc);
-				srctyp = "_EVA_LISTOBJ";
+				DynTableCell *c0 = dyntab_cell(&lineval, 0, j);
+				dyntab_free(&data);
+				for(k = 0; k < c0->row; k++) 
+				{
+					DynTableCell *c = dyntab_cell(&lineval, k, j);
+					unsigned long row = data.nbrows;
+					if(c->Line != idsrc && c0->col & 2) continue;
+					DYNTAB_SET_CELLP(&data, row, 0, c);
+					dyntab_cell(&data, row, 0)->Line = 0;
+				}
 			}
 			else
-				for(k = 0; k < srcvalobj.nbcols; k++)
-					if(dyntab_sz(&srcvalobj, j, k))
-						DYNTAB_SET_CELL(&listobj, k, 0, &srcvalobj, j, k);
-			DYNTAB_SET_CELL(&field, 0, 0, &srcfield, j, 0);
-
-			/* Evaluate value - don't create this object if error */
-			if(form_eval_valtype(cntxt, &data, srctyp, &listobj, &field))
+			/* Compute values on current object */
 			{
-				b_create = 0;
-				if(b_msg) printf("<font color=#FF0000>%s</font> : %s<br>", fld->txt, cntxt->err.text);
-				CLEAR_ERROR;
-				break;
+				/* Handle value source type & field */
+				char *srctyp = dyntab_val(&srcvaltyp, j, 0);
+				if(!*srctyp) srctyp = "_EVA_VALUE";
+				dyntab_free(&listobj);
+				if(!strcmp(srctyp, "_EVA_PROC_SELOBJ"))
+				{
+					/* Handle specific value source type : selected object */
+					DYNTAB_ADD_INT(&listobj, 0, 0, idsrc);
+					srctyp = "_EVA_LISTOBJ";
+				}
+				else
+					for(k = 0; k < srcvalobj.nbcols && dyntab_sz(&srcvalobj, j, k); k++)
+						DYNTAB_SET_CELL(&listobj, k, 0, &srcvalobj, j, k);
+				dyntab_free(&field);
+				DYNTAB_SET_CELL(&field, 0, 0, &srcfield, j, 0);
+				field.cell->Line = 0;
+
+				/* Evaluate value - don't create this object if error */
+				if(ctrl_eval_valtyp(cntxt, ctrl, &data, srctyp, &listobj, &field))
+				{
+					b_create = 0;
+					if(b_msg) printf("<font color=#FF0000>%s</font> : %s<br>", fld->txt, cntxt->err.text);
+					CLEAR_ERROR;
+					break;
+				}
 			}
 
 			/* Add values to object data */
@@ -157,13 +233,24 @@ int action_create_objects(			/* return : 0 on success, other on error */
 			{
 				unsigned long row = objdata.nbrows;
 				DynTableCell *c;
+
+				/* Handle decimal values */
+				if(valmode == 2)
+				{
+					char *tmp;
+					c = dyntab_cell(&data, k, 0);
+					tmp = input_to_number(c->txt);
+					if(strcmp(tmp, c->txt)) DYNTAB_ADD(&data, k, 0, tmp, strlen(tmp), NO_CONV);
+				}
+
+				/* Set value attributes */
 				DYNTAB_ADD_CELL(&objdata, row, 0, &data, k, 0);
 				c = dyntab_cell(&objdata, row, 0);
 				if(c->field && !c->b_dontfreefield) M_FREE(c->field);
 				c->field = fld->txt;
 				c->IdField = fld->IdValue;
 				c->b_dontfreefield = 1;
-				c->b_relation |= b_rel;
+				c->b_relation |= (valmode == 1);
 				c->i_cgi = b_key ? j : ~0UL;
 			}
 		}
@@ -172,7 +259,7 @@ int action_create_objects(			/* return : 0 on success, other on error */
 		if(!objdata.nbrows || !b_create)
 		{
 			/* Display message if applicable */
-			if(b_msg) printf("<font color=#FFAA00>Pas de données - fiche non créée</font> : %s<br>");
+			if(b_msg) printf("<font color=#FFAA00>Pas de données - fiche non créée</font><br>");
 			continue;
 		}
 
@@ -187,6 +274,7 @@ int action_create_objects(			/* return : 0 on success, other on error */
 			if(c->i_cgi == ~0UL || !c->txt || !c->txt[0] || !c->len) continue;
 			dyntab_free(&data);
 			DYNTAB_SET_CELLP(&data, 0, 0, c);
+			dyntab_free(&field);
 			DYNTAB_SET_CELLP(&field, 0, 0, dyntab_cell(&dstfield, c->i_cgi,0));
 			if(qry_add_filter(cntxt, &flt, RelNone, &field, c->b_relation ? RelList :  Like, &data)) STACK_ERROR;
 		}
@@ -218,6 +306,8 @@ int action_create_objects(			/* return : 0 on success, other on error */
 			c->IdObj = iddest;
 			if(qry_add_val(cntxt, c, 2, NULL)) STACK_ERROR;
 		}
+		DYNTAB_ADD_INT(&dstobj, dstobj.nbrows, 0, iddest);
+		dyntab_cell(&dstobj, dstobj.nbrows - 1, 0)->b_relation = 1;
 
 		/* Display message with created object if applicable */
 		if(b_msg)
@@ -231,24 +321,42 @@ int action_create_objects(			/* return : 0 on success, other on error */
 		/* Update source object if applicable */
 		if(srcupdate)
 		{
+			char idrelobj[32];
 			DynTableCell val = {0};
 			val.field = srcupdate->txt;
 			val.IdField = srcupdate->IdValue;
-			val.IdObj = idsrc;
+			val.IdObj = b_lineval ? idobj : idsrc;
+			val.txt = idrelobj;
+			val.len = snprintf(add_sz_str(idrelobj), "%lu", iddest);
+			val.b_relation = 1;
 			if(qry_add_val(cntxt, &val, 2, NULL)) STACK_ERROR;
 		}
 	}
 
-	/* Close active window if applicable */
-	if(0)
+	/* Store list of created objects in given field */
+	if(newobjfield)
 	{
-		if(form_close_nosave(cntxt, idform, 0, NULL)) STACK_ERROR;
+		/* If object was saved or is not current object */
+		if(b_savetodb)
+		{
+			/* Update data base */
+			if(qry_update_idobj_idfield(cntxt, idobj, newobjfield->IdValue, &dstobj, 1))
+				CLEAR_ERROR;
+		}
+		else 
+			/* Update CGI data */
+			if(cgi_set_field_values(cntxt, idform, idobj, newobjfield->txt, newobjfield->len, &dstobj, "_EVA_ADD", 0))
+				CLEAR_ERROR;
 	}
  
 	/* Output page footer if applicable */
 	if(b_msg)
 	{
 		printf("<hr><br><center><input type=image name='B$#NOP' src='../img/_eva_btn_gobackobj_fr.gif'></center><br>\n");
+	}
+	if(*after && strcmp(after, "_EVA_NONE"))
+	{
+		if(form_close_nosave(cntxt, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), NULL)) STACK_ERROR;
 	}
 
 	RETURN_OK_CLEANUP;

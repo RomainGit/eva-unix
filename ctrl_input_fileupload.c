@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_input_fileupload.c
-** Description : HTML handling functions for input controls
+** Description : handling functions for file upload input controls
 **      Author : Alain BOUTE
 **     Created : Aug 18 2001
 *********************************************************************/
@@ -23,52 +29,47 @@ int ctrl_add_fileupload(			/* return : 0 on success, other on error */
 	DynTable cgival = {0};
 	DynBuffer *name = NULL;
 	unsigned long i;
+	char *tablesearch = CTRL_ATTR_VAL(TABLESEARCH);
+	int b_search = strcmp(tablesearch, "_EVA_NONE");
 	int b_multiple = ctrl->MULTIPLE[0] != 0 && strcmp("No", ctrl->MULTIPLE);
-	int b_loadfile = cntxt->cgiencodemultipart && form->i_ctrl_clic == i_ctrl;
+	int b_loadfile = cntxt->cgiencodemultipart && (!b_search || form->i_ctrl_clic == i_ctrl);
 
 	switch(form->step)
 	{
 	case CtrlRead:
-		/* Renumber values */
-		ctrl_renumber_values(ctrl, 0);
 		if(ctrl->storage) ctrl->storage = 3;
 
 		/* If not transmit mode : handle files list */
 		if(!b_loadfile)
 		{
 			/* Read table format data if needed */
-			if(!cntxt->objdata_FORMLIST_FILTER.nbrows)
+			if(!CTRL_ATTR_CELL(DISPLAYFIELDS))
 			{
-				DynTableCell *list = dyntab_field_cell(&cntxt->cnf_data, "_EVA_FORMLIST_FILTER", 0, 1, 0);
-				unsigned long idlist = (list && list->txt) ? atoi(list->txt) : 0;
-				if(qry_obj_field(cntxt, &cntxt->objdata_FORMLIST_FILTER, idlist, NULL)) STACK_ERROR;
+				if(!cntxt->objdata_FORMLIST_FILTER.nbrows)
+				{
+					DynTableCell *list = DYNTAB_FIELD_CELL(&cntxt->cnf_data, FORMLIST_FILTER);
+					unsigned long idlist = (list && list->txt) ? atoi(list->txt) : 0;
+					if(qry_cache_idobj(&cntxt->objdata_FORMLIST_FILTER, idlist)) STACK_ERROR;
+				}
+				if(qry_complete_data(cntxt, &ctrl->attr, &cntxt->objdata_FORMLIST_FILTER, NULL, NULL)) STACK_ERROR;
 			}
 
 			/* Handle table buttons clics */
-			if(table_read_controls(cntxt, i_ctrl, &cntxt->objdata_FORMLIST_FILTER) ||
+			if(table_read_controls(cntxt, i_ctrl, NULL) ||
 				table_process_controls(cntxt, i_ctrl)) STACK_ERROR;
 		}
+		for(i = 0; i < ctrl->val.nbrows; i++) dyntab_cell(&ctrl->val, i, 0)->b_relation = 1;
 		break;
 
 	case HtmlEdit:
-	case HtmlPrint:
-	case HtmlView:
 		/* Read control status */
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
 
-		/* Enclose subcontrols in a table */
-		DYNBUF_ADD3_INT(form->html,
-			"\n<table cellspacing=0 cellpadding=0 border=",
-			b_loadfile ? 1 : 0,
-			" bgcolor=#EEEEEE rules=none>");
-
 		/* Output control values */
-		if(!b_loadfile && cntxt->objdata_FORMLIST_FILTER.nbrows)
+		if(!b_loadfile)
 		{
 			/* Output relation table if applicable */
-			DYNBUF_ADD_STR(form->html, "<tr><td colspan=4>");
-			if(ctrl_relation_put_table(cntxt, i_ctrl)) STACK_ERROR;
-			DYNBUF_ADD_STR(form->html, "</td></tr>");
+			if(ctrl_relation_put_table(cntxt, i_ctrl, table_put_html_obj_list)) STACK_ERROR;
 		}
 		else
 			/* Output as hidden inputs if no table */
@@ -76,7 +77,6 @@ int ctrl_add_fileupload(			/* return : 0 on success, other on error */
 				if(ctrl_put_hidden(cntxt, ctrl, i)) STACK_ERROR;
 
 		/* If new value allowed */
-		DYNBUF_ADD_STR(form->html, "<tr valign=middle>");
 		if(form->step == HtmlEdit && (b_loadfile || b_multiple || !ctrl->val.nbrows))
 		{
 			int columns = ctrl->COLUMNS;
@@ -87,13 +87,12 @@ int ctrl_add_fileupload(			/* return : 0 on success, other on error */
 			{
 				/* Add HTML input of type file */
 				CTRL_CGINAMEVAL(&name, ctrl->val.nbrows);
-				DYNBUF_ADD3_BUF(form->html, "<td><input type=file name='", name, NO_CONV, "'");
-				DYNBUF_ADD3_INT(form->html, " size=", columns, "></td>\n");
+				DYNBUF_ADD3_BUF(form->html, "<input type=file name='", name, NO_CONV, "'");
+				DYNBUF_ADD3_INT(form->html, " size=", columns, ">\n");
 				if(ctrl_put_hidden_old(cntxt, ctrl, ctrl->val.nbrows, name, NULL, 0)) STACK_ERROR;
 
 				/* Add upload button + name & description inputs */
 				CTRL_CGINAMEBTN(&name, NULL, add_sz_str("Nop"));
-				DYNBUF_ADD_STR(form->html, "<td align=right>");
 				if(put_html_button(cntxt, name->data, "Lancer", 
 									NULL, NULL,
 									"Lance la transmission du fichier\n\n"
@@ -103,24 +102,32 @@ int ctrl_add_fileupload(			/* return : 0 on success, other on error */
 									"Si vous avez utilisé Parcourir et que vous ne voulez pas transmettre le fichier, effacez le champ à gauche du bouton Parcourir"
 									,0, 0))
 					STACK_ERROR;
-				CTRL_CGINAMESUBFIELD(&name, NULL, "FILE_DESCRIPTION");
-				DYNBUF_ADD_STR(form->html, "</td></tr><tr><td colspan=4>Description du fichier</td></tr><tr><td colspan=4>");
-				if(put_html_text_input(cntxt, name->data, name->cnt, 
-									NULL, 0, 0, 0, 3, 30, 128))
-					STACK_ERROR;
+
+				/* Output file description input if applicable */
+				if(*CTRL_ATTR_VAL(INPUT_DESCRIPTION))
+				{
+					CTRL_CGINAMESUBFIELD(&name, NULL, "FILE_DESCRIPTION");
+					if(put_html_text_input(cntxt, name->data, name->cnt, 
+										NULL, 0, 0, 0, 3, 30, 128))
+						STACK_ERROR;
+				}
 			}
 			else
 			{
 				/* Add open upload dialog button */
 				CTRL_CGINAMEBTN(&name, NULL, add_sz_str("TRANSMIT_FILE"));
-				DYNBUF_ADD_STR(form->html, "<td align=center>");
 				if(put_html_button(cntxt, name->data, "Transmettre ...", 
 									NULL, NULL, "Transmettre un fichier au serveur", 0, 0))
 					STACK_ERROR;
 			}
-			DYNBUF_ADD_STR(form->html, "</td>");
 		}
-		DYNBUF_ADD_STR(form->html, "</tr></table>");
+		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
+		break;
+
+	case HtmlPrint:
+	case HtmlView:
+		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
+		if(ctrl_relation_put_table(cntxt, i_ctrl, table_put_html_obj_list)) STACK_ERROR;
 		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
 	}
 

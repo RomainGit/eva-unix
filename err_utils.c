@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : err_utils.c
 ** Description : error handling functions
 **      Author : Alain BOUTE
@@ -14,8 +20,8 @@
 *********************************************************************/
 void err_add_context(
 	EVA_context *cntxt,		/* in/out : execution context data */
-	char *function, 
-	char *file, 
+	char *function,
+	char *file,
 	int line
 ){
 	char tmp[1024];
@@ -32,8 +38,8 @@ void err_add_context(
 *********************************************************************/
 void err_clear(
 	EVA_context *cntxt,		/* in/out : execution context data */
-	char *function, 
-	char *file, 
+	char *function,
+	char *file,
 	int line
 ){
 	/* Save error context */
@@ -61,16 +67,17 @@ void err_clear(
 void err_save_context(EVA_context *cntxt)
 {
 	unsigned long i;
+	EVA_form *form = cntxt->form;
 	if(!cntxt->err.text) return;
-	if(cntxt->form && cntxt->form->ctrl)
+	if(form && form->ctrl)
 	{
 		dynbuf_add(&cntxt->debug_html, add_sz_str("Form : "), NO_CONV);
-		dynbuf_add(&cntxt->debug_html, cntxt->form->ctrl->LABEL, 0, TO_HTML);
+		dynbuf_add(&cntxt->debug_html, form->ctrl->LABEL, 0, TO_HTML);
 		dynbuf_add(&cntxt->debug_html, add_sz_str("<br>"), NO_CONV);
-		if(cntxt->i_ctrl)
+		if(form->i_ctrl && form->i_ctrl < form->nb_ctrl)
 		{
 			dynbuf_add(&cntxt->debug_html, add_sz_str("Control : "), NO_CONV);
-			dynbuf_add(&cntxt->debug_html, cntxt->form->ctrl[cntxt->i_ctrl].LABEL, 0, TO_HTML);
+			dynbuf_add(&cntxt->debug_html, form->ctrl[form->i_ctrl].LABEL, 0, TO_HTML);
 			dynbuf_add(&cntxt->debug_html, add_sz_str("<br>"), NO_CONV);
 		}
 	}
@@ -83,7 +90,7 @@ void err_save_context(EVA_context *cntxt)
 		dynbuf_add(&cntxt->debug_html, add_sz_str(
 			"</td>\n</tr></table>"), NO_CONV);
 	}
-	if(cntxt->debug_msg) 
+	if(cntxt->debug_msg)
 	{
 		dynbuf_add(&cntxt->debug_html, add_sz_str(
 			"<br><b><u>Debug info</u></b><br><pre>"), NO_CONV);
@@ -104,7 +111,7 @@ void put_html_error(EVA_context *cntxt)
 	char *wd = getcwd(NULL, 0);
 
 	/* Build errlog file name */
-	snprintf(cntxt->err.file, sizeof(cntxt->err.file), "%s-%lu-%lu.htm", cntxt->err.text, time(NULL), getpid());
+	snprintf(cntxt->err.file, sizeof(cntxt->err.file), "%s-%lu-%lu.htm", cntxt->err.text, time(NULL), (unsigned long)getpid());
 	file_compatible_name(cntxt->err.file);
 
 	/* Output error message */
@@ -117,9 +124,8 @@ void put_html_error(EVA_context *cntxt)
 		"</p>\n", cntxt->err.file, cntxt->err.file);
 
 	/* Open file in errlog directory */
-	chdir(cntxt->path);
-	chdir("..");
-	mkdir("errlog");
+	chdir(cntxt->rootdir);
+	MKDIR("errlog");
 	chdir("errlog");
 	f = fopen(cntxt->err.file, "w");
 	if(!f)
@@ -140,6 +146,8 @@ void put_html_error(EVA_context *cntxt)
 
 	fprintf(f, "<font face=Arial><hr><b><font size=+3>Erreur du serveur</font> : %s</b><hr>\n", cntxt->err.text);
 	err_save_context(cntxt);
+	cntxt->err.text = NULL;
+	err_clear(cntxt, NULL, NULL, 0);
 	put_debug_msg(cntxt, f);
 	M_FREE(cntxt->debug_html);
 	cntxt->debug = DEBUG_CGI|DEBUG_ARGS|DEBUG_ENV;
@@ -166,7 +174,10 @@ void put_debug_msg(EVA_context *cntxt, FILE *f)
 		M_FREE(cntxt->debug_msg);
 	}
 	if(cntxt->debug_html && cntxt->debug_html->data && cntxt->debug_html->cnt)
+	{
 		fprintf(f ? f : stdout, "<font face=Courier size=-1>%s</font><hr>", cntxt->debug_html->data);
+		M_FREE(cntxt->debug_html);
+	}
 }
 
 /*********************************************************************
@@ -178,7 +189,7 @@ void put_debug_sqltable(EVA_context *cntxt, char *table)
 	char printbuf[1024];
 	unsigned long sql_trace = cntxt->sql_trace;
 	DynTable id_obj = {0};
-	snprintf(add_sz_str(printbuf), "--   ***DEBUG***\nSELECT * FROM %s", table);
+	snprintf(add_sz_str(printbuf), "SELECT * FROM %s ORDER BY IdObj", table);
 	sql_exec_query(cntxt, printbuf);
 	cntxt->sql_trace = 0;
 	sql_get_table(cntxt, &id_obj, 3);
@@ -193,7 +204,7 @@ void put_debug_sqltable(EVA_context *cntxt, char *table)
 *********************************************************************/
 void err_print_filter(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	QryBuild *flt			/* in : filter to output */ 
+	QryBuild *flt			/* in : filter to output */
 ){
 	unsigned long i, j;
 	char printbuf[1024];
@@ -202,7 +213,7 @@ void err_print_filter(
 
 	/* Print filter names */
 	dynbuf_print2(buf, "\n*** Filter : %lu nodes\nsrctable=%s\n", flt->nbnode, flt->srctable ? flt->srctable : "*");
-	for(i = 0; i < flt->name.nbrows; i++) 
+	for(i = 0; i < flt->name.nbrows; i++)
 		dynbuf_print(buf, "[%s]\n", dyntab_val(&flt->name, i, 0));
 
 	/* Print filter nodes */
@@ -216,40 +227,40 @@ void err_print_filter(
 		/* Print fields */
 		if(node->field.nbrows)
 		{
-			dynbuf_add(buf, add_sz_str("["), NO_CONV); 
+			dynbuf_add(buf, add_sz_str("["), NO_CONV);
 			for(j = 0; j < node->field.nbrows; j++)
 			{
 				if(j) dynbuf_add(buf, add_sz_str(","), NO_CONV);
-				dynbuf_add(buf, DYNTAB_VAL_SZ(&node->field, j, 0), NO_CONV); 
+				dynbuf_add(buf, DYNTAB_VAL_SZ(&node->field, j, 0), NO_CONV);
 			}
-			dynbuf_add(buf, add_sz_str("]"), NO_CONV); 
+			dynbuf_add(buf, add_sz_str("]"), NO_CONV);
 		}
 
 		/* Print field modifier */
 #define CP(n) node->modif == n ? #n :
-		if(node->modif != F_None) dynbuf_print(buf, ".%s ", 
-					CP(F_Obj) CP(F_Field) CP(F_Value) CP(F_RelObj) CP(F_Num) CP(F_Line)
+		if(node->modif != F_None) dynbuf_print(buf, ".%s ",
+					CP(F_Pkey) CP(F_Obj) CP(F_IdField) CP(F_IdValue) CP(F_Field) CP(F_Value) CP(F_RelObj) CP(F_Num) CP(F_Line)
 					CP(F_DateCr) CP(F_WhoCr) CP(F_DateDel) CP(F_WhoDel) "F_???");
 #undef CP
 
 		/* Print match operator */
 #define CP(n) node->match == n ? #n :
-		if(node->match != NoMatch) dynbuf_print(buf, " %s", 
+		if(node->match != NoMatch) dynbuf_print(buf, " %s",
 					CP(ObjList) CP(NotObjList) CP(RelList) CP(NotRelList) CP(Like) CP(NotLike) CP(Contain) CP(NotContain) CP(IdValList)
 					CP(Smaller) CP(SmallerEqual) CP(Larger) CP(LargerEqual)
-					CP(Begin) CP(NotBegin) CP(Different) CP(Exact) CP(InBound) CP(NotInBound) CP(NumInBound) CP(NumNotInBound) "Match???");
+					CP(Begin) CP(NotBegin) CP(Different) CP(Exact) CP(InBound) CP(NotInBound) "Match???");
 #undef CP
 
 		/* Print match values */
 		if(node->value.nbrows)
 		{
-			dynbuf_add(buf, add_sz_str(" ("), NO_CONV); 
+			dynbuf_add(buf, add_sz_str(" ("), NO_CONV);
 			for(j = 0; j < node->value.nbrows; j++)
 			{
 				if(j) dynbuf_add(buf, add_sz_str(","), NO_CONV);
-				dynbuf_add(buf, DYNTAB_VAL_SZ(&node->value, j, 0), NO_CONV); 
+				dynbuf_add(buf, DYNTAB_VAL_SZ(&node->value, j, 0), NO_CONV);
 			}
-			dynbuf_add(buf, add_sz_str(")"), NO_CONV); 
+			dynbuf_add(buf, add_sz_str(")"), NO_CONV);
 		}
 
 		/* Print node condition */
@@ -260,7 +271,7 @@ void err_print_filter(
 #define CP(x) node->rel == x ? #x :
 		if(node->rel != RelNone) dynbuf_print(buf, " <%s>", CP(RelDirect) CP(RelReverse) CP(RelAny) CP(RelBoth) "Rel???");
 #undef CP
-		dynbuf_add(buf, add_sz_str("\n"), NO_CONV); 
+		dynbuf_add(buf, add_sz_str("\n"), NO_CONV);
 	}
 }
 
@@ -270,7 +281,7 @@ void err_print_filter(
 *********************************************************************/
 void err_print_dyntab_line(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	DynTable *tab,			/* in : table to output */ 
+	DynTable *tab,			/* in : table to output */
 	unsigned long i,		/* in : row to print */
 	ReplaceTable *sr,		/* in : search & replace table */
 	int sz_sr				/* in : # of elements in sr */
@@ -278,16 +289,16 @@ void err_print_dyntab_line(
 	unsigned long j;
 	char col[25] = {0};
 
-	dynbuf_add(buf, col, sprintf(col,"%d:\t", i), sr, sz_sr); 
+	dynbuf_add(buf, col, sprintf(col,"%lu:\t", i), sr, sz_sr);
 	for(j = 0; j < 20 && j < tab->nbcols; j++)
 	{
 		char *txt = dyntab_val(tab, i, j);
 		size_t len = dyntab_sz(tab, i, j);
 		memset(col, ' ', sizeof(col) - 1);
 		memcpy(col, txt, len < sizeof(col) - 1 ? len : sizeof(col) - 2);
-		dynbuf_add(buf, col, sizeof(col) - 1, sr, sz_sr); 
+		dynbuf_add(buf, col, sizeof(col) - 1, sr, sz_sr);
 	}
-	dynbuf_add(buf, add_sz_str("\n"), sr, sz_sr); 
+	dynbuf_add(buf, add_sz_str("\n"), sr, sz_sr);
 }
 
 /*********************************************************************
@@ -296,7 +307,7 @@ void err_print_dyntab_line(
 *********************************************************************/
 void err_print_dyntab(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	DynTable *tab,			/* in : table to output */ 
+	DynTable *tab,			/* in : table to output */
 	unsigned long rows,		/* in : max # of rows to print */
 	ReplaceTable *sr,		/* in : search & replace table */
 	int sz_sr				/* in : # of elements in sr */
@@ -305,9 +316,9 @@ void err_print_dyntab(
 
 	if(!buf) return;
 
-	if(!tab || !tab->nbrows) 
+	if(!tab || !tab->nbrows)
 	{
-		dynbuf_add(buf, add_sz_str("(null)"), sr, sz_sr); 
+		dynbuf_add(buf, add_sz_str("(null)"), sr, sz_sr);
 		return;
 	}
 
@@ -320,7 +331,7 @@ void err_print_dyntab(
 	j = (2 * rows > tab->nbrows) ? rows : tab->nbrows - rows;
 	if(rows && rows < tab->nbrows)
 	{
-		if(j > rows) dynbuf_add(buf, add_sz_str("...\n"), sr, sz_sr); 
+		if(j > rows) dynbuf_add(buf, add_sz_str("...\n"), sr, sz_sr);
 		for(i = j ;  i < tab->nbrows; i++)
 			err_print_dyntab_line(buf, tab, i, sr, sz_sr);
 	}
@@ -332,7 +343,7 @@ void err_print_dyntab(
 *********************************************************************/
 void err_print_data(
 	DynBuffer **buf,		/* in/out : destination buffer */
-	DynTable *tab,			/* in : table to output */ 
+	DynTable *tab,			/* in : table to output */
 	unsigned long beg,		/* in : 1st row to print */
 	unsigned long end,		/* in : last row to print */
 	ReplaceTable *sr,		/* in : search & replace table */
@@ -343,18 +354,18 @@ void err_print_data(
 
 	if(!buf) return;
 
-	if(!tab || !tab->nbrows) 
+	if(!tab || !tab->nbrows)
 	{
-		dynbuf_add(buf, add_sz_str("(null)"), sr, sz_sr); 
+		dynbuf_add(buf, add_sz_str("(null)\r"), sr, sz_sr);
 		return;
 	}
-	dynbuf_add(buf, add_sz_str("      IdObj ValObj   N   L  C  I Field                  Value\r"), sr, sz_sr); 
+	dynbuf_add(buf, add_sz_str("      IdObj ValObj   N   L  C  R Field                  Value\r"), sr, sz_sr);
 	if(!end || end > tab->nbrows) end = tab->nbrows;
 	for(i = beg; i < end; i++)
 	{
 		DynTableCell *c = dyntab_cell(tab, i, 0);
-		dynbuf_print5(buf, "%3d: %6lu %6lu %3d %3d", i, c->IdObj, c->IdValObj, c->Num, c->Line); 
-		dynbuf_print4(buf, " %2d %2d %-20.20s %-50.50s\r", c->col, c->row, c->field ? c->field : "", c->txt); 
+		dynbuf_print5(buf, "%3lu: %6lu %6lu %3lu %3lu", i, c->IdObj, c->IdValObj, c->Num, c->Line);
+		dynbuf_print4(buf, " %2lu %2lu %-20.20s %-50.50s\r", c->col, c->row, c->field ? c->field : "", c->txt);
 	}
 }
 
@@ -376,7 +387,8 @@ void debug_put_cgi(EVA_context *cntxt)
 		for(i = 0; i < cntxt->nb_cgi; i++)
 		{
 			dynbuf_add(&cntxt->debug_msg, buf, snprintf(buf, sizeof(buf),"%lu:\t",i), NO_CONV);
-			dynbuf_add(&cntxt->debug_msg, cntxt->cgi[i].name, cntxt->cgi[i].name_sz, NO_CONV);
+			if(cntxt->cgi[i].name[0])
+				dynbuf_add(&cntxt->debug_msg, cntxt->cgi[i].name, cntxt->cgi[i].name_sz, NO_CONV);
 			dynbuf_add(&cntxt->debug_msg, add_sz_str("="), NO_CONV);
 			dynbuf_add(&cntxt->debug_msg, cntxt->cgi[i].value, cntxt->cgi[i].value_sz, NO_CONV);
 			dynbuf_add(&cntxt->debug_msg, add_sz_str("\n"), NO_CONV);
@@ -405,15 +417,15 @@ void debug_put_info(EVA_context *cntxt)
 		lt = localtime(&t);
 		dynbuf_add(&cntxt->debug_msg, buf, snprintf(buf, sizeof(buf),
 				"*** Time : %s*** Duration : %1.2lf s\n*** CWD : ",
-				asctime(lt), (double)clock()/CLOCKS_PER_SEC), NO_CONV);
+				asctime(lt), (double)ms_since(&cntxt->tm0)/1000.), NO_CONV);
 		dynbuf_add(&cntxt->debug_msg, add_sz_str(""), NO_CONV);
 		getcwd(buf, sizeof(buf));
 		dynbuf_add(&cntxt->debug_msg, buf, 0, NO_CONV);
-		sprintf(buf, "\n*** Args : %lu\n", cntxt->argc);
+		sprintf(buf, "\n*** Args : %d\n", cntxt->argc);
 		dynbuf_add(&cntxt->debug_msg, buf, 0, NO_CONV);
 		for(i = 0; i < cntxt->argc; i++)
 		{
-			sprintf(buf, "%lu:\t", i);
+			sprintf(buf, "%d:\t", i);
 			dynbuf_add(&cntxt->debug_msg, buf, 0, NO_CONV);
 			dynbuf_add(&cntxt->debug_msg, cntxt->argv[i], 0, NO_CONV);
 			dynbuf_add(&cntxt->debug_msg, add_sz_str("\n"), NO_CONV);

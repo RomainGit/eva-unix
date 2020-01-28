@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : dynbuf.h
 ** Description : dynamic buffer structure definition & macros
 **      Author : Alain BOUTE
@@ -42,7 +48,48 @@ int dynbuf_add(				/* return : 0 if Ok, other on error */
 	char *txt,				/* in : text to add to buffer */
 	size_t sz,				/* in : # of chars to add from txt (0 = use strlen) */
 	ReplaceTable *sr,		/* in : search & replace table */
-	int sz_sr				/* in : # of elements in sr */
+	int srmode				/* in : # of elements in sr */
+);
+
+/*********************************************************************
+** Function : dynbuf_add_int
+** Description : add integer to a DynBuffer structure
+*********************************************************************/
+int dynbuf_add_int(			/* return : 0 if Ok, other on error */
+	DynBuffer **buf,		/* in : original DynBuffer pointer or NULL
+							   out : possibly realloc-ed DynBuffer pointer */
+	unsigned long nb		/* in : number to add */
+);
+
+/*********************************************************************
+** Function : dynbuf_add3
+** Description : add delimited text to a DynBuffer structure
+*********************************************************************/
+int dynbuf_add3(			/* return : 0 if Ok, other on error */
+	DynBuffer **buf,		/* in : original DynBuffer pointer or NULL
+							   out : possibly realloc-ed DynBuffer pointer */
+	char *txt0,				/* in : delimiter before */
+	size_t sz0,				/* in : # of chars to add from txt0 (0 = use strlen) */
+	char *txt,				/* in : text to add to buffer */
+	size_t sz,				/* in : # of chars to add from txt (0 = use strlen) */
+	ReplaceTable *sr,		/* in : search & replace table for txt */
+	int srmode,				/* in : # of elements in sr */
+	char *txt1,				/* in : delimiter afer */
+	size_t sz1				/* in : # of chars to add from txt1 (0 = use strlen) */
+);
+
+/*********************************************************************
+** Function : dynbuf_add3_int
+** Description : add delimited text to a DynBuffer structure
+*********************************************************************/
+int dynbuf_add3_int(		/* return : 0 if Ok, other on error */
+	DynBuffer **buf,		/* in : original DynBuffer pointer or NULL
+							   out : possibly realloc-ed DynBuffer pointer */
+	char *txt0,				/* in : delimiter before */
+	size_t sz0,				/* in : # of chars to add from txt0 (0 = use strlen) */
+	unsigned long nb,		/* in : number to add */
+	char *txt1,				/* in : delimiter afer */
+	size_t sz1				/* in : # of chars to add from txt1 (0 = use strlen) */
 );
 
 /*********************************************************************
@@ -52,46 +99,47 @@ int dynbuf_add(				/* return : 0 if Ok, other on error */
 #define add_sz_str(_obj) (_obj), sizeof(_obj)-1
 
 /*********************************************************************
+** Macro : nbelem
+** Description : return # of elements in a fixed array
+*********************************************************************/
+#define nbelem(_obj) (sizeof(_obj) / sizeof(_obj[0]))
+
+/*********************************************************************
 ** Macro : DYNBUF_ADD
 ** Description : add a string in a DynBuffer with error handling
 *********************************************************************/
-#define DYNBUF_ADD(buf, txt, len, conv) \
-	{ if(dynbuf_add(buf, txt, len, conv)) RETURN_ERR_MEMORY; }
+#define DYNBUF_ADD(buf, txt, len, conv) { if(dynbuf_add(buf, txt, len, conv)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD_STR
 ** Description : add a static string to a buffer
 *********************************************************************/
-#define DYNBUF_ADD_STR(buf, txt) DYNBUF_ADD(buf, txt, sizeof(txt) - 1, NO_CONV)
+#define DYNBUF_ADD_STR(buf, txt) { if(dynbuf_add(buf, add_sz_str(txt), NO_CONV)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD_BUF
 ** Description : add a DynBuffer to a buffer
 *********************************************************************/
-#define DYNBUF_ADD_BUF(buf, buf1, conv) { if(buf1) DYNBUF_ADD(buf, (buf1)->data, (buf1)->cnt, conv) }
+#define DYNBUF_ADD_BUF(buf, buf1, conv) { if(buf1 && dynbuf_add(buf, (buf1)->data, (buf1)->cnt, conv)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD_INT
 ** Description : add an integer value to a buffer
 *********************************************************************/
-#define DYNBUF_ADD_INT(buf, nb) { char tmp[32]; itoa(nb, tmp, 10); \
-		DYNBUF_ADD(buf, tmp, 0, NO_CONV) }
+#define DYNBUF_ADD_INT(buf, nb) { if(dynbuf_add_int(buf, nb)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD3_INT
 ** Description : add an integer surrounded by 2 static strings
 *********************************************************************/
-#define DYNBUF_ADD3_INT(buf, txt1, nb, txt2)  { char tmp[32]; itoa(nb, tmp, 10); \
-		if(dynbuf_add(buf, txt1, sizeof(txt1) - 1, NO_CONV) || \
-			dynbuf_add(buf, tmp, 0, NO_CONV) || \
-			dynbuf_add(buf, txt2, sizeof(txt2) - 1, NO_CONV)) RETURN_ERR_MEMORY; }
+#define DYNBUF_ADD3_INT(buf, txt1, nb, txt2)  {  if(dynbuf_add3_int(buf, add_sz_str(txt1), nb, add_sz_str(txt2))) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_PRINTF
 ** Description : add formatted value to a buffer
 *********************************************************************/
 #define DYNBUF_PRINTF(dynbuf, maxlen, fmt, value, conv) { char buf[maxlen+1] = {0}; \
-		DYNBUF_ADD(dynbuf, buf, snprintf(buf, maxlen, fmt, value), conv); }
+    if(dynbuf_add(dynbuf, buf, snprintf(buf, maxlen, fmt, value), conv)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : dynbuf_printf
@@ -109,60 +157,48 @@ int dynbuf_add(				/* return : 0 if Ok, other on error */
 ** Macro : DYNBUF_ADD_CELL
 ** Description : add a DynTable cell to a buffer
 *********************************************************************/
-#define DYNBUF_ADD_CELL(buf, tab, row, col, conv) \
-	{ if(dynbuf_add(buf, DYNTAB_VAL_SZ(tab, row, col), conv)) RETURN_ERR_MEMORY; }
+#define DYNBUF_ADD_CELL(buf, tab, row, col, conv) { if(dynbuf_add(buf, DYNTAB_VAL_SZ(tab, row, col), conv)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD_CELLP
 ** Description : add a DynTable cell to a buffer
 *********************************************************************/
-#define DYNBUF_ADD_CELLP(buf, cell, conv) \
-	{ if(cell && dynbuf_add(buf, cell->txt, cell->len, conv)) RETURN_ERR_MEMORY; }
+#define DYNBUF_ADD_CELLP(buf, cell, conv) { DynTableCell *_c = cell; if(_c && dynbuf_add(buf, _c->txt, _c->len, conv)) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD3
 ** Description : add a string surrounded by 2 static strings
 *********************************************************************/
 #define DYNBUF_ADD3(buf, txt1, val, sz, conv, txt2) {\
-	if(dynbuf_add(buf, txt1, sizeof(txt1) - 1, NO_CONV) || \
-		dynbuf_add(buf, val, sz, conv) || \
-		dynbuf_add(buf, txt2, sizeof(txt2) - 1, NO_CONV)) RETURN_ERR_MEMORY; }
+	if(dynbuf_add3(buf, add_sz_str(txt1), val, sz, conv, add_sz_str(txt2))) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD3_BUF
 ** Description : add a DynBuffer surrounded by 2 static strings
 *********************************************************************/
-#define DYNBUF_ADD3_BUF(buf, txt1, buf1, conv, txt2) {\
-	if(dynbuf_add(buf, txt1, sizeof(txt1) - 1, NO_CONV) || \
-		buf1 && dynbuf_add(buf, (buf1)->data, (buf1)->cnt, conv) || \
-		dynbuf_add(buf, txt2, sizeof(txt2) - 1, NO_CONV)) RETURN_ERR_MEMORY; }
+#define DYNBUF_ADD3_BUF(buf, txt1, buf1, conv, txt2) { \
+if(dynbuf_add3(buf, add_sz_str(txt1), (buf1) ? (buf1)->data : NULL, (buf1) ? (buf1)->cnt : 0, conv, add_sz_str(txt2))) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD3_CELL
 ** Description : add a DynTable cell surrounded by 2 static strings
 *********************************************************************/
 #define DYNBUF_ADD3_CELL(buf, txt1, tab, l, c, conv, txt2) {\
-	if(dynbuf_add(buf, txt1, sizeof(txt1) - 1, NO_CONV) || \
-		dynbuf_add(buf, DYNTAB_VAL_SZ(tab, l, c), conv) || \
-		dynbuf_add(buf, txt2, sizeof(txt2) - 1, NO_CONV)) RETURN_ERR_MEMORY; }
+	if(dynbuf_add3(buf, add_sz_str(txt1), DYNTAB_VAL_SZ(tab, l, c), conv, add_sz_str(txt2))) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD3_CELLP
 ** Description : add a DynTable cell surrounded by 2 static strings
 *********************************************************************/
-#define DYNBUF_ADD3_CELLP(buf, txt1, cell, conv, txt2) {\
-	if(dynbuf_add(buf, txt1, sizeof(txt1) - 1, NO_CONV) || \
-		(cell) && dynbuf_add(buf, (cell)->txt, (cell)->len, conv) || \
-		dynbuf_add(buf, txt2, sizeof(txt2) - 1, NO_CONV)) RETURN_ERR_MEMORY; }
+#define DYNBUF_ADD3_CELLP(buf, txt1, cell, conv, txt2) { DynTableCell *_c = cell; \
+	if(dynbuf_add3(buf, add_sz_str(txt1), _c ? _c->txt : NULL, _c ? _c->len : 0, conv, add_sz_str(txt2))) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_ADD3_CGI
 ** Description : add a CGI item (name or value) surrounded by 2 static strings
 *********************************************************************/
 #define DYNBUF_ADD3_CGI(buf, txt1, ival, item, conv, txt2) {\
-	if(dynbuf_add(buf, txt1, sizeof(txt1) - 1, NO_CONV) || \
-		dynbuf_add(buf, cntxt->cgi[ival].item, cntxt->cgi[ival].item##_sz, conv) || \
-		dynbuf_add(buf, txt2, sizeof(txt2) - 1, NO_CONV)) RETURN_ERR_MEMORY; }
+	if(dynbuf_add3(buf, add_sz_str(txt1), cntxt->cgi[ival].item, cntxt->cgi[ival].item##_sz, conv, add_sz_str(txt2))) RETURN_ERR_MEMORY; }
 
 /*********************************************************************
 ** Macro : DYNBUF_VAL_SZ
@@ -175,7 +211,7 @@ int dynbuf_add(				/* return : 0 if Ok, other on error */
 ** Description : wrapper for strcmp that supports null strings
 *********************************************************************/
 #define STRCMPNUL(a,b) strcmp((a) ? (a) : "",(b) ? (b) : "")
-#define STRICMPNUL(a,b) stricmp((a) ? (a) : "",(b) ? (b) : "")
+#define STRICMPNUL(a,b) STRCMPCASE((a) ? (a) : "",(b) ? (b) : "")
 
 /*********************************************************************
 ** Function : dynbuf_strip

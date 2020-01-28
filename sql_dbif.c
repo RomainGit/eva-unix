@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : sql_dbif.c
-** Description : EVA SQL interface functions - MySQL version
+** Description : SQL interface functions - MySQL version
 **      Author : Alain BOUTE
 **     Created : Aug 15 2001
 *********************************************************************/
@@ -8,9 +14,16 @@
 #include "eva.h"
 
 /* MySQL includes */
-#include <windows.h>
+#ifdef WIN32
 #include <mysql.h>
 #include <errmsg.h>
+#define SQL_USER "root"
+#else
+#include "findfirst.h"
+#include <mysql/mysql.h>
+#include <mysql/errmsg.h>
+#define SQL_USER "EVA"
+#endif
 
 /*********************************************************************
 ** Function : sql_open_session
@@ -18,12 +31,12 @@
 *********************************************************************/
 #define ERR_FUNCTION "sql_open_session"
 #define ERR_CLEANUP
-int sql_open_session				/* return : 0 on success, other on error */
-(
-	EVA_context *cntxt
+int sql_open_session(				/* return : 0 on success, other on error */
+	EVA_context *cntxt				/* in : execution context data
+									   out : sql_session = opened session */
 ){
 	/* Initialize MySql - return on error */
-	clock_t t0 = clock();
+	int t0 = ms_since(&cntxt->tm0);
 
 	if(cntxt->sql_session) RETURN_OK;
 	cntxt->sql_session = mysql_init(NULL);
@@ -32,13 +45,16 @@ int sql_open_session				/* return : 0 on success, other on error */
 		RETURN_ERROR("Problème d'initialisation du serveur SQL", NULL);
 	}
 
-	/* Connect to MySql server - return on error */
-	if(!mysql_real_connect(cntxt->sql_session, cntxt->srvaddr, "root", "", cntxt->dbname, MYSQL_PORT, NULL, 0))
+	/* Connect to MySql server using named pipes - return on error */
+#ifdef WIN32
+	mysql_options(cntxt->sql_session, MYSQL_OPT_NAMED_PIPE, NULL);
+#endif
+	if(!mysql_real_connect(cntxt->sql_session, cntxt->srvaddr, SQL_USER, cntxt->dbpwd, cntxt->dbname, 0, NULL, 0))
 	{
 		sql_control(cntxt, 0);
 		RETURN_ERROR("Pas de connexion au serveur SQL", NULL);
 	}
-	cntxt->sqltime += clock() - t0;
+	cntxt->sqltime += ms_since(&cntxt->tm0) - t0;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -54,7 +70,7 @@ int find_files(						/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	DynTable *files,				/* out : found files
 										col0 : file name (no path)
-										col1 : empty
+										col1 : file summary (name, date, size)
 										col2 : file attributes (D for subdir)
 										col3 : file size
 										col4 : contaning subdir path
@@ -120,49 +136,25 @@ int find_files(						/* return : 0 on success, other on error */
 *********************************************************************/
 char *sql_control(EVA_context *cntxt, int mode)
 {
-	clock_t t0 = clock();
 	switch(mode)
 	{
-	case 0:	/* Close session */
+	case 0:	    /* Close session */
 		if(!cntxt->sql_session) return NULL;
 		mysql_close(cntxt->sql_session);
 		cntxt->sql_session = NULL;
 		return NULL;
 
-	case 1: /* MySQL shutdown */
-		if(!cntxt->sql_session) return NULL;
-		switch(mysql_shutdown(cntxt->sql_session))
-		{
-		case 0:
-			cntxt->sql_session = NULL;
-			cntxt->sqltime += clock() - t0;
-			return NULL;
-		case CR_COMMANDS_OUT_OF_SYNC: return "CR_COMMANDS_OUT_OF_SYNC";
-		case CR_SERVER_GONE_ERROR: return "CR_SERVER_GONE_ERROR";
-		case CR_SERVER_LOST: return "CR_SERVER_LOST";
-		case CR_UNKNOWN_ERROR: return "CR_UNKNOWN_ERROR";
-		}
-		cntxt->sqltime += clock() - t0;
-		return "Impossible d'arréter le serveur SQL";
 
-	case 2: /* Server soft reboot */
-	case 3: /* Server hard reboot */
-		{
-			HANDLE hToken; 
-			TOKEN_PRIVILEGES tkp; 
-			if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) ; 
-			LookupPrivilegeValue(NULL, SE_SHUTDOWN_NAME, &tkp.Privileges[0].Luid); 
-			tkp.PrivilegeCount = 1;
-			tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED; 
-			AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0); 
-		}
-		if(!ExitWindowsEx(EWX_REBOOT | (mode == 2 ? EWX_SHUTDOWN : EWX_FORCE), 0))
-			return "Redémarrage refusé par Windows";
-		Sleep(20000);
-		return "Le serveur n'a toujours pas redémarré";
+	case 5:	    /* Server initialisation */
+		if(mysql_server_init(0, NULL, NULL)) return "SQL server initialisation failure";
+		break;
 
-	case 10:	/* Server random wait (for deadlock resolution during new obj Id creation) */
-		Sleep(50 * (DWORD)(rand() % 100));
+	case 6:	    /* Server usage end */
+		mysql_server_end();
+		break;
+
+	default:	/* Server random wait (for deadlock resolution during new obj Id creation) */
+		SLEEP(50 * (unsigned int)(rand() % 100));
 		break;
 	}
 	return NULL;
@@ -235,93 +227,78 @@ int sql_exec_query				/* return : 0 on success, other on error */
 								  out : cntxt->sql_result */
 	char *query					/* in : SQL query */
 ){
-	clock_t t1, t2;
+	int t1, t2;
 	int sql_trace = cntxt->sql_trace;
 	size_t query_sz = query ? strlen(query) : 0;
 
 	cntxt->sql_cnt++;
 	cntxt->sql_nbrows = 0;
+
 	if(!sql_trace)
 	{
 		cntxt->sql_trace = cntxt->debug & (DEBUG_SQL | DEBUG_SQL_RES);
 		if(cntxt->sql_trace & DEBUG_SQL_RES && !(cntxt->sql_trace & DEBUG_FILTER))
 		{
-			unsigned long i = strtoul(dyntab_field_val(&cntxt->user_data, "_EVA_SQL_INDEX", 0, 1, 0), NULL, 10);
+			unsigned long i = strtoul(DYNTAB_FIELD_VAL(&cntxt->user_data, SQL_INDEX), NULL, 10);
 			if(i != cntxt->sql_cnt) cntxt->sql_trace ^= DEBUG_SQL_RES;
 		}
 	}
 
-	/* Output debug info */
-	if(cntxt->sql_trace & DEBUG_SQL_RES)
-	{
-		DYNBUF_ADD_STR(&cntxt->debug_msg, "\n");
-		DYNBUF_ADD_INT(&cntxt->debug_msg, cntxt->sql_cnt);
-		DYNBUF_ADD3(&cntxt->debug_msg, " : *** SQL Query :\n", query, query_sz, NO_CONV, "\n")
-	}
-	else if(cntxt->sql_trace & DEBUG_SQL)
-	{
-		char *cr = strchr(query+1, '\n');
-		size_t sz = strlen(query), szout = cr ? cr - query : sz;
-		if(szout > 50) szout = 50;
-		DYNBUF_ADD_STR(&cntxt->debug_msg, "\n");
-		DYNBUF_ADD_INT(&cntxt->debug_msg, cntxt->sql_cnt);
-		DYNBUF_ADD_STR(&cntxt->debug_msg, " : *** SQL Query : "); 
-		DYNBUF_ADD(&cntxt->debug_msg, query, szout, NO_CONV); 
-		if(sz > szout) DYNBUF_ADD_STR(&cntxt->debug_msg, "..."); 
-	}
-
-
 	/* Open MySql session if needed */
 	if(!cntxt->sql_session && sql_open_session(cntxt)) STACK_ERROR;
-
-	/* Check bad use of indexes */
-	if(cntxt->debug & DEBUG_SQL_SLOW) 
-	{
-		unsigned long nbfulljoin = cntxt->nbfulljoin;
-		cntxt->nbfulljoin = sql_get_unsigned_status_var(cntxt, "Select_full_join");
-		if(nbfulljoin < cntxt->nbfulljoin && cntxt->sql_qry)
-		{
-			DYNBUF_ADD3_INT(&cntxt->debug_msg, "\n*** Warning : full join search (bad use of indexes) for query #", cntxt->sql_cnt - 1, "\n");
-			DYNBUF_ADD_BUF(&cntxt->debug_msg, cntxt->sql_qry, NO_CONV);
-			DYNBUF_PRINTF(&cntxt->debug_msg, 128, "\nElapsed time : %.2lf s\n", cntxt->sql_restime, NO_CONV);
-		}
-	}
 
 	/* Store query for further reference */
 	if(cntxt->sql_qry) cntxt->sql_qry->cnt = 0;
 	DYNBUF_ADD(&cntxt->sql_qry, query, query_sz, NO_CONV);
 
 	/* Exec query on MySql server - return on error */
-	t1 = clock();
+	t1 = ms_since(&cntxt->tm0);
 	sql_free_result(cntxt);
 	if(mysql_query(cntxt->sql_session, query))
 	{
-		cntxt->sqltime += clock() - t1;
+		cntxt->sqltime += ms_since(&cntxt->tm0) - t1;
 		ERR_PUT_TXT("*** Error : ", (char*)mysql_error(cntxt->sql_session), 0);
 		ERR_PUT_TXT("\n*** Query : ", query, query_sz);
-		if(cntxt->sql_trace) 
+		if(cntxt->sql_trace)
 			DYNBUF_ADD3(&cntxt->debug_msg, "\n*** Error : ", (char*)mysql_error(cntxt->sql_session), 0, NO_CONV, "\n");
 		RETURN_ERROR("Erreur dans une requête SQL", NULL);
 	}
 
 	/* Ask for results - return on error */
     cntxt->sql_result = mysql_store_result(cntxt->sql_session) ;
-	if(!cntxt->sql_result && mysql_field_count(cntxt->sql_session)) 
+	if(!cntxt->sql_result && mysql_field_count(cntxt->sql_session))
 		RETURN_ERROR("Impossible de lire le résultat d'une requête à la base de données", NULL);
 	cntxt->sql_nbrows = (unsigned long)mysql_affected_rows(cntxt->sql_session);
- 	t2 = clock();
+ 	t2 = ms_since(&cntxt->tm0);
 	cntxt->sqltime += t2 - t1;
 	cntxt->sql_restime = (double)(t2-t1)/CLOCKS_PER_SEC;
 
-	/* Output result to trace.txt if debug mode */
+	/* Output debug info */
+	if(cntxt->sql_trace)
+	{
+		DYNBUF_PRINTF(&cntxt->debug_msg, 64, "\n%4ld : ", cntxt->sql_cnt, NO_CONV);
+		DYNBUF_PRINTF(&cntxt->debug_msg, 64, "%1.3f s ", (double)(t2-t1)/CLOCKS_PER_SEC, NO_CONV);
+	}
+	if(cntxt->sql_trace & DEBUG_SQL_RES)
+	{
+		if(cntxt->form && cntxt->form->ctrl && cntxt->form->i_ctrl < cntxt->form->nb_ctrl)
+			DYNBUF_ADD3(&cntxt->debug_msg, "(", cntxt->form->ctrl[cntxt->form->i_ctrl].LABEL, 0, NO_CONV, ")");
+		DYNBUF_ADD3(&cntxt->debug_msg, "\n", query, query_sz, NO_CONV, "\n");
+	}
+	else if(cntxt->sql_trace & DEBUG_SQL)
+	{
+		size_t sz = strlen(query);
+		DYNBUF_ADD(&cntxt->debug_msg, query, sz, NO_TABCR);
+		if(cntxt->form && cntxt->form->ctrl && cntxt->form->i_ctrl < cntxt->form->nb_ctrl)
+			DYNBUF_ADD3(&cntxt->debug_msg, "(", cntxt->form->ctrl[cntxt->form->i_ctrl].LABEL, 0, NO_CONV, ")");
+	}
 	if(cntxt->sql_trace & (DEBUG_SQL | DEBUG_SQL_RES))
 	{
 		if(cntxt->sql_result) DYNBUF_ADD3_INT(&cntxt->debug_msg, " *** Result : ", cntxt->sql_nbrows, " rows")
 		else DYNBUF_ADD3_INT(&cntxt->debug_msg, " *** Affected : ", cntxt->sql_nbrows, " rows");
-		DYNBUF_PRINTF(&cntxt->debug_msg, 64, "- time = %1.3f s", (double)(t2-t1)/CLOCKS_PER_SEC, NO_CONV);
 		if(cntxt->sql_trace & DEBUG_SQL_RES) DYNBUF_ADD_STR(&cntxt->debug_msg, "\n");
 	}
-	else if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > 0.03)
+	else if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > DEBUG_SQL_SLOW_TH)
 	{
 		DYNBUF_ADD3_INT(&cntxt->debug_msg, "\n=========> Slow query #", cntxt->sql_cnt, "");
 		DYNBUF_PRINTF(&cntxt->debug_msg, 128, " - time = %1.3f s", (double)(t2-t1)/CLOCKS_PER_SEC, NO_CONV);
@@ -329,7 +306,8 @@ int sql_exec_query				/* return : 0 on success, other on error */
 		if(cntxt->form && cntxt->form->ctrl)
 		{
 			DYNBUF_ADD3(&cntxt->debug_msg, "Form : ", cntxt->form->ctrl->LABEL, 0, NO_CONV, "\n")
-			if(cntxt->form->ctrl) DYNBUF_ADD3(&cntxt->debug_msg, "Ctrl : ", cntxt->form->ctrl[cntxt->i_ctrl].LABEL, 0, NO_CONV, "\n")
+			if(cntxt->form->ctrl && cntxt->form->i_ctrl < cntxt->form->nb_ctrl)
+				DYNBUF_ADD3(&cntxt->debug_msg, "Ctrl : ", cntxt->form->ctrl[cntxt->form->i_ctrl].LABEL, 0, NO_CONV, "\n")
 		}
 		DYNBUF_ADD3(&cntxt->debug_msg, "", query, query_sz, NO_CONV, "\n")
 	}

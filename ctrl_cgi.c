@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : ctrl_cgi.c
 ** Description : CGI handling utilities for controls
 **      Author : Alain BOUTE
@@ -54,7 +60,7 @@ int ctrl_cgi_name(					/* return : 0 on success, other on error */
 	if(cgi_build_finalname(cntxt, name, type, subfield, subfield_sz, 
 		(val && val->Num) ? val->Num : num, 
 		(val && val->Line) ? val->Line : form->Line, 
-		(val && val->Lvl) ? val->Lvl : form->Lvl)) 
+		val ? val->Lang : 0)) 
 			STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
@@ -82,65 +88,6 @@ int ctrl_put_hidden(				/* return : 0 if Ok, other on error */
 	DYNBUF_ADD3_CELL(html, " value='", &ctrl->val, i, 0, HTML_NO_QUOTE, "'>");
 	if(cntxt->debug & DEBUG_HTML) DYNBUF_ADD_STR(cntxt->form->html, "\n");
 	if(cntxt->form->b_newobj && ctrl_put_hidden_old(cntxt, ctrl, i, name, NULL, 0)) STACK_ERROR;
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : cgi_get_subfield
-** Description : return	cgi inputs matching the given name
-*********************************************************************/
-#define ERR_FUNCTION "cgi_get_subfield"
-#define ERR_CLEANUP
-int cgi_get_subfield(				/* return : 0 if Ok, other on error */		
-	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *cgival,				/* out : CGI values table */
-	EVA_ctrl *ctrl,					/* in : related control */
-	char *subfield,					/* in : subfield name */
-	int b_keep,						/* in : mark for no reoutput if 0 */
-	unsigned long num,				/* in : value index */
-	unsigned long line				/* in : value index */
-)
-{
-	dyntab_free(cgival); 
-	if(cgi_filter_values(cntxt, cgival, 'D', DYNTAB_TOUL(&ctrl->id), 
-										DYNTAB_TOUL(&cntxt->form->id_form),
-										DYNTAB_TOUL(&cntxt->form->id_obj),
-										ctrl->FIELD, 
-										subfield, num, line))
-		STACK_ERROR; 
-	if(!b_keep) CGI_VALUES_DONTKEEP(cgival); 
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
-** Function : cgi_put_subfield
-** Description : output hidden CGI input for control options
-*********************************************************************/
-#define ERR_FUNCTION "cgi_put_subfield"
-#define ERR_CLEANUP	M_FREE(name)
-int cgi_put_subfield(				/* return : 0 if Ok, other on error */		
-	EVA_context *cntxt,				/* in/out : execution context data */
-	EVA_ctrl *ctrl,					/* in : related control */
-	char *subfield,					/* in : subfield name */
-	char *val, size_t val_sz		/* in : value to use */
-)
-{
-	DynBuffer *name = NULL;	
-	if(cgi_build_name(cntxt, &name, 'D',
-		DYNTAB_TOUL(&ctrl->id), 
-		DYNTAB_TOUL(&cntxt->form->id_form), 
-		DYNTAB_TOUL(&cntxt->form->id_obj), 
-		ctrl->FIELD, strlen(ctrl->FIELD), subfield, strlen(subfield), 0, 0, 0))
-		STACK_ERROR; 
-	DYNBUF_ADD3_BUF(cntxt->form->html, "<input type=hidden name='", name, NO_CONV, "'"); 
-	DYNBUF_ADD3(cntxt->form->html, " value='", val, val_sz, HTML_NO_QUOTE, "'>");	
-	if(cntxt->debug & DEBUG_HTML) DYNBUF_ADD_STR(cntxt->form->html, "\n");
 
 	RETURN_OK_CLEANUP;
 }

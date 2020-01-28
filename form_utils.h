@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : form_utils.h
 ** Description : generic forms functions (display, save, print, ...)
 **      Author : Alain BOUTE
@@ -44,6 +50,17 @@ int form_close_nosave(				/* return : 0 on success, other on error */
 	unsigned long idform,			/* in : form id to search for */
 	unsigned long idobj,			/* in : object id to search for */
 	DynTable *call_data				/* in : form call data */
+);
+
+/*********************************************************************
+** Function : set_session_statistics
+** Description : update statistics data in current session
+*********************************************************************/
+void set_session_statistics(
+	EVA_context *cntxt,			/* in : execution context */
+	DynTable *data,				/* in : session data */
+	unsigned long idobj,		/* in : displayed object or form */
+	unsigned long idfield		/* in : updated field (IdValue) */
 );
 
 /*********************************************************************

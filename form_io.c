@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : form_io.c
 ** Description : form load & save functions
 **      Author : Alain BOUTE
@@ -16,70 +22,105 @@
 					DYNTAB_FREE(ctrltree)
 int form_load(
 	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *id_form,				/* in : form object id */		
-	DynTable *id_obj				/* in : current object id loaded in form */		
+	DynTable *id_form,				/* in : form to load (IdObj) */		
+	DynTable *id_obj,				/* in : object to load in form (IdObj) */		
+	int mode						/* in : display mode
+											0 : automatic
+											1 : edit
+											2 : read only
+											3 : print
+											4 : footer */
 ){
 	EVA_form *form = NULL;
  	EVA_ctrl *ctrl;
 	DynTable ctrltree = { 0 };
 	unsigned long idobj = DYNTAB_TOUL(id_obj);
+	unsigned long idform = DYNTAB_TOUL(id_form);
 	int b_noacc = 0;
+	int b_opttab = 0;
 
 	/* Alloc & intialize form structure */
 	M_ALLOC(form, sizeof(EVA_form));
-	DYNTAB_ADD_CELL(&form->id_form, 0, 0, id_form, 0, 0);
+	DYNTAB_ADD_INT(&form->id_form, 0, 0, idform);
 	form_free(cntxt);
 	cntxt->form = form;
 
 	/* Store object id if not null */
-	if(idobj) DYNTAB_ADD_CELL(&form->id_obj, 0, 0, id_obj, 0, 0);
+	if(idobj) DYNTAB_ADD_INT(&form->id_obj, 0, 0, idobj);
 	form->b_newobj = idobj == 0;
 
 	/* Read current object data if object exists */
-	if(idobj && qry_obj_data(cntxt, &form->objdata, &form->id_obj, NULL)) STACK_ERROR;
+	if(idobj && qry_obj_idfield(cntxt, &form->objdata, idobj, 0)) STACK_ERROR;
 
 	/* Create new control for form */
 	form->step = CtrlRead;
-	if(ctrl_add_new(cntxt, 0, NULL, NULL)) STACK_ERROR;
+	if(ctrl_add_new(cntxt, idform, NULL)) STACK_ERROR;
 
 	/* Set form params : cginame, previous context, access */
 	ctrl = form->ctrl;
 	if(cgi_build_basename(cntxt, &ctrl->cginame, 0, 'F') ||
 		cgi_get_values(cntxt, &ctrl->cgival, form->ctrl->cginame->data, 0))	STACK_ERROR;
 	if(dyntab_from_list(&ctrltree, DYNTAB_VAL_SZ(&ctrl->cgival, 0, 0), "§", 0, 4)) RETURN_ERR_MEMORY;
-	if(dyntab_sz(&ctrltree, 0, 0)) DYNTAB_ADD_CELL(&form->seltab, 0, 0, &ctrltree, 0, 0);
-	if(dyntab_sz(&ctrltree, 1, 0)) DYNTAB_ADD_CELL(&form->call_data, 0, 0, &ctrltree, 1, 0);
-	form->prevstep = atoi(dyntab_val(&ctrltree, 3, 0));
-	if(dyntab_sz(&ctrltree, 4, 0)) DYNTAB_ADD_CELL(&form->dlg_ctrl, 0, 0, &ctrltree, 4, 0);
+	if(dyntab_sz(&ctrltree, 0, 0)) DYNTAB_ADD_CELL(&form->call_data, 0, 0, &ctrltree, 0, 0);
+	form->prevstep = atoi(dyntab_val(&ctrltree, 2, 0));
+	if(dyntab_sz(&ctrltree, 3, 0)) DYNTAB_ADD_CELL(&form->dlg_ctrl, 0, 0, &ctrltree, 3, 0);
 
-	/* Handle save as form */
-	form->id_formsave = strtoul(CTRL_ATTR_VAL(FORMSAVEAS), NULL, 10);
-	if(!form->id_formsave) form->id_formsave = DYNTAB_TOUL(&form->id_form);
-
-	/* Determine output mode */
-	if(ctrl_check_access(cntxt, form->ctrl)) STACK_ERROR;
-	form->nextstep = form->prevstep > HtmlSaveDlg ? form->prevstep :
-				(dyntab_field_cell(&cntxt->user_data, "_EVA_OPEN_MODE_EDIT", 0, 1, 0) || !idobj) ? 
-					HtmlEdit : HtmlView;
-	if(!form->b_newobj)
+	/* Check if control is a form */
+	if(!strcmp(ctrl->CONTROL, "_EVA_FORM") || mode == 4)
 	{
-		form->step = form->nextstep;
-		if(ctrl_check_access(cntxt, form->ctrl)) STACK_ERROR;
-	}
-	form->step = CtrlRead;
+		/* Handle save as form */
+		if(!dyntab_sz(&form->id_obj, 0, 0) || !CTRL_ATTR_CELL(NO_FORMSTAMP))
+		{
+			form->id_formsave = strtoul(CTRL_ATTR_VAL(FORMSAVEAS), NULL, 10);
+			if(!form->id_formsave) form->id_formsave = DYNTAB_TOUL(&form->id_form);
+		}
+		b_opttab = *CTRL_ATTR_VAL(OPTIMIZE_TAB) == '1';
 
-	/* Check if user has access rights to the form */
-	b_noacc = (idobj ? ctrl->access & (AccessEdit | AccessView) :
-					(!*CTRL_ATTR_VAL(DISPLAYFIELDS) && (ctrl->access & AccessView) ||
-						(ctrl->access & AccessCreate))) ? 0 : 1;
+		/* Calc output mode : check access, new object & edit on open in user preferences */
+		if(ctrl_check_access(cntxt, form->ctrl)) STACK_ERROR;
+		form->nextstep = mode == 1 ? HtmlEdit : (mode == 2 || mode == 4) ? HtmlView : mode == 3 ? HtmlPrint :
+					form->prevstep > HtmlSaveDlg ? form->prevstep :
+					(DYNTAB_FIELD_CELL(&cntxt->user_data, OPEN_MODE_EDIT) || !idobj) ? 
+						HtmlEdit : HtmlView;
+		if(idobj || !CTRL_ATTR_CELL(DISPLAYFIELDS))
+		{
+			form->step = form->nextstep;
+			if(form->step && ctrl_check_access(cntxt, form->ctrl)) STACK_ERROR;
+			form->step = CtrlRead;
+		}
+
+		/* Check if user has access rights to the form */
+		b_noacc = (idobj ? ctrl->access & (AccessEdit | AccessView) :
+						(!CTRL_ATTR_CELL(DISPLAYFIELDS) && (ctrl->access & AccessView) ||
+							(ctrl->access & AccessCreate))) ? 0 : 1;
+	}
+	else
+		b_noacc = 1;
+
+	/* Access granted */
 	if(!b_noacc)
 	{
 		/* Set View mode if no edit access */
 		if(dyntab_sz(&form->id_obj, 0, 0) && form->nextstep == HtmlEdit && !(ctrl->access & AccessEdit))
 			form->nextstep = HtmlView;
 
+		/* Handle tab selection */
+		if(b_opttab)
+		{
+			CGIData *cgi = cntxt->cgi + cntxt->cgibtn;
+			if(cgi->IdForm == idform && cgi->IdObj == idobj && cgi->name[0] == 'T')
+				form->opttabid = cgi->IdCtrl;
+			if(!form->opttabid)
+			{
+				if(cgi_filter_values(cntxt, &ctrltree,
+					'D', ~0UL, idform, idobj, "_EVA_SELTAB", "", 0, 0)) STACK_ERROR;
+				form->opttabid = DYNTAB_TOUL(&ctrltree);
+			}
+			if(!form->opttabid) form->opttabid = ~0UL;
+		}
+
 		/* Read form controls */
-		CTRL_OPTIONAL(ctrltree, CTRLTREE);
+		CTRL_ATTR(ctrltree, CTRLTREE);
 		if(ctrl_add_child(cntxt, 0, &ctrltree)) STACK_ERROR;
 		ctrl = form->ctrl;
 		if(idobj)
@@ -89,31 +130,58 @@ int form_load(
 			b_noacc = (idobj ? ctrl->access & (AccessEdit | AccessView) : ctrl->access & AccessCreate) ? 0 : 2;
 			form->step = CtrlRead;
 		}
+
+		/* Handle tab selection */
+		if(form_tab_selection(cntxt, 1)) STACK_ERROR;
 	}
+
+	/* Access not granted */
 	else if(dyntab_cmp(id_form, 0, 0, &cntxt->menubar, 0, 0))
 	{
-		/* Output error message */
+		/* Output error message for identified user */
 		form->html = &form->html_top;
-		DYNBUF_ADD_STR(form->html, 
-			"<td align=center>"
-			"<font size=+1><b><br><br>Accès non autorisé<br><br></b></font>");
-		if(idobj)
- 			DYNBUF_ADD_STR(form->html, "L'accès à cette fiche ")
-		else if(*CTRL_ATTR_VAL(DISPLAYFIELDS))
- 			DYNBUF_ADD_STR(form->html, "L'ajout de fiches")
+		if(cntxt->b_identified)
+		{
+			DYNBUF_ADD_STR(form->html, 
+				"<td align=center>"
+				"<font size=+1><b><br><br>Accès non autorisé<br><br></b></font>");
+			if(idobj)
+ 				DYNBUF_ADD_STR(form->html, "L'accès à cette fiche ")
+			else if(CTRL_ATTR_CELL(DISPLAYFIELDS) && !strcmp(ctrl->CONTROL, "_EVA_FORM"))
+ 				DYNBUF_ADD_STR(form->html, "L'ajout de fiches")
+			else
+ 				DYNBUF_ADD_STR(form->html, "L'accès au formulaire");
+			DYNBUF_ADD3(form->html, " [", ctrl->LABEL, 0, TO_HTML, 
+				"] vous est refusé<br><br>"
+				"Contactez votre administateur si vous avez besoin de cet accès<br><br>");
+			if(put_html_button(cntxt, "B$#.CLOSE", "Revenir", "_eva_btn_gobackobj_fr.gif", "_eva_btn_gobackobj_fr_s.gif",
+									"Retourne à la page précédente", 0, 0)) STACK_ERROR;
+			DYNBUF_ADD_STR(form->html, "<br><br></td>");
+		}
+		/* Output login message for non identified user */
 		else
- 			DYNBUF_ADD_STR(form->html, "L'accès au formulaire");
-		DYNBUF_ADD3(form->html, " [", ctrl->LABEL, 0, TO_HTML, 
-			"] vous est interdit<br><br>"
-			"Contactez votre administateur si vous avez besoin de cet accès");
+		{
+			int b_showid = strtoul(DYNTAB_FIELD_VAL(&cntxt->cnf_data, ALLOW_CLEAR_LOGIN), NULL, 10);
+			DYNBUF_ADD3(form->html, 
+				"<td align=center>"
+				"<table noborder width=100% bgcolor=#FFFFFF><tr><td align=center>"
+				"<b>Vous devez vous identifier pour accéder à cette fiche</b>"
+				"</td></tr></table><hr>"
+				"<table noborder width=100% bgcolor=#FFFFFF><tr><td>"
+				"</td></tr><tr><td align=right width=50%><font size=-1 color=#0000AA>"
+					"Identifiant</font></td><td><input type=", b_showid ? "text" : "password", 0, NO_CONV," name='D$#_EVA_LOGINSUBMIT'></td></tr>"
+				"<tr><td align=right><font size=-1 color=#0000AA>"
+					"Mot de passe</font></td><td><input type=password name='D$#_EVA_LOGINSUBMITP'>"
+				"</td></tr></table><hr>"
+				"<table noborder width=100% height=50 bgcolor=#FFFFFF><tr><td align=center>"
+				"<input type=submit value=\"Valider l'identification\"></td></tr></table><hr>");
+			if(cntxt->jsenabled) DYNBUF_ADD_STR(form->html,
+				"<script>document.mainform['D$#_EVA_LOGINSUBMIT'].focus();</script>");
+		}
 
-		DYNBUF_ADD_STR(form->html, 
-			"<br><br><input type=image src='../img/_eva_btn_gobackobj_fr.gif' name='B$#.CLOSE'><br><br></td>");
+		/* Add auto title */
+		CTRL_SETATTRDEF("1", AUTO_TITLEBAR);
 	}
-
-	/* Add extra control for further processing */
-	form->sz_ctrl = form->nb_ctrl;
-	M_REALLOC(EVA_ctrl, form->ctrl, form->sz_ctrl);
 
 	RETURN_OK_CLEANUP;
 }
@@ -127,75 +195,102 @@ int form_load(
 #define ERR_FUNCTION "form_load_from_ctrl"
 #define ERR_CLEANUP DYNTAB_FREE(idform); \
 					DYNTAB_FREE(sqlres); \
+					DYNTAB_FREE(data); \
 					M_FREE(call_data)
 
 int form_load_from_ctrl(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *id_form,				/* in : form object id */		
-	DynTable *id_obj,				/* in : current object id loaded in form */		
+	DynTable *id_form,				/* in : form to load */		
+	DynTable *id_obj,				/* in : object to load */		
 	int loc,						/* in : where to place new form
 											0 : same as caller
 											1 : top
-											2 : bottom (alt form) */
-	unsigned long i_ctrl			/* in : caller control index in form->ctrl 
-											add caller data if not 0 */
+											2 : bottom (alt form)
+											3 : replace caller form */
+	int mode						/* in : display mode
+											0 : automatic
+											1 : edit
+											2 : read only
+											3 : print */
 ){
 	EVA_form *form = cntxt->form;
-	EVA_ctrl *ctrl = form ? form->ctrl + i_ctrl : NULL;
 	DynTable idform = { 0 };
 	DynTable sqlres = { 0 };
+	DynTable data = { 0 };
 	DynBuffer *call_data = NULL;
+	CGIData *cgi = cntxt->cgi + cntxt->cgibtn;
+	unsigned long idform0 = form ? DYNTAB_TOUL(&form->id_form) : 0;
+	unsigned long idobj0 = form ? DYNTAB_TOUL(&form->id_obj) : 0;
+	int b_reuse = loc == 3;
+	if(b_reuse) loc = 0;
 
 	/* Check params */
 	if(!dyntab_sz(id_form, 0, 0) && !dyntab_sz(id_obj, 0, 0)) RETURN_OK;
 
 	/* Set placement if same as caller */
-	if(!loc) loc = (!form || !dyntab_sz(&cntxt->id_form, 0, 0) || 
-		!dyntab_cmp(&cntxt->id_obj, 0, 0, &form->id_obj, 0, 0) && 
-		!dyntab_cmp(&cntxt->id_form, 0, 0, &form->id_form, 0, 0)) ? 1 : 2;
+	if(!loc) loc = (!form || !dyntab_sz(&cntxt->alt_form, 0, 0) || 
+		dyntab_cmp(&form->id_obj, 0, 0, &cntxt->alt_obj, 0, 0) || 
+		dyntab_cmp(&form->id_form, 0, 0, &cntxt->alt_form, 0, 0)) ? 1 : 2;
 
 	/* If no form given */
 	if(!dyntab_sz(id_form, 0, 0))
 	{
-		char sql[128];
-
 		/* Read object formstamp */
-		sprintf(sql, 
-			"-- form_load_from_ctrl : Read object formstamp \n"
-			"SELECT IdRelObj FROM TLink WHERE DateDel Is NULL AND IdField=1 AND IdObj=%d", 
-						atoi(dyntab_val(id_obj, 0, 0)));
-		if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, &sqlres, 2)) STACK_ERROR;
+		if(qry_obj_idfield(cntxt, &sqlres, DYNTAB_TOUL(id_obj), cntxt->val_FORMSTAMP)) STACK_ERROR;
+
+		/* TODO - handle form access - take first available */
 		DYNTAB_ADD_CELL(&idform, 0, 0, &sqlres, 0, 0);
 	}
-	else DYNTAB_ADD_CELL(&idform, 0, 0, id_form, 0, 0);
+	else
+		DYNTAB_ADD_CELL(&idform, 0, 0, id_form, 0, 0);
 
-	/* If form is empty : return */
+	/* If no form to open : return */
 	if(!dyntab_sz(&idform, 0, 0)) RETURN_OK;
 
-	/* Memorise caller data if given : id_form/id_obj/id_ctrl/Num.Line  */
-	if(form && i_ctrl < form->nb_ctrl)
+	/* reuse caller data if reuse form */
+	if(b_reuse)
 	{
-		CGIData *cgi = cntxt->cgi + cntxt->cgibtn;
-		DYNBUF_ADD_CELL(&call_data, &form->id_form, 0, 0, NO_CONV);
-		DYNBUF_ADD3_CELL(&call_data, "/", &form->id_obj, 0, 0, NO_CONV, "/");
-		if(i_ctrl < form->nb_ctrl)
+		if(!form)
 		{
-			DYNBUF_ADD_CELL(&call_data, &ctrl->id, 0, 0, NO_CONV);
-			if(cgi->IdCtrl == DYNTAB_TOUL(&ctrl->id))
+			idform0 = cgi->IdForm;
+			idobj0 = cgi->IdObj;
+			if(cgi_filter_values(cntxt, &sqlres, 'F', ~0UL, idform0, idobj0, NULL, NULL, 0, 0)) STACK_ERROR;
+			if(sqlres.nbrows && sqlres.cell->len)
 			{
-				DYNBUF_ADD3_INT(&call_data, "/", cntxt->cgi[cntxt->cgibtn].Num, "");
-				DYNBUF_ADD3_INT(&call_data, ".", cntxt->cgi[cntxt->cgibtn].Line, "");
+				size_t sz = strcspn(sqlres.cell->txt, "§");
+				DYNBUF_ADD(&call_data, sqlres.cell->txt, sz, NO_CONV);
 			}
 		}
+		else
+			DYNBUF_ADD_CELL(&call_data, &form->call_data, 0, 0, NO_CONV);
+	}
+	else
+	{
+		/* Memorise caller data : id_form/id_obj/id_ctrl/Num.Line  */
+		if(form)
+		{
+			DYNBUF_ADD_CELL(&call_data, &form->id_form, 0, 0, NO_CONV);
+			DYNBUF_ADD3_CELL(&call_data, "/", &form->id_obj, 0, 0, NO_CONV, "/");
+		}
+		else
+		{
+			DYNBUF_ADD_INT(&call_data, cgi->IdForm);
+			DYNBUF_ADD3_INT(&call_data, "/", cgi->IdObj, "/");
+		}
+		DYNBUF_ADD_INT(&call_data, cgi->IdCtrl);
+		DYNBUF_ADD3_INT(&call_data, "/", cgi->Num, ".");
+		DYNBUF_ADD_INT(&call_data, cgi->Line);
 	}
 
 	/* Set next opened form & obj */
-	DYNTAB_ADD_CELL(loc == 2 ?  &cntxt->alt_form: &cntxt->id_form, 0, 0, &idform, 0, 0);
+	DYNTAB_ADD_CELL(loc == 2 ? &cntxt->alt_form: &cntxt->id_form, 0, 0, &idform, 0, 0);
 	DYNTAB_ADD_CELL(loc == 2 ? &cntxt->alt_obj : &cntxt->id_obj, 0, 0, id_obj, 0, 0);
 
-	/* Load new form, abort dialog if any & set caller data */
-	if(form_load(cntxt, &idform, id_obj)) STACK_ERROR;
-	DYNTAB_FREE(cntxt->form->dlg_ctrl);
+	/* Clear previous form is reused */
+	if(b_reuse) cgi_clear_form_inputs(cntxt, idform0, idobj0, 0);
+
+	/* Load new form & set caller data */
+	if(form_load(cntxt, &idform, id_obj, mode)) STACK_ERROR;
 	if(call_data && !cntxt->form->call_data.nbrows)
 		DYNTAB_ADD_BUF(&cntxt->form->call_data, 0, 0, call_data);
 	
@@ -251,7 +346,7 @@ int form_close_nosave(				/* return : 0 on success, other on error */
 		if(i < cntxt->nb_cgi)
 		{
 			call_data = &call_data1;
-			if(cgi_extract(cntxt, cntxt->cgi[i].value, '§', &id_form, call_data, NULL))
+			if(cgi_extract(cntxt, cntxt->cgi[i].value, '§', call_data, NULL))
 				STACK_ERROR;
 		}
 	}
@@ -269,7 +364,7 @@ int form_close_nosave(				/* return : 0 on success, other on error */
 		/* Put caller form & obj in destination location */
 		DYNTAB_ADD_CELL(dest_form, 0, 0, &id_form, 0, 0);
 		dyntab_free(dest_obj);
-		if(dyntab_sz(&id_obj, 0, 0)) DYNTAB_ADD_CELL(dest_obj, 0, 0, &id_obj, 0, 0);
+		if(idobj2) DYNTAB_ADD_CELL(dest_obj, 0, 0, &id_obj, 0, 0);
 
 		/* Clear form position if home page or menubar or already in page */
 		if(idform2 == homepage) form_set_homepage(cntxt);
@@ -299,19 +394,19 @@ int form_close_nosave(				/* return : 0 on success, other on error */
 	}
 
 	/* Clear form data in CGI inputs */
-	if(cgi_clear_form_inputs(cntxt, idform, idobj, 0)) STACK_ERROR;
+	cgi_clear_form_inputs(cntxt, idform, idobj, 0);
 
 	/* If no form to display */
 	if(!dyntab_sz(&cntxt->id_form, 0, 0))
 	{
 		/* Look for next opened form in CGI inputs */
 		unsigned long i = 0;
-		if(cntxt->nb_cgi) for(i = cntxt->nb_cgi - 1; i > 0; i--)
-			if(cntxt->cgi[i].name[0] == 'F' &&
+		if(cntxt->nb_cgi) for(i = 1; i < cntxt->nb_cgi; i++)
+			if(cntxt->cgi[i].name[0] == 'F' && cntxt->cgi[i].IdForm &&
 				cntxt->cgi[i].IdForm != homepage &&
 				cntxt->cgi[i].IdForm != menubar)
 				break;
-		if(i)
+		if(i < cntxt->nb_cgi)
 		{
 			DYNTAB_ADD_INT(&cntxt->id_form, 0, 0, cntxt->cgi[i].IdForm);
 			DYNTAB_FREE(cntxt->id_obj);
@@ -346,13 +441,29 @@ int form_output(					/* return : 0 on success, other on error */
 	/* If dialog mode not processed : call control action handler */
 	if(!form->html && dyntab_sz(&form->dlg_ctrl, 0, 0))
 	{
+		/* Get dialog control index */
 		unsigned long i = ctrl_from_cginame(cntxt, DYNTAB_VAL_SZ(&form->dlg_ctrl, 0, 0));
 		if(i) 
 		{
-			CTRL_ACT_HDLR(i);
+			/* Control index found : use control handler */
+			if(!strcmp(form->ctrl[i].CONTROL, "_EVA_BUTTON"))
+			{
+				/* Button dialog : call action handler */
+				CTRL_ACT_HDLR(i);
+			}
+			else
+			{
+				/* Other controls : call secondary handler */
+				form->step = form->nextstep;
+				form->html = &form->html_top;
+				CTRL_SEC_HDLR(i);
+			}
 		}
 		else
+			/* Control index not found : simulate close button */
 			if(form_save_dialog(cntxt, 0, "_EVA_CONFIRMCHANGE", BUTN_CLOSE | BUTN_SAVE_CLOSE, &b_done)) STACK_ERROR;
+
+		/* Do not output form if cleared */
 		if(!cntxt->form) RETURN_OK;
 	}
 
@@ -360,7 +471,7 @@ int form_output(					/* return : 0 on success, other on error */
 	if(form->b_reload)
 	{
 		EVA_execmode nextstep = form->nextstep;
-		if(form_load(cntxt, id_form, id_obj)) STACK_ERROR;
+		if(form_load(cntxt, id_form, id_obj, 0)) STACK_ERROR;
 		form = cntxt->form;
 		form->nextstep = nextstep;
 	}
@@ -404,6 +515,42 @@ int form_output(					/* return : 0 on success, other on error */
 		cntxt->html = NULL;
 	}
 	form_free(cntxt);
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Function : form_get_html
+** Description : open form & produce HTML output
+*********************************************************************/
+#define ERR_FUNCTION "form_get_html"
+#define ERR_CLEANUP DYNTAB_FREE(idform); \
+					DYNTAB_FREE(idobj); \
+					DYNTAB_FREE(ctrltree)
+
+int form_get_html(					/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	DynBuffer **res,				/* in/out : buffer to output form HTML */		
+	unsigned long id_form,			/* in : form to load */		
+	unsigned long id_obj			/* in : object to load */		
+){
+	DynTable idform = { 0 };
+	DynTable idobj = { 0 };
+	DynTable ctrltree = { 0 };
+
+	/* Load form */
+	DYNTAB_ADD_INT(&idform, 0, 0, id_form);
+	DYNTAB_ADD_INT(&idobj, 0, 0, id_obj);
+	if(form_load(cntxt, &idform, &idobj, 4)) STACK_ERROR;
+	ATTR_OPTIONAL(ctrltree, CTRLTREE, cntxt->form->ctrl);
+
+	/* Send output to result */
+	cntxt->form->html = res;
+	cntxt->form->step = HtmlView;
+	cntxt->form->ctrl->POSITION = "_EVA_SameCell";
+	if(ctrl_primary_handler(cntxt, 0)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }

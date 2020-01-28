@@ -1,6 +1,12 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : pivottable.c
-** Description : utility functions for pivot tables & statistics calculations
+** Description : handling functions for pivot tables & statistics
 **      Author : Alain BOUTE
 **     Created : April 2 2004
 *********************************************************************/
@@ -19,14 +25,22 @@ void pivottablefield_free(
 	dyntab_free(&pvf->expr);
 	dyntab_free(&pvf->labels);
 	dyntab_free(&pvf->totals);
-	dyntab_free(&pvf->function);
 	dyntab_free(&pvf->forms);
 	dyntab_free(&pvf->filters);
 	dyntab_free(&pvf->selctrl);
+	dyntab_free(&pvf->function);
+	dyntab_free(&pvf->totlabel);
+	dyntab_free(&pvf->function);
+	dyntab_free(&pvf->percent);
 	dyntab_free(&pvf->srcdata);
+	dyntab_free(&pvf->graphfile);
 	dyntab_free(&pvf->slices);
 	dyntab_free(&pvf->sr_src);
 	dyntab_free(&pvf->sr_dest);
+	dyntab_free(&pvf->sr_pos);
+	dyntab_free(&pvf->optsrc);
+	dyntab_free(&pvf->emptyval);
+	M_FREE(pvf->where);
 	sql_drop_table(cntxt, pvf->datatable);
 	sql_drop_table(cntxt, pvf->objtable);
 	M_FREE(pvf->vmin);
@@ -59,7 +73,7 @@ void pivottable_free(
 
 /*********************************************************************
 ** Function : get_relmode_oneway
-** Description : get relation mod & field betwen tables of a pivot table
+** Description : get relation mode & field betwen tables of a pivot table
 *********************************************************************/
 RelationMode get_relmode_oneway(				/* return : relation mode */
 	PivotTable *pv,							/* in : pivot table data */
@@ -118,10 +132,14 @@ void auto_date_unit(
 	char fmt = 0;
 	int d = datetxt_to_age(pvf->vmin, pvf->vmax, &fmt);
 	if(pvf->dispunit && *pvf->dispunit) return;
-	if(d > 10 && fmt == 'M') fmt = 'Y';
+	if(d > 12 && fmt == 'M') fmt = 'Y';
+	else if(d > 60 && fmt == 'D') fmt = 'M';
+	else if(d > 14 && fmt == 'D') fmt = 'W';
+	else if(d > 48 && fmt == 'h') fmt = 'D';
 	pvf->dispunit = fmt == 'm' ? "_EVA_MINUTE" :
 					fmt == 'h' ? "_EVA_HOUR" :
 					fmt == 'D' ? "_EVA_DAY" :
+					fmt == 'W' ? "_EVA_WEEK" :
 					fmt == 'M' ? "_EVA_MONTH" :
 					fmt == 'Y' ? "_EVA_YEAR" :
 					"_EVA_YEAR";
@@ -150,13 +168,12 @@ int pivottable_select(						/* return : 0 on success, other on error */
 
 		/* Build table with objects matching formstamp & filter */
 		strcpy(pv->objtable, "DTmpPVT");
-		DYNBUF_ADD3(&sql, 
+		DYNBUF_ADD3(&sql,
 			"-- pivottable_select - select objects matching formstamp\n"
-			"CREATE TEMPORARY TABLE ", pv->objtable, 0, NO_CONV, " TYPE=HEAP\n");
+			"CREATE TEMPORARY TABLE ", pv->objtable, 0, NO_CONV, " ENGINE=MEMORY\n");
 		if(qry_build_clauses(cntxt, &flt, 1)) STACK_ERROR;
 		if(qry_build_flt_select(cntxt, &sql, &id_obj, &flt, 0, 0)) STACK_ERROR;
-		SQL_QRY_DEBUG_FLT(&flt, sql->data, STACK_ERROR);	
-		if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > 0.03) err_print_filter(&cntxt->debug_msg, &flt);
+		if(qry_exec_filter(cntxt, &flt, sql->data)) STACK_ERROR;
 		pv->nbobj = cntxt->sql_nbrows;
 		pv->b_empty = !pv->nbobj;
 		if(sql_exec_query(cntxt, "ALTER TABLE DTmpPVT ADD INDEX(IdObj)")) STACK_ERROR;
@@ -172,7 +189,7 @@ int pivottable_select(						/* return : 0 on success, other on error */
 		if(pv->nbobj > id_obj.nbrows)
 		{
 			M_FREE(sql);
-			DYNBUF_ADD_STR(&sql, 
+			DYNBUF_ADD_STR(&sql,
 				"-- pivottable_select - remove objects not matching condition\n"
 				"DELETE FROM DTmpPVT WHERE IdObj NOT IN (");
 			if(qry_values_list(cntxt, &id_obj, 0, &sql)) STACK_ERROR;
@@ -231,48 +248,54 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 	}
 
 	/* Handle formstamp & filter condition */
+	flt.srctable = pvf->srctable;
 	if(qry_add_filter_forms(cntxt, &flt, &pvf->forms, &pvf->filters)) STACK_ERROR;
 
 	/* Build temporary list of matching & related objects if applicable */
-	if(flt.nbnode)
+	if(flt.nbnode || flt.node->idobjmatch.nbrows)
 	{
 		snprintf(add_sz_str(pvf->objtable), "%cTmp%s", *pvf->pos, pvf->datatable);
-		DYNBUF_ADD3(&sql, 
+		DYNBUF_ADD3(&sql,
 			"-- pivottable_add_field - Create field idobj table\n"
-			"CREATE TEMPORARY TABLE ", pvf->objtable, 0, NO_CONV, " TYPE=HEAP\n");
-		flt.srctable = pvf->srctable;
-		if(qry_build_clauses(cntxt, &flt, pvf->relmode == RelNone ? 1 : b_linkonrelobj ? 3 : 2)) STACK_ERROR;
-		if(qry_build_flt_select(cntxt, &sql, &id_obj, &flt, 0, 0)) STACK_ERROR;
-		SQL_QRY_DEBUG_FLT(&flt, sql->data, STACK_ERROR);	
+			"CREATE TEMPORARY TABLE ", pvf->objtable, 0, NO_CONV, " ENGINE=MEMORY\n");
+		cntxt->sql_nbrows = 0;
+		if(flt.nbnode)
+		{
+			if(qry_build_clauses(cntxt, &flt, pvf->relmode == RelNone ? 1 : b_linkonrelobj ? 3 : 2)) STACK_ERROR;
+			if(qry_build_flt_select(cntxt, &sql, &id_obj, &flt, 0, 0)) STACK_ERROR;
+			if(qry_exec_filter(cntxt, &flt, sql->data)) STACK_ERROR;
+		}
+		else
+		{
+			DYNBUF_ADD_STR(&sql, "SELECT DISTINCT IdObj FROM TLink WHERE IdObj IN (");
+			if(dyntab_to_dynbuf(&flt.node->idobjmatch, &sql, 0, 0, ",", 1, NO_CONV)) STACK_ERROR;
+			DYNBUF_ADD_STR(&sql, ")");
+			if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
+		}
 		pvf->nbsrcobj = cntxt->sql_nbrows;
 
 		/* Add index to list of matching object table */
 		snprintf(add_sz_str(printbuf), "ALTER TABLE %s ADD INDEX(IdObj)", pvf->objtable);
 		if(sql_exec_query(cntxt, printbuf)) STACK_ERROR;
 	}
-	else if(flt.node->idobjmatch.nbrows)
-	{
-		dyntab_moveto(&id_obj, &flt.node->idobjmatch);
-		pvf->nbsrcobj = id_obj.nbrows;
-	}
 
 	/* Prepare query for field values table */
 	sql_drop_table(cntxt, pvf->datatable);
 	M_FREE(sql);
-	DYNBUF_ADD3(&sql, 
+	DYNBUF_ADD3(&sql,
 		"-- pivottable_add_field - Create field values table\n"
-		"CREATE TEMPORARY TABLE ", pvf->datatable, 0, NO_CONV, " TYPE=HEAP\n");
+		"CREATE TEMPORARY TABLE ", pvf->datatable, 0, NO_CONV, "\n");
 
 	/* Handle multiple fields : concat fields */
 	if(pvf->expr.nbrows > 1)
 	{
-		if(dyntab_to_dynbuf(&pvf->expr, &expr, NULL, 0, ",", 1, NO_CONV)) RETURN_ERR_MEMORY; 
+		if(dyntab_to_dynbuf(&pvf->expr, &expr, NULL, 0, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
 		dyntab_free(&pvf->expr);
 		DYNTAB_ADD_BUF(&pvf->expr, 0, 0, expr);
 	}
 
 	/* Handle SQL expression */
-	if(strchr(dyntab_val(&pvf->expr, 0, 0), '['))
+	if(strchr(dyntab_val(&pvf->expr, 0, 0), '[') || !strncmp(dyntab_val(&pvf->expr, 0, 0), "SELECT ", 7))
 	{
 		/* Build table of base objects if applicable */
 		char *srcobj = "TmpExpr";
@@ -282,8 +305,8 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 			snprintf(add_sz_str(pvf->objtable), "%cTmp%s", *pvf->pos, pvf->datatable);
 			snprintf(add_sz_str(printbuf),
 				"-- pivottable_add_field - Build table of base objects for SQL expression\n"
-				"CREATE TEMPORARY TABLE %s TYPE=HEAP\n"
-				"SELECT DISTINCT IdObj FROM %s", 
+				"CREATE TEMPORARY TABLE %s ENGINE=MEMORY\n"
+				"SELECT DISTINCT IdObj FROM %s",
 				pvf->objtable, pvf->srctable);
 			if(sql_exec_query(cntxt, printbuf) || sql_get_table(cntxt, &id_obj, 2)) STACK_ERROR;
 			pvf->nbsrcobj = cntxt->sql_nbrows;
@@ -292,7 +315,7 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 		{
 			snprintf(add_sz_str(printbuf),
 				"-- pivottable_add_field - Build table of base objects for SQL expression\n"
-				"CREATE TEMPORARY TABLE TmpExpr TYPE=HEAP\n"
+				"CREATE TEMPORARY TABLE TmpExpr ENGINE=MEMORY\n"
 				"SELECT DISTINCT %s AS IdObj FROM %s",
 				pvf->relmode == RelNone ? "IdObj" : "IdRelObj",
 				pvf->objtable);
@@ -312,12 +335,11 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 		{
 			snprintf(add_sz_str(printbuf),
 				"-- pivottable_add_field - Build values table\n"
-				"CREATE TEMPORARY TABLE %s TYPE=HEAP\n"
+				"CREATE TEMPORARY TABLE %s ENGINE=MEMORY\n"
 				"SELECT %s.IdObj,LEFT(TmpValExpr.Val,250) AS Val,TmpValExpr.Line AS Line FROM %s\n"
 				"INNER JOIN TmpValExpr ON TmpValExpr.IdObj=%s.%s",
 				pvf->datatable, pvf->objtable, pvf->objtable, pvf->objtable,
-				pvf->relmode == RelNone ? "IdObj" : "IdRelObj",
-				pvf->objtable);
+				pvf->relmode == RelNone ? "IdObj" : "IdRelObj");
 			if(sql_exec_query(cntxt, printbuf)) STACK_ERROR;
 			sql_drop_table(cntxt, "TmpValExpr");
 		}
@@ -346,6 +368,7 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 			M_FREE(flt.select);
 			flt.select = tmp;
 			tmp = NULL;
+			flt.b_nodistinct = 1;
 		}
 		else
 		{
@@ -355,7 +378,7 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 		}
 
 		/* Handle date filter if calendar active */
-		if(pvf->b_calendar) 
+		if(pvf->b_calendar)
 		{
 			/* Set start date if applicable */
 			size_t tr;
@@ -365,9 +388,9 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 			if(!pvf->startdate[0])
 			{
 				if(!pvf->timeway) pvf->timeway = "";
-				if(!*pvf->timeway) 
+				if(!*pvf->timeway)
 				{
-					sprintf(printbuf, "SELECT DATE_SUB(CURDATE(),INTERVAL %ld %s)+0", 
+					sprintf(printbuf, "SELECT DATE_SUB(CURDATE(),INTERVAL %ld %s)+0",
 						(!strcmp(pvf->dispunit, "_EVA_WEEK") ? 7 : 1) * (pvf->maxlabels - 1),
 						!strcmp(pvf->dispunit, "_EVA_WEEK") ? "DAY" : pvf->dispunit + 5);
 					if(sql_exec_query(cntxt, printbuf) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
@@ -387,7 +410,7 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 				{
 					time_t t;
 					struct tm dt;
-					if(!datetxt_to_time(pvf->startdate, &t, &dt) &&	dt.tm_wday != 1 && 
+					if(!datetxt_to_time(pvf->startdate, &t, &dt) &&	dt.tm_wday != 1 &&
 						!delay_to_datetxt(date, pvf->startdate, dt.tm_wday ? 1 - dt.tm_wday : 6, 'D'))
 						strcpy(pvf->startdate, date);
 					pvf->startdate[8] = 0;
@@ -399,18 +422,17 @@ int pivottable_get_field_data(				/* return : 0 on success, other on error */
 				if(sql_exec_query(cntxt, printbuf) || sql_get_table(cntxt, &data, 2)) STACK_ERROR;
 				if(flt.where) DYNBUF_ADD_STR(&flt.where, "\nAND ");
 				dynbuf_print5(&flt.where, "%s>='%s' AND %s<'%.*s'",
-									flt.select->data, pvf->startdate, 
-									flt.select->data, tr, dyntab_val(&data, 0, 0));
+									flt.select->data, pvf->startdate,
+									flt.select->data, (int)tr, dyntab_val(&data, 0, 0));
 				pvf->b_showemptyval = 0;
 			}
 		}
-		else 
+		else
 			pvf->startdate[0] = 0;
 
 		/* Create values table for the pivot field */
 		if(qry_build_flt_select(cntxt, &sql, &id_obj, &flt, 0, 0)) STACK_ERROR;
-		SQL_QRY_DEBUG_FLT(&flt, sql->data, STACK_ERROR);	
-		if(flt.nbnode && cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > 0.03) err_print_filter(&cntxt->debug_msg, &flt);
+		if(qry_exec_filter(cntxt, &flt, sql->data)) STACK_ERROR;
 	}
 
 	/* Add IdObj index to values table */
@@ -459,12 +481,12 @@ int pivottable_add_empty_values(			/* return : 0 on success, other on error */
 	DynBuffer *sql = NULL;
 	char printbuf[1024];
 
-	snprintf(add_sz_str(printbuf), 
+	snprintf(add_sz_str(printbuf),
 		"-- pivottable_add_field - Add empty value for objects with no value\n"
 		"SELECT DISTINCT IdObj FROM %s", pvf->datatable);
 	if(sql_exec_query(cntxt, printbuf) || sql_get_table(cntxt, &id_obj, 2)) STACK_ERROR;
 	M_FREE(sql);
-	DYNBUF_ADD3(&sql, 
+	DYNBUF_ADD3(&sql,
 		"INSERT INTO ", pvf->datatable, 0, NO_CONV, " (IdObj,Val)\n");
 	DYNBUF_ADD3(&sql,
 		"SELECT DISTINCT IdObj,'' AS Val\n"
@@ -499,7 +521,7 @@ int pivottable_handle_field_format(			/* return : 0 on success, other on error *
 		/* Auto format - use min & max values to select proper format */
 
 		/* Check for date */
-		if(pvf->sz_vmin > 5 && pvf->sz_vmax> 5 && 
+		if(pvf->sz_vmin > 5 && pvf->sz_vmax> 5 &&
 			strcmp(pvf->vmin, "1900") > 0 && strcmp(pvf->vmax, "2100") < 0 &&
 			!datetxt_invalid(pvf->vmin) && !datetxt_invalid(pvf->vmax))
 		{
@@ -537,7 +559,7 @@ int pivottable_handle_field_format(			/* return : 0 on success, other on error *
 	/* Truncate values as applicable */
 	if(pvf->ltrunc || pvf->rtrunc)
 	{
-		dynbuf_print(&sql, 
+		dynbuf_print(&sql,
 			"-- pivottable_add_field - Truncate values\n"
 			"UPDATE %s SET Val=", pvf->datatable);
 		if(!pvf->ltrunc && pvf->rtrunc)
@@ -559,9 +581,9 @@ int pivottable_handle_field_format(			/* return : 0 on success, other on error *
 	if(!strcmp(pvf->dispunit, "_EVA_WEEK") && !strcmp(pvf->dispfmt, "_EVA_DATE"))
 	{
 		M_FREE(sql);
-		dynbuf_print(&sql, 
+		dynbuf_print(&sql,
 			"-- pivottable_add_field - Transform to week\n"
-			"UPDATE %s SET Val=DATE_FORMAT(Val,'%%xS%%v')", pvf->datatable);
+			"UPDATE %s SET Val=DATE_FORMAT(Val,'%%x S%%v')", pvf->datatable);
 		if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
 	}
 
@@ -573,9 +595,9 @@ int pivottable_handle_field_format(			/* return : 0 on success, other on error *
 
 		/* Transform to age */
 		M_FREE(sql);
-		dynbuf_print3(&sql, 
+		dynbuf_print3(&sql,
 			"-- pivottable_add_field - Transform to age\n"
-			"UPDATE %s SET Val=%04u-LEFT(Val,4)-IF(MID(Val,5,4)<='%04u',0,1) WHERE Val<>''",
+			"UPDATE %s SET Val=%u-LEFT(Val,4)-IF(MID(Val,5,4)<='%04u',0,1) WHERE Val<>''",
 			pvf->datatable, year, monthday);
 		if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
 		pvf->dispfmt = "_EVA_NUMBER";
@@ -599,7 +621,7 @@ int pivottable_slice_values(				/* return : 0 on success, other on error */
 ){
 	DynBuffer *sql = NULL;
 	char printbuf[1024];
-	dynbuf_print(&sql, 
+	dynbuf_print(&sql,
 		"-- pivottable_add_field - Replace values\n"
 		"UPDATE %s SET Val=", pvf->datatable);
 	if(pvf->slices.nbrows == 1)
@@ -610,7 +632,7 @@ int pivottable_slice_values(				/* return : 0 on success, other on error */
 		{
 			if(!strcmp(pvf->dispfmt, "_EVA_DATE") && pvf->b_overrun)
 			{
-				dynbuf_print5(&sql, 
+				dynbuf_print5(&sql,
 					"CONCAT(LPAD(FLOOR((Val-1)/%lu)*%lu+1,2,'0'),' - ',LPAD(FLOOR((Val-1)/%lu)*%lu+%lu,2,'0')) WHERE Val<>''",
 								slice, slice, slice, slice, slice);
 				if(!*pvf->sortmode) pvf->sortmode = "_EVA_NUMBER";
@@ -619,7 +641,7 @@ int pivottable_slice_values(				/* return : 0 on success, other on error */
 			}
 			else
 			{
-				dynbuf_print5(&sql, 
+				dynbuf_print5(&sql,
 					"CONCAT(FLOOR(Val/%lu)*%lu,' ~ ',FLOOR(Val/%lu)*%lu+%lu) WHERE Val<>''",
 								slice, slice, slice, slice, slice);
 				if(sql_exec_query(cntxt, sql->data)) STACK_ERROR;
@@ -642,7 +664,7 @@ int pivottable_slice_values(				/* return : 0 on success, other on error */
 			{
 				n2 = atoi(dyntab_val(&pvf->slices, i, 0));
 				if(n2 <= n1) continue;
-				dynbuf_print4(&sql, n2 == n1 + 1 ? 
+				dynbuf_print4(&sql, n2 == n1 + 1 ?
 						" WHEN Val+0>=%d AND Val+0<%d THEN '%d'" :
 						" WHEN Val+0>=%d AND Val+0<%d THEN '%d ~ %d'",
 						n1, n2, n1, n2 - 1);
@@ -699,7 +721,7 @@ int pivottable_replace_values(				/* return : 0 on success, other on error */
 
 	if(!pvf->sr_src.nbrows) RETURN_OK;
 	if(sql) sql->cnt = 0;
-	dynbuf_print(&sql, 
+	dynbuf_print(&sql,
 		"-- pivottable_add_field - Replace values\n"
 		"UPDATE %s SET Val=CASE Val ", pvf->datatable);
 	for(i = 0; i < pvf->sr_src.nbrows; i++)
@@ -722,7 +744,7 @@ int pivottable_replace_values(				/* return : 0 on success, other on error */
 ** Description : set cell value in pivot table result
 *********************************************************************/
 #define ERR_FUNCTION "pivottable_set_cellval"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int pivottable_set_cellval(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,						/* in/out : execution context data */
 	PivotTable *pv,							/* in/out : pivot table data */
@@ -748,7 +770,7 @@ int pivottable_set_cellval(					/* return : 0 on success, other on error */
 ** Description : build values table for a pivot table field
 *********************************************************************/
 #define ERR_FUNCTION "pivottable_add_field"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int pivottable_add_field(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,						/* in/out : execution context data */
 	PivotTable *pv,							/* in/out : pivot table data */
@@ -825,7 +847,7 @@ int pivottable_handle_relation_label(		/* return : 0 on success, other on error 
 		dyntab_cell(&pvf->labels, i, 0)->IdObj = id_obj;
 		if(qry_obj_field(cntxt, &objdata, id_obj, NULL)) STACK_ERROR;
 		if(qry_obj_label(cntxt, NULL, NULL, &buf, NULL, NULL, NULL, NULL, NULL, 0, &objdata, 0)) STACK_ERROR;
-		DYNTAB_ADD_BUF(&pvf->labels, i, 0, buf); 
+		DYNTAB_ADD_BUF(&pvf->labels, i, 0, buf);
 	}
 
 	RETURN_OK_CLEANUP;
@@ -849,40 +871,61 @@ int pivottable_build_labels(				/* return : 0 on success, other on error */
 	DynTable labels = {0};
 	DynBuffer *sql = NULL;
 	DynTable objdata = {0};
-	char printbuf[1024];
-	unsigned long i, j, k;
-	int b_first = pvf && !pvf->labels.nbrows;
+	char printbuf[1024], *end;
+	DynTableCell *c, *c1;
+	unsigned long i, j, k, id, id1 = 0;
+	int b_first = pvf && pvf->labels.nbcols <= 1;
+	int b_relation = pvf && pvf->dispfmt && !strcmp(pvf->dispfmt, "_EVA_RELATION");
 
 	if(!pvf || !pv) RETURN_OK;
 
 	/* Read all field labels if required */
 	if(pvf->b_shownomatch && b_first)
 	{
-		snprintf(add_sz_str(printbuf), 
-			"-- pivottable_add_field - Read all field labels\n"
+		snprintf(add_sz_str(printbuf),
+			"-- pivottable_build_labels - Read all field labels\n"
 			"SELECT DISTINCT Val FROM %s", pvf->datatable);
 		if(sql_exec_query(cntxt, printbuf) ||
-			sql_get_table(cntxt, &pvf->labels, 2)) STACK_ERROR;
+			sql_get_table(cntxt, &pvf->labels, 0)) STACK_ERROR;
+		dyntab_group(&pvf->labels, "DISTINCT");
 	}
 
 	/* Build SELECT clause for field labels & counts */
-	dynbuf_print5(&sql, 
+	dynbuf_print5(&sql,
 		"-- pivottable_build_labels - Read field labels & counts\n"
 		"SELECT %s.Val,%s,COUNT(DISTINCT %s.IdObj),MAX(%s.IdObj)\nFROM %s\n",
 		pvf->datatable, pv->datamember, pv->basetable, pv->basetable, pv->basetable);
 	DYNBUF_ADD_BUF(&sql, pv->join, NO_CONV);
 	if(pv->where) DYNBUF_ADD3_BUF(&sql, "WHERE ", pv->where, NO_CONV, "\n");
 	dynbuf_print(&sql, "GROUP BY %s.Val", pvf->datatable);
-	
+
+	/* Handle existing labels - clear old totals */
+	for(i = 0; i < pvf->labels.nbrows;i++) DYNTAB_SET_CELLP(&pvf->labels, i, 1, NULL);
+
 	/* Exec query & get field labels */
 	if(sql_exec_query(cntxt, sql->data) ||
 		sql_get_table(cntxt, pvf->labels.nbrows ? &labels : &pvf->labels, 2)) STACK_ERROR;
 
-	/* Handle existing labels */
-	for(i = 0; i < labels.nbrows;i ++)
+	/* Handle existing labels - transfer new totals */
+	for(i = 0; i < labels.nbrows;i++)
 	{
 		/* Search corresponding label in existing labels */
-		for(j= 0; j < pvf->labels.nbrows && dyntab_cmp(&labels, i, 0, &pvf->labels, j, 0); j++);
+		c1 = dyntab_cell(&labels, i, 0);
+		if(b_relation && c1 && c1->txt)
+		{
+			id1 = strtoul(c1->txt, &end, 10);
+			c1->b_relation = (char)(*end == 0);
+		}
+		for(j= 0; j < pvf->labels.nbrows; j++)
+		{
+			if(b_relation && c1 && c1->b_relation)
+			{
+				c = dyntab_cell(&pvf->labels, j, 0);
+				id = c->IdValObj ? c->IdValObj : c->IdObj ? c->IdObj : c->txt ? strtoul(c->txt, NULL, 10) : 0;
+				if(id == id1) break;
+			}
+			if(!dyntab_cmp(&labels, i, 0, &pvf->labels, j, 0)) break;
+		}
 		if(j == pvf->labels.nbrows)
 		{
 			/* Add new label if not found */
@@ -894,16 +937,9 @@ int pivottable_build_labels(				/* return : 0 on success, other on error */
 		pvf->labels.nbcols = labels.nbcols;
 	}
 
-	/* Handle empty labels */
-	if(pvf->labels.nbrows == 1 && !dyntab_sz(&pvf->labels, 0, 0))
-	{
-		pvf->labels.nbrows = 0;
-		RETURN_OK;
-	}
-
 	/* Handle relation format */
-	if(!strcmp(pvf->dispfmt, "_EVA_RELATION"))
-		for(i = 0; i < pvf->labels.nbrows;i ++)
+	if(b_relation)
+		for(i = 0; i < pvf->labels.nbrows;i++)
 		{
 			DynTableCell *c = dyntab_cell(&pvf->labels, i, 0);
 			char *s = "";
@@ -913,19 +949,33 @@ int pivottable_build_labels(				/* return : 0 on success, other on error */
 			c->col = 1;
 			if(qry_obj_field(cntxt, &objdata, id_obj, NULL)) STACK_ERROR;
 			if(qry_obj_label(cntxt, NULL, NULL, &sql, NULL, NULL, NULL, NULL, NULL, 0, &objdata, 0)) STACK_ERROR;
-			DYNTAB_ADD_BUF(&pvf->labels, i, 0, sql); 
+			DYNTAB_ADD_BUF(&pvf->labels, i, 0, sql);
 		}
 
-	/* Sort labels as required */
-	if(b_first)
+	/* Sort labels on first field calculation */
+	if(!pvf->sortmode) pvf->sortmode = "";
+	if(b_first && strcmp(pvf->sortmode, "_EVA_NONE"))
 	{
-		if(!pvf->sortmode) pvf->sortmode = "";
-		dyntab_sort(&pvf->labels, 
+		/* Sort with given mode */
+		dyntab_sort(&pvf->labels,
 			!strcmp(pvf->sortmode, "_EVA_NUMBER") ?
 				pvf->b_sortdesc ? qsort_col0idesc : qsort_col0i :
 			!strcmp(pvf->sortmode, "_EVA_TOTAL") ?
 				pvf->b_sortdesc ? qsort_col1fdesc : qsort_col1f :
 				pvf->b_sortdesc ? qsort_col0desc : qsort_col0);
+
+		/* Handle labels sort position */
+		if(pvf->sr_pos.nbrows)
+		{
+			for(i = 0; i < pvf->labels.nbrows;i++)
+			{
+				DynTableCell *c = dyntab_cell(&pvf->labels, i, 0), *p;
+				for(j = 0; j < pvf->sr_pos.nbrows && dyntab_cmp(&pvf->sr_dest, j, 0, &pvf->labels, i, 0); j++);
+				p = dyntab_cell(&pvf->sr_pos, j, 0);
+				c->col = (p && p->len && p->txt) ? atoi(p->txt) : i + 10000;
+			}
+			dyntab_sort(&pvf->labels, qsort_val_col);
+		}
 	}
 
 	RETURN_OK_CLEANUP;
@@ -989,7 +1039,10 @@ int pivottablefield_add_total(			/* return : 0 on success, other on error */
 			if(pivottable_set_cellval(cntxt, pv, b_col ? rowcol : i, b_col ? i : rowcol, &data, 0, 0))
 				STACK_ERROR;
 		}
+		pos++;
+		rowcol++;
 	}
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -1018,7 +1071,14 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 		pv->data->srctable = *pv->objtable ? pv->objtable : NULL;
 		if(pivottable_add_field(cntxt, pv, pv->data)) STACK_ERROR;
 		if(pv->data->srctable || *pv->data->datatable)
+		{
 			pv->nbobj = pv->data->nbobj;
+			if(!pv->nbobj)
+			{
+				pv->b_empty = 1;
+				RETURN_OK;
+			}
+		}
 		else
 			pv->data = NULL;
 	}
@@ -1039,7 +1099,7 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 	/* Set base table */
 	pv->basetable = pv->data ? pv->data->datatable :
 					*pv->objtable ? pv->objtable :
-					pv->row ? pv->row->datatable : 
+					pv->row ? pv->row->datatable :
 					pv->col ? pv->col->datatable : NULL;
 	if(!pv->basetable) RETURN_OK;
 
@@ -1068,26 +1128,26 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 	if(pv->data && pv->data->b_lines)
 	{
 		if(pv->row && pv->row->b_lines)
-			dynbuf_print5(&pv->where, "%s (%s.Line=%s.Line OR %s.Val='' OR %s.Val='')\n",
-									pv->where ? " AND " : "", 
+			dynbuf_print5(&pv->where, "%s (%s.Line=%s.Line OR %s.Line IS NULL OR %s.Line IS NULL)\n",
+									pv->where ? "AND " : "",
 									pv->row->datatable, pv->data->datatable,
 									pv->row->datatable, pv->data->datatable);
 		if(pv->col && pv->col->b_lines)
-			dynbuf_print5(&pv->where, "%s (%s.Line=%s.Line OR %s.Val='' OR %s.Val='')\n",
-									pv->where ? " AND " : "", 
+			dynbuf_print5(&pv->where, "%s (%s.Line=%s.Line OR %s.Line IS NULL OR %s.Line IS NULL)\n",
+									pv->where ? "AND " : "",
 									pv->col->datatable, pv->data->datatable,
 									pv->col->datatable, pv->data->datatable);
 	}
 	else if(pv->row && pv->row->b_lines && pv->col && pv->col->b_lines)
-		dynbuf_print5(&pv->where, "%s (%s.Line=%s.Line OR %s.Val='' OR %s.Val='')\n",
-								pv->where ? " AND " : "", 
+		dynbuf_print5(&pv->where, "%s (%s.Line=%s.Line OR %s.Line IS NULL OR %s.Line IS NULL)\n",
+								pv->where ? "AND " : "",
 								pv->row->datatable, pv->col->datatable,
 								pv->row->datatable, pv->col->datatable);
 
 	/* Build labels */
 	if(pivottable_build_labels(cntxt, pv, pv->row)) STACK_ERROR;
 	if(pivottable_build_labels(cntxt, pv, pv->col)) STACK_ERROR;
-	
+
 	/* Build GROUP clause */
 	if(pv->row || pv->col) DYNBUF_ADD_STR(&pv->group, "GROUP BY ");
 	if(pv->row) dynbuf_print(&pv->group, "%s.Val", pv->row->datatable);
@@ -1099,7 +1159,7 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 
 	/* Calc pivot table grand total */
 	M_FREE(sql);
-	DYNBUF_ADD3(&sql, 
+	DYNBUF_ADD3(&sql,
 		"-- pivottable_calc - grand total\n"
 		"SELECT ", pv->datamember, 0, NO_CONV, "");
 	DYNBUF_ADD3(&sql, ",COUNT(DISTINCT ", pv->basetable, 0, NO_CONV, ".IdObj) ");
@@ -1111,17 +1171,17 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 	if(pivottable_set_cellval(cntxt, pv, ROWCNT, COLCNT, &id_obj, 0, 0)) STACK_ERROR;
 
 	/* Build SELECT clause for cross values table if applicable */
-	if(pv->row && pv->col) 
+	if(pv->row && pv->col)
 	{
 		M_FREE(sql);
-		dynbuf_print5(&sql, 
+		dynbuf_print5(&sql,
 			"-- pivottable_calc - Build cross values table\n"
 			"SELECT %s%s,COUNT(DISTINCT %s.IdObj),MAX(%s.IdObj)\nFROM %s\n",
 			pv->select ? pv->select->data : "", pv->datamember, pv->basetable, pv->basetable, pv->basetable);
 		DYNBUF_ADD_BUF(&sql, pv->join, NO_CONV);
 		if(pv->where) DYNBUF_ADD3_BUF(&sql, "WHERE ", pv->where, NO_CONV, "\n");
 		DYNBUF_ADD_BUF(&sql, pv->group, NO_CONV);
-		
+
 		/* Exec query & get cross values table */
 		if(sql_exec_query(cntxt, sql->data) || sql_get_table(cntxt, &id_obj, 2)) STACK_ERROR;
 
@@ -1137,14 +1197,24 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 				unsigned long idrow = DYNTAB_TOULRC(&id_obj, i, 0);
 				unsigned long idcol = DYNTAB_TOULRC(&id_obj, i, c_col);
 				unsigned long irow = 0, icol = 0;
-				if(pv->row) for(irow = 0; irow < ROWCNT && (
-						(b_relrow && idrow) ? 
-							idrow != dyntab_cell(&pv->row->labels, irow, 0)->IdObj :
-							dyntab_cmp(&pv->row->labels, irow, 0, &id_obj, i, 0)); irow++);
-				if(pv->col) for(icol = 0; icol <  COLCNT &&	(
-						(b_relcol && idcol) ? 
-							idcol != dyntab_cell(&pv->col->labels, icol, 0)->IdObj :
-							dyntab_cmp(&pv->col->labels, icol, 0, &id_obj, i, c_col)); icol++);
+				if(pv->row) for(irow = 0; irow < ROWCNT; irow++)
+				{
+					if(b_relrow && idrow)
+					{
+						DynTableCell *c =  dyntab_cell(&pv->row->labels, irow, 0);
+						if(idrow == (c->IdValObj ? c->IdValObj : c->IdObj)) break;
+					}
+					else if(!dyntab_cmp(&pv->row->labels, irow, 0, &id_obj, i, 0)) break;
+				}
+				if(pv->col) for(icol = 0; icol <  COLCNT; icol++)
+				{
+					if(b_relcol && idcol)
+					{
+						DynTableCell *c =  dyntab_cell(&pv->col->labels, icol, 0);
+						if(idcol == (c->IdValObj ? c->IdValObj : c->IdObj)) break;
+					}
+					else if(!dyntab_cmp(&pv->col->labels, icol, 0, &id_obj, i, c_col)) break;
+				}
 
 				/* Set corresponding cell */
 				if(pivottable_set_cellval(cntxt, pv, irow, icol, &id_obj, i, c_val)) STACK_ERROR;
@@ -1155,19 +1225,24 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 	/* Add pivot table column & row totals */
 	{
 		double grandtot = atof(dyntab_val(pv->res, ROWCNT, COLCNT));
+		int b_pc_all = pv->data && !strcmp(dyntab_val(&pv->data->percent, 0, 0), "_EVA_SINGLE");
+		int b_pc_row = pv->data && pv->row && !strcmp(dyntab_val(&pv->data->percent, 0, 0), "_EVA_ROW");
+		int b_pc_col = pv->data && pv->col && !strcmp(dyntab_val(&pv->data->percent, 0, 0), "_EVA_COL");
 		if(pv->row && pivottablefield_add_total(cntxt, pv, pv->row, grandtot)) STACK_ERROR;
 		if(pv->col && pivottablefield_add_total(cntxt, pv, pv->col, grandtot)) STACK_ERROR;
-		if(pv->data && !strcmp(dyntab_val(&pv->data->percent, 0, 0), "_EVA_SINGLE"))
+
+		/* Percent displayed : replace values in result */
+		if(b_pc_all || b_pc_row || b_pc_col)
 		{
-			/* Percent displayed single : replace values in result */
-			for(i = 0; !i || i < ROWCNT; i++) 
+			for(i = 0; !i || i < ROWCNT; i++)
 				for(j = 0; !j || j < COLCNT; j++)
 					if(dyntab_sz(pv->res, i, j))
-			{
-				double v = atof(dyntab_val(pv->res, i, j));
-				char p[32];
-				DYNTAB_ADD(pv->res, i, j, p, snprintf(add_sz_str(p), "%.1lf%%", 100.0 * v / grandtot), NO_CONV);
-			}
+					{
+						double v = atof(dyntab_val(pv->res, i, j));
+						double b = b_pc_all ? grandtot : b_pc_row ? atof(dyntab_val(&pv->row->labels, i, 1)) : atof(dyntab_val(&pv->col->labels, j, 1));
+						char p[32];
+						DYNTAB_ADD(pv->res, i, j, p, snprintf(add_sz_str(p), "%.1lf%%", 100.0 * v / b), NO_CONV);
+					}
 		}
 	}
 	RETURN_OK_CLEANUP;
@@ -1180,12 +1255,12 @@ int pivottable_calc_single(					/* return : 0 on success, other on error */
 ** Description : compute a pivot table with multiple indicators at each position
 *********************************************************************/
 #define ERR_FUNCTION "pivottable_calc"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int pivottable_calc(						/* return : 0 on success, other on error */
 	EVA_context *cntxt,						/* in/out : execution context data */
 	PivotTable *pv							/* in/out : pivot table data */
 ){
-	unsigned long irow, icol, idata;
+	unsigned long irow, icol, idata, i;
 
 	/* Check params */
 	if(!pv) return 0;
@@ -1218,6 +1293,10 @@ int pivottable_calc(						/* return : 0 on success, other on error */
 				}
 			}
 		}
+
+		/* Reset optimization status for row & col fields */
+		for(i = 0; i < pv->nbcol; i++) pv->cols[i].b_done = 0;
+		for(i = 0; i < pv->nbrow; i++) pv->rows[i].b_done = 0;
 	}
 
 	RETURN_OK_CLEANUP;

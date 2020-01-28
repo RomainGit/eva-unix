@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : cgi_utils.c
 ** Description : handling of cgi input format
 **      Author : Alain BOUTE
@@ -13,7 +19,7 @@
 *********************************************************************/
 void cgi_free_files(EVA_context *cntxt)
 {
-	if(cntxt && cntxt->cgi_file) 
+	if(cntxt && cntxt->cgi_file)
 	{
 		unsigned long i;
 		for(i = 0; i < cntxt->cgi_file_nb; i++)
@@ -27,59 +33,59 @@ void cgi_free_files(EVA_context *cntxt)
 ** Description : read args & configuration for cgi calls
 *********************************************************************/
 #define ERR_FUNCTION "cgi_init_call"
-#define ERR_CLEANUP M_FREE(cnffile)
+#define ERR_CLEANUP	DYNTAB_FREE(urlswitch); \
+					DYNTAB_FREE(pgconfig)
 int cgi_init_call(				/* return : 0 on success, other on error */
 	EVA_context *cntxt
 ){
-	char *cnffile = NULL;
-	char tmp[32];
+	char tmp[2048];
 	struct stat st;
 	FILE *f = NULL;
+	DynTable urlswitch = { 0 };
+	DynTable pgconfig = { 0 };
+	unsigned long i = 0;
 
-	/* Set process time counters */
-	cntxt->t0 = clock();
-	cntxt->tm0 = time(NULL);
-	strcpy(cntxt->timestamp, datetxt_now());
-	/*
-	cntxt->debug = DEBUG_CGI_RAW|DEBUG_SQL_RES|DEBUG_CGI;
-	*/
-	cntxt->debug |= strcmp(cntxt->user_ip, "127.0.0.1") ? 0 : DEBUG_CGI_RAW;
-	srand((unsigned int)(getpid() ^ time(NULL)));
+	if(cntxt->user_ip && !strcmp(cntxt->user_ip, "127.0.0.1")) cntxt->debug |= DEBUG_CGI_RAW;
 
 	/* Initialize memory trace file */
 	MEM_TRACE(NULL, NULL);
 
 	/* Output log start */
-	time_to_datetxt(cntxt->tm0, tmp);
-	datetxt_to_format(cntxt, cntxt->logfile, tmp, "_EVA_DATE_SORT");
-	sprintf(cntxt->logfile + strlen(cntxt->logfile), ".txt");
-	chdir(cntxt->path);
-	chdir("..");
-	if(chdir("logs")) { mkdir("logs"); chdir("logs"); }
-	if(stat(cntxt->logfile, &st))
+	if(!cntxt->b_task)
 	{
-		f = fopen(cntxt->logfile, "w");
-		fprintf(f, "time\tpid\tclock\tcgi\tClickBtn\tClickForm\tClickSubField\tSession\tMainForm\tMainObj\tAltForm\tAltObj\tSrchTxt\n");
-	}
-	else
-		f = fopen(cntxt->logfile, "a");
-	fprintf(f, "%lu\t%u\t%lu\t%s\n", time(NULL), getpid(), clock(), cntxt->dbname);
-	fclose(f);
-	chdir(cntxt->path);
+		time_to_datetxt(cntxt->tm0.tv_sec, tmp);
+		datetxt_to_format(cntxt, cntxt->logfile, tmp, "_EVA_DATE_SORT");
+		sprintf(cntxt->logfile + strlen(cntxt->logfile), ".txt");
+		chdir(cntxt->rootdir);
+		if(chdir("logs")) { MKDIR("logs"); chdir("logs"); }
+		if(stat(cntxt->logfile, &st))
+		{
+			/* Create new log file every day */
+			f = fopen(cntxt->logfile, "w");
+			fprintf(f, "time\tpid\tclock\tcgi\tClickBtn\tClickForm\tClickSubField\tSession\tMainForm\tMainObj\tAltForm\tAltObj\tSrchTxt\n");
 
-	/* Read config file */
-	if(cntxt->dbname)
-	{
-		M_ALLOC(cnffile, strlen(cntxt->dbname)+16);
-		sprintf(cnffile, "%s.conf", cntxt->dbname);
-		if(file_read_tabrc(cntxt, &cntxt->id_cnf, cnffile))
-			 RETURN_ERROR("Configuration du serveur EVA incorrecte", NULL);
+			/* Send mail report */
+			snprintf(tmp, sizeof(tmp), "%s" "/BLAT.EXE - -body \"http://%s%s\" -s \"Notification EVA CGI %s\" -noh2 -to eva@abing.fr",
+							cntxt->path, cntxt->srvname, cntxt->requri, cntxt->srvname);
+			system(tmp);
+		}
+		else
+			f = fopen(cntxt->logfile, "a");
+		fprintf(f, "%lu\t%u\t%lu\t%s\n", time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname);
+		fclose(f);
 	}
-	if(file_read_tabrc(cntxt, &cntxt->cnf_server, "serverconfig.conf"))
-	{
-		DYNTAB_SET(&cntxt->cnf_server, 0, 0, "C:\\Program Files\\MSOfficeEVA");
-		CLEAR_ERROR_NOWARN;
-	}
+
+	/* Read	CGI input data */
+	if(cgi_read_data(cntxt)) STACK_ERROR;
+
+	/* Read server config file */
+	if(file_read_config(cntxt)) STACK_ERROR;
+
+	/* Read DB config */
+	snprintf(add_sz_str(tmp), "SELECT DISTINCT IdObj FROM TLink WHERE IdField=%lu AND DateDel IS NULL", IDVAL("_EVA_ADMINISTRATOR"));
+	if(sql_exec_query(cntxt, tmp) || sql_get_table(cntxt, &cntxt->id_cnf, 0)) STACK_ERROR;
+	if(qry_obj_data(cntxt, &cntxt->cnf_data, &cntxt->id_cnf, NULL)) STACK_ERROR;
+	if(cntxt->id_cnf.nbrows != 1 || !cntxt->cnf_data.nbrows) RETURN_ERROR("Configuration du serveur incorrecte", NULL);
 
 	/* Read date labels */
 	dyntab_from_list(&cntxt->daylong, add_sz_str("dimanche,lundi,mardi,mercredi,jeudi,vendredi,samedi"), ",", 0, 0);
@@ -87,9 +93,59 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 	dyntab_from_list(&cntxt->monthlong, add_sz_str("Janvier,Février,Mars,Avril,Mai,Juin,Juillet,Août,Septembre,Octobre,Novembre,Décembre"), ",", 0, 0);
 	dyntab_from_list(&cntxt->monthshort, add_sz_str("Jan,Fev,Mar,Avr,Mai,Jun,Jul,Aou,Sep,Oct,Nov,Dec"), ",", 0, 0);
 
+	/* Read public user account */
+	cntxt->id_public = strtoul(DYNTAB_FIELD_VAL(&cntxt->cnf_data, UNKNOWNUSER), NULL, 10);
 
-	/* Read	CGI input data */
-	if(cgi_read_data(cntxt)) STACK_ERROR;
+	/* Read value constants */
+	if(sql_id_value(cntxt, add_sz_str("_EVA_FORMSTAMP"), &cntxt->val_FORMSTAMP)) STACK_ERROR;
+	if(sql_id_value(cntxt, add_sz_str("_EVA_TYPE"), &cntxt->val_TYPE)) STACK_ERROR;
+	if(sql_id_value(cntxt, add_sz_str("_EVA_FIELD"), &cntxt->val_FIELD)) STACK_ERROR;
+
+	/* Handle URL dependent settings : menubar, homepage, page title */
+	DYNTAB_FIELD_TAB(&urlswitch, &cntxt->cnf_data, URL_SWITCH);
+	if(cntxt->srvname)
+	{
+		DynTableCell *val = NULL;
+		for(i = 0; i < urlswitch.nbrows; i++)
+		{
+			val = dyntab_cell(&urlswitch, i, 0);
+			if(!(val && val->txt && *val->txt) || strstr(cntxt->srvname, val->txt))
+			{
+				DYNTAB_FIELDLINE(&pgconfig, &cntxt->cnf_data, URL_PAGE_CONFIG, i);
+				break;
+			}
+		}
+	}
+	if(urlswitch.nbrows && cntxt->srvname)
+	{
+		i++;
+		DYNTAB_FIELDLINE(&cntxt->menubar, &cntxt->cnf_data, MENUBAR, i);
+		DYNTAB_FIELDLINE(&cntxt->homepage, &cntxt->cnf_data, HOMEPAGE, i);
+		DYNTAB_FIELDLINE(&cntxt->pagetitle, &cntxt->cnf_data, PAGE_TITLE, i);
+		DYNTAB_FIELDLINE(&cntxt->pagebottom, &cntxt->cnf_data, PAGE_BOTTOM, i);
+		DYNTAB_FIELDLINE(&cntxt->pagebtctrl, &cntxt->cnf_data, PAGE_FOOTER, i);
+	}
+	else
+	{
+		DYNTAB_FIELD(&cntxt->menubar, &cntxt->cnf_data, MENUBAR);
+		DYNTAB_FIELD(&cntxt->homepage, &cntxt->cnf_data, HOMEPAGE);
+		DYNTAB_FIELD(&cntxt->pagetitle, &cntxt->cnf_data, PAGE_TITLE);
+		DYNTAB_FIELD(&cntxt->pagebottom, &cntxt->cnf_data, PAGE_BOTTOM);
+		DYNTAB_FIELD(&cntxt->pagebtctrl, &cntxt->cnf_data, PAGE_FOOTER);
+	}
+
+	/* Disable / enable javascript if applicable */
+	{
+		char *msie = cntxt->user_agent ? strstr(cntxt->user_agent, " MSIE ") : NULL;
+		int vers = msie ? atoi(msie + 6) : -1;
+		cntxt->b_pda = cntxt->user_agent && strstr(cntxt->user_agent, " IEMobile ") != 0;
+		if(vers > 0 && vers < 5 || cntxt->b_pda)
+		{
+			cntxt->jsenabled = 0;
+			cntxt->imgwait = 0;
+		}
+		else if(!cntxt->cgi) cntxt->jsenabled = 1;
+	}
 
 	RETURN_OK_CLEANUP;
 }
@@ -104,15 +160,14 @@ void output_log_end(EVA_context *cntxt)
 {
 	FILE *f;
 
-	chdir(cntxt->path);
-	chdir("..");
+	chdir(cntxt->rootdir);
 	chdir("logs");
 	f = fopen(cntxt->logfile, "a");
 	fprintf(f, "%lu\t%u\t%lu\t%s\t%lu\t%lu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					time(NULL), getpid(), clock(), cntxt->dbname,
+					time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname,
 					cntxt->log_clkbtn,										/* clicked button id */
 					cntxt->log_clkform,										/* clicked button form id */
-					(cntxt->cgi && cntxt->cgi[cntxt->cgibtn].subfield) ? 
+					(cntxt->cgi && cntxt->cgi[cntxt->cgibtn].subfield) ?
 						cntxt->cgi[cntxt->cgibtn].subfield : ""				/* clicked button subfield */
 					,dyntab_val(&cntxt->session, 0, 0)						/* session id */
 					,dyntab_val(&cntxt->id_form, 0, 0)						/* current form id */
@@ -165,31 +220,32 @@ void cgi_free(EVA_context *cntxt)
 ** Description : extract tokens and put theim in a table
 *********************************************************************/
 #define ERR_FUNCTION "cgi_extract"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int cgi_extract(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	char *val,						/* in : text containing tokens */
 	char sep,						/* in : tokens separator */
-	DynTable *res, ...				/* out : list of DynTable* pointers to receive values in cell 0,0 
+	DynTable *res, ...				/* out : list of DynTable* pointers to receive values in cell 0,0
 											MUST BE NULL TERMINATED if # of tokens may exceed # of tables */
 ){
 	DynTable *t = res;
-	char *nextval = val; 
+	char *nextval = val;
 	size_t sz;
 	va_list	p;
 
 	/* Args loop */
-	va_start(p, sep);
-	t = va_arg(p, DynTable*);
+	t = res;
+	va_start(p, res);
 	while(t && nextval)
 	{
 		nextval = strchr(val, sep);
 		sz = nextval ? nextval - val : strlen(val);
 		dyntab_free(t);
-		if(sz) DYNTAB_ADD(t, 0, 0, val, sz, NO_CONV); 
+		if(sz) DYNTAB_ADD(t, 0, 0, val, sz, NO_CONV);
 		val = nextval+1;
 		t = va_arg(p, DynTable*);
 	}
+	va_end(p);
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -199,8 +255,8 @@ int cgi_extract(					/* return : 0 if Ok, other on error */
 ** Function : cgi_build_name
 
 	CGI names have the following format :
-			
-			  <type><ctrl>/<form>$<idobj>#<field>.<subfield>$<valnum> 
+
+			  <type><ctrl>/<form>$<idobj>#<field>.<subfield>$<valnum>
 
 	<type>     : the first char of name describes the type of input
 				D = user input
@@ -277,7 +333,7 @@ int cgi_build_basename(					/* return : 0 if Ok, other on error */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
-	
+
 	/* Check params */
 	if(!name) RETURN_ERROR("Erreur du programme", NULL);
 	if(*name) { (*name)->cnt = 0; memset((*name)->data, 0, (*name)->sz); }
@@ -317,7 +373,7 @@ int cgi_build_finalname(			/* return : 0 if Ok, other on error */
 	size_t subfield_sz,				/* in : subfield name string size */
 	unsigned long num,				/* in : value index to handle multiple values */
 	unsigned long row,				/* in : value index to handle table rows */
-	unsigned long lvl				/* in : value index to handle list options level */
+	unsigned long lang				/* in : value index to handle langage */
 ){
 	if(!name || !*name) RETURN_OK;
 
@@ -327,12 +383,12 @@ int cgi_build_finalname(			/* return : 0 if Ok, other on error */
 	/* Add .subfield if needed */
 	if(subfield && *subfield)
 		DYNBUF_ADD3(name, ".", subfield, subfield_sz, NO_CONV, "");
-	
+
 	/* Add "$" and value indexes */
 	DYNBUF_ADD_STR(name, "$");
-	if(num || row || lvl) DYNBUF_ADD_INT(name, num ? num : 1);
-	if(row || lvl) DYNBUF_ADD3_INT(name, ".", row, "");
-	if(lvl) DYNBUF_ADD3_INT(name, ".", lvl, "");
+	if(num || row || lang) DYNBUF_ADD_INT(name, num ? num : 1);
+	if(row || lang) DYNBUF_ADD3_INT(name, ".", row, "");
+	if(lang) DYNBUF_ADD3_INT(name, ".", lang, "");
 	(*name)->data[(*name)->cnt] = 0;
 
 	RETURN_OK_CLEANUP;
@@ -382,18 +438,19 @@ int cgi_parse_name(			/* return : 0 on success, other on error */
 			/* Store indexes */
 			cgi->Num = strtoul(index, NULL, 10);
 			t = strchr(index, '.');
-			if(t) 
+			if(t)
 			{
 				char *t1 = strchr(t + 1, '.');
 				cgi->Line = strtoul(t + 1, NULL, 10);
-				if(t1) cgi->Lvl = strtoul(t1 + 1, NULL, 10);
+				if(t1) cgi->Lang = strtoul(t1 + 1, NULL, 10);
 			}
 		}
 		while(*field && *field != '#') field++;
 		if(*field)
 		{
 			*field = 0;
-			field = ++field;
+			++field;
+
 			/* Store field & subfield */
 			t = strchr(field, '.');
 			if(t)
@@ -416,7 +473,7 @@ int cgi_parse_name(			/* return : 0 on success, other on error */
 	cgi->IdCtrl = strtoul(name + 1, NULL, 10);
 
 	/* Parse CGI input belonging to cntxt->cgi
-		Parsing retrieves various data necessary in first steps of processing, 
+		Parsing retrieves various data necessary in first steps of processing,
 		such as session information, encoding type for next form, clicked button ... */
 	if(cgi >= cntxt->cgi && cgi <= cntxt->cgi + cntxt->nb_cgi - 1)
 	{
@@ -452,12 +509,12 @@ int cgi_parse_name(			/* return : 0 on success, other on error */
 		case 'I':	/* control info button click */
 			cntxt->cgibtn = i;
 			break;
-		
+
 		case 'S':	/* Session data */
 			if(cgi_extract(cntxt, cgi->value, '$',
-							&cntxt->session, 
-							&cntxt->id_form, &cntxt->id_obj, 
-							&cntxt->alt_form, &cntxt->alt_obj, NULL)) STACK_ERROR; 
+							&cntxt->session,
+							&cntxt->id_form, &cntxt->id_obj,
+							&cntxt->alt_form, &cntxt->alt_obj, NULL)) STACK_ERROR;
 			break;
 		case 'O':	/* Original input (to check for user changes) */
 			/* Look for corresponding data input & add empty input if not found */
@@ -505,7 +562,7 @@ DynTableCell *cgi_to_cell(		/* return : cell with given cgi data */
 	cell.IdObj = cgi->IdObj;
 	cell.Num = cgi->Num;
 	cell.Line = cgi->Line;
-	cell.Lvl = cgi->Lvl;
+	cell.Lang = cgi->Lang;
 	cell.i_cgi = i;
 	return &cell;
 }
@@ -515,8 +572,8 @@ DynTableCell *cgi_to_cell(		/* return : cell with given cgi data */
 ** Description : return	cgi inputs matching the given name
 *********************************************************************/
 #define ERR_FUNCTION "cgi_get_values"
-#define ERR_CLEANUP 
-int cgi_get_values(					/* return : 0 if Ok, other on error */		
+#define ERR_CLEANUP
+int cgi_get_values(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	DynTable *ret,					/* out : CGI values table */
 	char *name,						/* in : name to search for in cgi data */
@@ -540,7 +597,7 @@ int cgi_get_values(					/* return : 0 if Ok, other on error */
 		dyntab_free(ret);
 		for(i = 0; i < cntxt->nb_cgi; i++)
 			if(!strcmp(cntxt->cgi[i].name, name) &&
-				dyntab_set(ret, ret->nbrows, 0, cgi_to_cell(cntxt->cgi + i, i))) 
+				dyntab_set(ret, ret->nbrows, 0, cgi_to_cell(cntxt->cgi + i, i)))
 				RETURN_ERR_MEMORY;
 	}
 
@@ -564,8 +621,8 @@ int cgi_get_values(					/* return : 0 if Ok, other on error */
 ** Description : return	cgi inputs matching the given name
 *********************************************************************/
 #define ERR_FUNCTION "cgi_filter_values"
-#define ERR_CLEANUP 
-int cgi_filter_values(				/* return : 0 if Ok, other on error */		
+#define ERR_CLEANUP
+int cgi_filter_values(				/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	DynTable *ret,					/* out : matching CGI inputs table */
 	char type,						/* in : 1st letter of name to search for - do not use if 0 */
@@ -588,7 +645,7 @@ int cgi_filter_values(				/* return : 0 if Ok, other on error */
 	{
 		CGIData *cgi = cntxt->cgi + i;
 		if(	cgi->name[0] &&
-			(!type || type == cgi->name[0]) && 
+			(!type || type == cgi->name[0]) &&
 			(IdCtrl == ~0UL || IdCtrl == cgi->IdCtrl) &&
 			(IdForm == ~0UL || IdForm == cgi->IdForm) &&
 			(IdObj == ~0UL || IdObj == cgi->IdObj) &&
@@ -612,26 +669,26 @@ int cgi_filter_values(				/* return : 0 if Ok, other on error */
 ** Function : cgi_check_form_change
 ** Description : check for modified values in given form/object pair CGI data
 *********************************************************************/
-int cgi_check_form_change(			/* return : 0 = unchanged 
-												1 = modified 
-												2 = menubar or  home page */		
+int cgi_check_form_change(			/* return : 0 = unchanged
+												1 = modified
+												2 = menubar or  home page */
 	EVA_context *cntxt,				/* in : execution context data */
 	unsigned long idform,			/* in : form id to search for */
 	unsigned long idobj				/* in : object id to search for */
 ){
 	unsigned long i;
 
-	if(idform == DYNTAB_TOUL(&cntxt->menubar) || idform == DYNTAB_TOUL(&cntxt->homepage)) 
+	if(idform == DYNTAB_TOUL(&cntxt->menubar) || idform == DYNTAB_TOUL(&cntxt->homepage))
 		return 2;
 
 	/* Search form & return its modified status */
-	for(i = 0; i < cntxt->nb_cgi; i++) 
+	for(i = 0; i < cntxt->nb_cgi; i++)
 	{
 		CGIData *cgi = cntxt->cgi + i;
 		if(cgi->name[0] == 'F' && idobj == cgi->IdObj && idform == cgi->IdForm)
 			return cgi->value[cgi->value_sz - 1] == '1';
 	}
-	
+
 	return 0;
 }
 
@@ -639,9 +696,7 @@ int cgi_check_form_change(			/* return : 0 = unchanged
 ** Function : cgi_clear_form_inputs
 ** Description : clear lines of cntxt->cgi for given form & obj
 *********************************************************************/
-#define ERR_FUNCTION "cgi_clear_form_inputs"
-#define ERR_CLEANUP	
-int cgi_clear_form_inputs(
+void cgi_clear_form_inputs(
 	EVA_context *cntxt,				/* in : execution context data */
 	unsigned long idform,			/* in : form id to search for */
 	unsigned long idobj,			/* in : object id to search for */
@@ -656,18 +711,15 @@ int cgi_clear_form_inputs(
 		CGIData *cgi = cntxt->cgi + i;
 		if(idobj == cgi->IdObj && idform  == cgi->IdForm)
 		{
-			if(!b_keepstatus || strchr("DO", cgi->name[0]) && !cgi->subfield)
+			if(!b_keepstatus || strchr("DO", cgi->name[0]) && !cgi->subfield && strcmp(cgi->field, "_EVA_SELTAB"))
 			{
 				cgi->name[0] = 0;
 				cgi->name_sz = 0;
 			}
+			cgi->b_dontkeep = 1;
 		}
 	}
-
-	RETURN_OK_CLEANUP;
 }
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
 
 /*********************************************************************
 ** Function : cginame_setkeep
@@ -708,10 +760,10 @@ void cgi_setkeep(
 		cgi->name_sz = 0;
 
 	}
-	if(b_dontkeep && cgi->i_old) 
+	if(b_dontkeep && cgi->i_old)
 	{
 		if(b_dontkeep < 2) cntxt->cgi[cgi->i_old].b_dontkeep = b_dontkeep;
-		else 
+		else
 		{
 			cntxt->cgi[cgi->i_old].name[0] = 0;
 			cntxt->cgi[cgi->i_old].name_sz = 0;
@@ -735,8 +787,8 @@ void cgi_value_setkeep(
 	unsigned long j;
 	for(j = 0; j < cgival->nbcols; j++)
 	{
-		DynTableCell *val = dyntab_cell(cgival, i, j); 
-		if(val && val->i_cgi && val->i_cgi < cntxt->nb_cgi) 
+		DynTableCell *val = dyntab_cell(cgival, i, j);
+		if(val && val->i_cgi && val->i_cgi < cntxt->nb_cgi)
 			cgi_setkeep(cntxt, val->i_cgi, b_dontkeep);
 	}
 }
@@ -746,8 +798,8 @@ void cgi_value_setkeep(
 ** Description : ouput hidden old input for a control
 *********************************************************************/
 #define ERR_FUNCTION "cgi_put_hiddenold"
-#define ERR_CLEANUP 
-int cgi_put_hiddenold(					/* return : 0 if Ok, other on error */		
+#define ERR_CLEANUP
+int cgi_put_hiddenold(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	DynBuffer *name,				/* in : CGI name for data input */
 	char *txt, size_t len			/* in original value */
@@ -765,14 +817,14 @@ int cgi_put_hiddenold(					/* return : 0 if Ok, other on error */
 ** Description : ouput hidden input for CGI values not marked
 *********************************************************************/
 #define ERR_FUNCTION "cgi_put_hidden"
-#define ERR_CLEANUP 
-int cgi_put_hidden(					/* return : 0 if Ok, other on error */		
+#define ERR_CLEANUP
+int cgi_put_hidden(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt				/* in : execution context data */
 ){
 	unsigned long i;
 
 	/* For each CGI input */
-	for(i = 0; i < cntxt->nb_cgi; i++) 
+	for(i = 0; i < cntxt->nb_cgi; i++)
 	{
 		CGIData *cgi = cntxt->cgi + i;
 
@@ -784,7 +836,7 @@ int cgi_put_hidden(					/* return : 0 if Ok, other on error */
 			if(cntxt->debug & DEBUG_HTML) DYNBUF_ADD_STR(&cntxt->htmlhidden, "\n");
 		}
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -795,7 +847,7 @@ int cgi_put_hidden(					/* return : 0 if Ok, other on error */
 ** Description : add an input / value pair to cntxt->cgi with corresponding old value
 *********************************************************************/
 #define ERR_FUNCTION "cgi_add_inputold"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int cgi_add_inputold(				/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	unsigned long *i_cgi,			/* out : index of added value in cntxt->cgi */
@@ -837,17 +889,18 @@ int cgi_add_input(					/* return : 0 if Ok, other on error */
 	{
 		CGIData *cgi = cntxt->cgi + i;
 
-		if(	name_sz == cgi->name_sz && 
-			value_sz == cgi->value_sz && 
-			!strncmp(name, cgi->name, name_sz) && 
+		if(	name_sz == cgi->name_sz &&
+			value_sz == cgi->value_sz &&
+			!strncmp(name, cgi->name, name_sz) &&
 			(!value_sz || !strncmp(value ? value : "", cgi->value ? cgi->value : "", value_sz)))
 		{
 			/* If same name & value found : do not add */
 			if(i_cgi) *i_cgi = i;
+			cgi->b_dontkeep = 0;
 			RETURN_OK;
 		}
 	}
-	
+
 	/* Add cgi input in cntxt->cgi */
 	M_REALLOC(CGIData, cntxt->cgi, cntxt->nb_cgi);
 	cgi = cntxt->cgi + (cntxt->nb_cgi - 1);
@@ -879,13 +932,8 @@ int cgi_add_input(					/* return : 0 if Ok, other on error */
 #define ERR_FUNCTION "cgi_read_urlencoded"
 #define ERR_CLEANUP M_FREE(parsed)
 int cgi_read_urlencoded(	/* return : 0 on success, other on error */
-	EVA_context *cntxt		/* in : 
-								cntxt->input : CGI input to process
-							   out : 
-								cntxt->cgi : table of read & parsed CGI inputs
-									col 0 : name
-									col 1 : value
-							*/
+	EVA_context *cntxt		/* in : cntxt->input : CGI input to process
+							   out : cntxt->cgi : table of read & parsed CGI inputs */
 ){
 	char c[2], prevdelim = '&';
 	char *name = "";
@@ -938,13 +986,13 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 	{
 		/* Calc value length - return error on null name */
 		len = strlen(parsed->data + i);
-		if(bname) 
+		if(bname)
 		{
 			if(!len) RETURN_ERROR("Null name in CGI data", NULL);
 			name = parsed->data + i;
 			name_sz = len;
 		}
-		else 
+		else
 		{
 			/* Strip spaces around the value */
 			char *val = parsed->data + i;
@@ -955,7 +1003,7 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 			if(cgi_add_input(cntxt, NULL, name, name_sz, val, sz)) STACK_ERROR;
 		}
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -967,7 +1015,7 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 *********************************************************************/
 #define ERR_FUNCTION "cgi_read_file"
 #define ERR_CLEANUP
-int cgi_read_file(					/* return : 0 if Ok, other on error */		
+int cgi_read_file(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	char **input,					/* in : filename
 									  out : first char after file data */
@@ -1049,6 +1097,72 @@ int cgi_read_file(					/* return : 0 if Ok, other on error */
 #undef ERR_CLEANUP
 
 /*********************************************************************
+** Function : file_find_duplicate
+** Description : find object id of an existing file
+*********************************************************************/
+#define ERR_FUNCTION "file_find_duplicate"
+#define ERR_CLEANUP	DYNTAB_FREE(data); \
+					M_FREE(buf)
+int file_find_duplicate(			/* return : 0 if Ok, other on error */
+	EVA_context *cntxt,				/* in : execution context data */
+	DynTable *idobj,				/* out : object id of existing file - empty if not found */
+	char *txt, size_t sz			/* in : file data to search */
+){
+	DynTable data = { 0 };
+	char sql[1024];
+	char sztxt[16];
+	unsigned long i;
+	FILE *f = NULL;
+	char *buf = NULL;
+
+	/* Get IdValue of file size - return if not found */
+	unsigned long idval = get_id_value(cntxt, sztxt, snprintf(add_sz_str(sztxt), "%lu", sz));
+	dyntab_free(idobj);
+	if(!idval) RETURN_OK;
+	M_ALLOC(buf, sz);
+
+	/* Build & exec query for files with this size */
+	snprintf(add_sz_str(sql),
+		"-- file_find_duplicate\n"
+		"SELECT DISTINCT IdObj FROM TLink WHERE "
+		"IdValue=%lu AND IdField=%lu AND DateDel IS NULL",
+		idval, IDVAL("_EVA_FILE_SIZE"));
+	if(sql_exec_query(cntxt, sql) || sql_get_table(cntxt, idobj, 0)) STACK_ERROR;
+	if(idobj->nbrows &&
+		qry_listobj_field(cntxt, &data, idobj, "_EVA_FILE_SERVER_NAME")) STACK_ERROR;
+	dyntab_free(idobj);
+
+	/* For each found file */
+	for(i = 0; i < data.nbrows && !idobj->nbrows; i++)
+	{
+		/* Check actual size - ignore if different or not found */
+		DynTableCell *c = dyntab_cell(&data, i, 0);
+		struct stat fs;
+		size_t sz1 = 0;
+		if(stat(c->txt, &fs) || (size_t)fs.st_size != sz) continue;
+
+		/* Same size : read file contents & close - ignore file on error */
+		f = fopen(c->txt, "rb");
+		if(!f) continue;
+		*buf = (char)(*txt + 1);
+		sz1 = fread(buf, sz, 1, f);
+		fclose(f);
+
+		/* Ignore if files differ */
+		if(sz1 != 1 || memcmp(buf, txt, sz)) continue;
+
+		/* Duplicate found : set result */
+		DYNTAB_ADD_INT(idobj, idobj->nbrows, 0, c->IdObj);
+		ERR_PUT_TXT("Server file : ", c->txt, c->len);
+		RETURN_ERROR("Le fichier est déjà sur le serveur", {})
+	}
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
 ** Function : cgi_save_files
 ** Description : write uploaded files to disk & create objects in DB
 *********************************************************************/
@@ -1057,10 +1171,9 @@ int cgi_read_file(					/* return : 0 if Ok, other on error */
 					DYNTAB_FREE(id_form); \
 					DYNTAB_FREE(data); \
 					if(f) fclose(f)
-int cgi_save_files(					/* return : 0 if Ok, other on error */		
+int cgi_save_files(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt				/* in : execution context data */
-)
-{
+){
 	DynTable id_obj = { 0 };
 	DynTable id_form = { 0 };
 	DynTable data = { 0 };
@@ -1079,7 +1192,11 @@ int cgi_save_files(					/* return : 0 if Ok, other on error */
 		CGIData *cgi = cntxt->cgi ? cntxt->cgi + cgi_file->i_cgi : NULL;
 		char *bname = basename(DYNTAB_VAL_SZ(&cgi_file->descr, 0, 1));
 		char *ext = strrchr(bname, '.');
-		size_t sz0 = strlen(bname) - (ext ? strlen(ext) : 0);
+		size_t sz_ext = ext ? strlen(ext) : 0;
+		size_t sz0 = strlen(bname) - sz_ext;
+		char serial[16] = {0};
+		size_t sz_max = sizeof(name) - sz_ext - sizeof(serial);
+		if(sz0 > sz_max) sz0 = sz_max;
 
 		/* Continue if empty file */
 		if(!cgi_file->len) continue;
@@ -1087,11 +1204,11 @@ int cgi_save_files(					/* return : 0 if Ok, other on error */
 		/* If location specified in subfield - save to location */
 		if(cgi && cgi->subfield && !strncmp(cgi->subfield, add_sz_str("SAVETO=")))
 		{
-			if(chdir(cntxt->path) || chdir("..") || chdir(cgi->subfield + 7)) continue;
+			if(chdir(cntxt->rootdir) || chdir(cgi->subfield + 7)) continue;
 			snprintf(add_sz_str(name), "%s", bname);
 			file_compatible_name(name);
 			f = fopen(name, "wb");
-			if(!f) RETURN_ERROR("Cannot create file in docs directory", NULL);
+			if(!f) RETURN_ERROR("Cannot create file in subdirectory", NULL);
 			if(fwrite(cgi_file->data, cgi_file->len, 1, f) != 1) RETURN_ERROR("Cannot write downloaded file", NULL);
 			fclose(f);
 			f = NULL;
@@ -1104,48 +1221,91 @@ int cgi_save_files(					/* return : 0 if Ok, other on error */
 
 		/* Switch to docs directory */
 		if(chdir_db_doc(cntxt)) STACK_ERROR;
-		
-		/* Build unique file name based on original file name*/
-		snprintf(add_sz_str(name), "%.*s-%X%X%s", sz0, bname, time(NULL), getpid(), ext ? ext : "");
-		file_compatible_name(name);
-		
-		/* Create new file & write file data */
-		f = fopen(name, "wb");
-		if(!f) RETURN_ERROR("Cannot create file in docs directory", NULL);
-		if(fwrite(cgi_file->data, cgi_file->len, 1, f) != 1) RETURN_ERROR("Cannot write downloaded file", NULL);
-		fclose(f);
-		f = NULL;
 
-		/* Add file length to object data */
-		k = cgi_file->descr.nbrows;
-		DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_FILE_SIZE");
-		DYNTAB_ADD_INT(&cgi_file->descr, k, 1, cgi_file->len);
-		DYNTAB_SET(&cgi_file->descr, k, 2, "V");
-		DYNTAB_SET(&cgi_file->descr, k, 3, "1");
-		k++;
-
-		/* Add file name to object data */
-		DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_FILE_SERVER_NAME");
-		DYNTAB_ADD(&cgi_file->descr, k, 1, name, 0, NO_CONV);
-		DYNTAB_SET(&cgi_file->descr, k, 2, "V");
-		DYNTAB_SET(&cgi_file->descr, k, 3, "1");
-		k++;
-
-		/* Get file description from CGI user input */
-		if(cgi && cgi_filter_values(cntxt, &data, 'D', cgi->IdCtrl, cgi->IdForm, cgi->IdObj ? cgi->IdObj : ~0UL, cgi->field, "FILE_DESCRIPTION", 0, 0))
-			STACK_ERROR;
-		if(dyntab_sz(&data, 0, 0))
+		/* Search for duplicate file */
+		if(file_find_duplicate(cntxt, &id_obj, cgi_file->data, cgi_file->len)) CLEAR_ERROR;
+		if(!id_obj.nbrows)
 		{
-			DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_NOTES");
-			DYNTAB_ADD_CELL(&cgi_file->descr, k, 1, &data, 0, 0);
+			/* Duplicate not found : save file & create object */
+			unsigned long iserial = 0;
+			struct stat fs;
+
+			/* Build unique file name based on original file name */
+			do
+			{
+				snprintf(add_sz_str(name), "%.*s%s%s", (int)sz0, bname, serial, ext ? ext : "");
+				file_compatible_name(name);
+				snprintf(add_sz_str(serial), "#%lu", ++iserial);
+			}
+			while(!stat(name, &fs));
+
+			/* Create new file & write file data */
+			f = fopen(name, "wb");
+			if(!f) RETURN_ERROR("Cannot create file in docs directory", NULL);
+			if(fwrite(cgi_file->data, cgi_file->len, 1, f) != 1) RETURN_ERROR("Cannot write downloaded file", NULL);
+			fclose(f);
+			f = NULL;
+
+			/* Add file length to object data */
+			k = cgi_file->descr.nbrows;
+			DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_FILE_SIZE");
+			DYNTAB_ADD_INT(&cgi_file->descr, k, 1, cgi_file->len);
 			DYNTAB_SET(&cgi_file->descr, k, 2, "V");
 			DYNTAB_SET(&cgi_file->descr, k, 3, "1");
 			k++;
-		}
 
-		/* Create new object with file description */
-		if(qry_add_obj_data(cntxt, &id_obj, &cgi_file->descr, &id_form, 0))
-			STACK_ERROR;
+			/* Add file name to object data */
+			DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_FILE_SERVER_NAME");
+			DYNTAB_ADD(&cgi_file->descr, k, 1, name, 0, NO_CONV);
+			DYNTAB_SET(&cgi_file->descr, k, 2, "V");
+			DYNTAB_SET(&cgi_file->descr, k, 3, "1");
+			k++;
+
+			/* Add form/obj/ctrl info */
+			if(cgi)
+			{
+				if(cgi->IdObj)
+				{
+					DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_OBJ");
+					DYNTAB_ADD_INT(&cgi_file->descr, k, 1, cgi->IdObj);
+					DYNTAB_SET(&cgi_file->descr, k, 2, "R");
+					DYNTAB_SET(&cgi_file->descr, k, 3, "1");
+					k++;
+				}
+				if(cgi->IdCtrl)
+				{
+					DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_CTRL");
+					DYNTAB_ADD_INT(&cgi_file->descr, k, 1, cgi->IdCtrl);
+					DYNTAB_SET(&cgi_file->descr, k, 2, "R");
+					DYNTAB_SET(&cgi_file->descr, k, 3, "1");
+					k++;
+				}
+				if(cgi->IdForm)
+				{
+					DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_FORM");
+					DYNTAB_ADD_INT(&cgi_file->descr, k, 1, cgi->IdForm);
+					DYNTAB_SET(&cgi_file->descr, k, 2, "R");
+					DYNTAB_SET(&cgi_file->descr, k, 3, "1");
+					k++;
+				}
+			}
+
+			/* Get file description from CGI user input */
+			if(cgi && cgi_filter_values(cntxt, &data, 'D', cgi->IdCtrl, cgi->IdForm, cgi->IdObj ? cgi->IdObj : ~0UL, cgi->field, "FILE_DESCRIPTION", 0, 0))
+				STACK_ERROR;
+			if(dyntab_sz(&data, 0, 0))
+			{
+				DYNTAB_SET(&cgi_file->descr, k, 0, "_EVA_NOTES");
+				DYNTAB_ADD_CELL(&cgi_file->descr, k, 1, &data, 0, 0);
+				DYNTAB_SET(&cgi_file->descr, k, 2, "V");
+				DYNTAB_SET(&cgi_file->descr, k, 3, "1");
+				k++;
+			}
+
+			/* Create new object with file description */
+			if(qry_add_obj_data(cntxt, &id_obj, &cgi_file->descr, &id_form, 0))
+				STACK_ERROR;
+		}
 		DYNTAB_FREE(cgi_file->descr);
 
 		/* Add object id as value in corresponding CGI input */
@@ -1170,9 +1330,9 @@ int cgi_save_files(					/* return : 0 if Ok, other on error */
 #define ERR_FUNCTION "cgi_read_multipart"
 #define ERR_CLEANUP	M_FREE(separator)
 int cgi_read_multipart(		/* return : 0 on success, other on error */
-	EVA_context *cntxt		/* in : 
+	EVA_context *cntxt		/* in :
 								cntxt->input : CGI input to process
-							   out : 
+							   out :
 								cntxt->cgi : table of read & parsed CGI inputs */
 ){
 	char *txt = cntxt->input->data;
@@ -1236,7 +1396,7 @@ int cgi_read_multipart(		/* return : 0 on success, other on error */
 		/* Switch to next part */
 		txt = endval;
 	}
-	
+
 #undef CGI_DELIM_DESCR
 #undef CGI_DELIM_NAME
 #undef CGI_DELIM_FILE
@@ -1251,7 +1411,7 @@ int cgi_read_multipart(		/* return : 0 on success, other on error */
 ** Description : output CGI data in a trace file
 *********************************************************************/
 void cgi_trace_input(EVA_context *cntxt)
-{ 
+{
 	FILE *f = NULL;
 	chdir(cntxt->path);
 	f = fopen("cgi.txt", "wb");
@@ -1263,14 +1423,37 @@ void cgi_trace_input(EVA_context *cntxt)
 }
 
 /*********************************************************************
+** Function : cgi_read_trace_input
+** Description : read CGI data from a trace file
+*********************************************************************/
+void cgi_read_trace_input(EVA_context *cntxt)
+{
+	struct stat fs;
+	char *fname = "cgi.txt";
+	chdir(cntxt->path);
+	if(!stat(fname, &fs))
+	{
+		FILE *f = NULL;
+		f = fopen(fname, "rb");
+		if(f)
+		{
+			cntxt->input = dynbuf_init(fs.st_size + 4);
+			if(cntxt->input) fread(cntxt->input->data, fs.st_size, 1, f);
+			fclose(f);
+			if(cntxt->input) cntxt->input->cnt = fs.st_size;
+		}
+	}
+}
+
+/*********************************************************************
 ** Function : cgi_read_data
 ** Description : read CGI data into a DynTable
 *********************************************************************/
 #define ERR_FUNCTION "cgi_read_data"
-#define ERR_CLEANUP	if(f) fclose(f)
+#define ERR_CLEANUP
 int cgi_read_data(			/* return : 0 on success, other on error */
 	EVA_context *cntxt		/* in : context data
-							   out : 
+							   out :
 								cntxt->cgi : table of read & parsed CGI inputs
 									col 0 : name
 									col 1 : value
@@ -1284,75 +1467,102 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 ){
 	char *enctype = getenv("CONTENT_TYPE");
 	char *length = getenv("CONTENT_LENGTH");
-	FILE *f = NULL;
+	size_t len = length ? atoi(length) : 0;
 
-	/* If trace mode */
-	if(cntxt->argc > 1 && !strcmp(cntxt->argv[cntxt->argc - 1], "CGITrace"))
+	/* Read from stdin if available */
+	if(length)
 	{
-		/* Read input from text file */
-		chdir(cntxt->path);
-		f = fopen("cgi.txt", "rb");
-		if(f)
-		{
-			size_t len = filelength(fileno(f));
-			cntxt->input = dynbuf_init(len+4);
-			if(!cntxt->input) RETURN_ERR_MEMORY;
-			if(fread(cntxt->input->data, len, 1, f) != 1) RETURN_ERROR("CGI read error from file", NULL);
-			cntxt->input->cnt = len;
-			fclose(f);
-			f = NULL;
-			cntxt->urlencoded = *cntxt->input->data != '-';
-		}
-		cntxt->argc = 1;
-	}
+		size_t r = 0;
+		int t0 = ms_since(&cntxt->tm0);
 
-	/* Else : read from stdin */
-	else if(length)
-	{
-		size_t len = atoi(length);
-		clock_t t0 = clock();
-
-		cntxt->urlencoded = !enctype || !strcmp(enctype, "application/x-www-form-urlencoded");
-		cntxt->rxsize = len;
-		cntxt->input = dynbuf_init(len+4);
+		/* Initialize input buffer */
+		cntxt->input = dynbuf_init(len + 4);
 		if(!cntxt->input) RETURN_ERR_MEMORY;
+#ifdef WIN32
 		setmode(fileno(stdin), _O_BINARY);
+#endif
 
-		/* If not urlencoded and size over 50k */
-		if(!cntxt->urlencoded && len > 500000000L)
-		{
-			/* TODO - deactivated - doesnt work : displayed after file was transmitted */
-			/* Display progress bar & use multiple blocks read */
-			size_t sz = 0, blk = 1024;
-			unsigned long cnt = 0;
-			cntxt->imgwait = 1;
-			put_html_page_header(cntxt, NULL, "Téléchargement de fichier", NULL, 2);
-			printf("Téléchargement : ");
-			while(sz < len)
-			{
-				if(blk > len - sz) blk = len - sz;
-				if(fread(cntxt->input->data + sz, blk, 1, stdin) != 1) 
-					RETURN_ERROR("CGI read error from stdin", ERR_PUT_INT("\n\texpected size = ", len));
-				sz += blk;
-				while(cnt < 50 * sz / len) { printf("*"); fflush(stdout); cnt++; }
-			}
-		}
-		else
-			/* Else use single block read */
-			if(fread(cntxt->input->data, len, 1, stdin) != 1) RETURN_ERROR("CGI read error from stdin", ERR_PUT_INT("\n\texpected size = ", len));
-		cntxt->input->cnt = len;
-		cntxt->rxtime = clock() - t0;
+		/* Read input from stdin */
+		r = fread(cntxt->input->data + r, 1, len, stdin);
+		if(r < len) RETURN_ERROR("CGI read error from stdin", { ERR_PUT_INT("\n\texpected size = ", len); ERR_PUT_INT("\n\tinput size = ", cntxt->input->cnt); });
+
+		cntxt->rxtime = ms_since(&cntxt->tm0) - t0;
+		cntxt->rxsize = len;
+		cntxt->input->cnt = r;
 
 		/* Trace CGI data if applicable */
-		if(cntxt->debug & DEBUG_CGI_RAW) cgi_trace_input(cntxt);
-		if(len > cntxt->input->cnt) RETURN_ERROR("CGI read incomplete :", ERR_PUT_INT("\n\tinput size = ", cntxt->input->cnt))
+#ifdef PROD_VERSION
+		if(cntxt->debug & DEBUG_CGI_RAW)
+#endif
+            cgi_trace_input(cntxt);
 	}
 
+	/* If debug mode from trace input */
+	else if(!enctype)
+		cgi_read_trace_input(cntxt);
+
 	/* Call CGI read function depending on encoding type */
-	cntxt->urlencoded = enctype ? !strcmp(enctype, "application/x-www-form-urlencoded") : 
-									cntxt->input && *cntxt->input->data != '-';
-	if(cntxt->input && (cntxt->urlencoded ? cgi_read_urlencoded : cgi_read_multipart)(cntxt))
+	cntxt->urlencoded = enctype ? !strcmp(enctype, "application/x-www-form-urlencoded") : cntxt->input && *cntxt->input->data != '-';
+	if(cntxt->input && (cntxt->urlencoded ? cgi_read_urlencoded : cgi_read_multipart)(cntxt)) STACK_ERROR;
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Function : cgi_get_subfield
+** Description : return	cgi inputs matching the given name
+*********************************************************************/
+#define ERR_FUNCTION "cgi_get_subfield"
+#define ERR_CLEANUP
+int cgi_get_subfield(				/* return : 0 if Ok, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	DynTable *cgival,				/* out : CGI values table */
+	EVA_ctrl *ctrl,					/* in : related control */
+	char *subfield,					/* in : subfield name */
+	int b_keep,						/* in : mark for no reoutput if 0 */
+	unsigned long num,				/* in : value index */
+	unsigned long line				/* in : value index */
+)
+{
+	dyntab_free(cgival);
+	if(cgi_filter_values(cntxt, cgival, 'D', DYNTAB_TOUL(&ctrl->id),
+										DYNTAB_TOUL(&cntxt->form->id_form),
+										DYNTAB_TOUL(&cntxt->form->id_obj),
+										ctrl->FIELD,
+										subfield, num, line))
 		STACK_ERROR;
+	if(!b_keep) CGI_VALUES_DONTKEEP(cgival);
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Function : cgi_put_subfield
+** Description : output hidden CGI input for control options
+*********************************************************************/
+#define ERR_FUNCTION "cgi_put_subfield"
+#define ERR_CLEANUP	M_FREE(name)
+int cgi_put_subfield(				/* return : 0 if Ok, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	EVA_ctrl *ctrl,					/* in : related control */
+	char *subfield,					/* in : subfield name */
+	char *val, size_t val_sz		/* in : value to use */
+)
+{
+	DynBuffer *name = NULL;
+	if(cgi_build_name(cntxt, &name, 'D',
+		DYNTAB_TOUL(&ctrl->id),
+		DYNTAB_TOUL(&cntxt->form->id_form),
+		DYNTAB_TOUL(&cntxt->form->id_obj),
+		ctrl->FIELD, strlen(ctrl->FIELD), subfield, strlen(subfield), 0, 0, 0))
+		STACK_ERROR;
+	DYNBUF_ADD3_BUF(cntxt->form->html, "<input type=hidden name='", name, NO_CONV, "'");
+	DYNBUF_ADD3(cntxt->form->html, " value='", val, val_sz, HTML_NO_QUOTE, "'>");
+	if(cntxt->debug & DEBUG_HTML) DYNBUF_ADD_STR(cntxt->form->html, "\n");
 
 	RETURN_OK_CLEANUP;
 }

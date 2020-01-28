@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : dlg_openedforms.c
 ** Description : handling fonctions for opened forms list dialog
 **      Author : Alain BOUTE
@@ -58,7 +64,7 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 	{
 		DYNBUF_ADD_STR(html, "<td align=center>")
 		NAME_BUTTON("VIEW");
-		if(put_html_button(cntxt, name->data, NULL, "_eva_btn_gobackobj_fr.gif", "_eva_btn_gobackobj_fr_s.gif", 
+		if(put_html_button(cntxt, name->data, NULL, "_eva_btn_2forms_fr.gif", "_eva_btn_2forms_fr_s.gif", 
 			"Afficher les formulaires sélectionnés dans les colonnes Haut et bas\n\n"
 			"Vous pouvez afficher deux formulaires simultanément", 0, 0)) STACK_ERROR; 
 		DYNBUF_ADD_STR(html, "</td>")
@@ -80,7 +86,8 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 		int b_modified = cgi_check_form_change(cntxt, cgi->IdForm, cgi->IdObj);
 		if(b_modified == 2) continue;
 		b_modif |= b_modified;
-		bgcolor = table_row_bgcolor(cntxt, &tbl, j++);
+		bgcolor = table_row_bgcolor(cntxt, &tbl, j++, NULL);
+		if(!bgcolor || !*bgcolor) bgcolor = "FFFFFF";
 
 		/* Output row header */
 		DYNBUF_ADD_STR(html, "<tr>")
@@ -107,8 +114,7 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 		}
 
 		/* Output open button */
-		if(ctrl_add_symbol_btn(cntxt, NULL, NULL, NULL, &cgival, 0,
-								add_sz_str("Cliquez pour retourner à la fiche"), bgcolor, "SYMBOL+NAME+LABEL+OBJNOTES"))
+		if(ctrl_add_symbol_btn(cntxt, NULL, NULL, &cgival, 0, bgcolor, "SYMBOL+NAME+LABEL+OBJNOTES"))
 			CLEAR_ERROR;
 
 		/* Output display position radio buttons */
@@ -277,7 +283,7 @@ int dlg_openedforms(				/* return : 0 on success, other on error */
 			DYNTAB_ADD_INT(&cntxt->id_form, 0, 0, idform);
 			DYNTAB_FREE(cntxt->id_obj);
 			if(idobj) DYNTAB_ADD_INT(&cntxt->id_obj, 0, 0, idobj);
-			if(form_load(cntxt, &cntxt->id_form, &cntxt->id_obj) ||
+			if(form_load(cntxt, &cntxt->id_form, &cntxt->id_obj, 0) ||
 				form_save_dialog(cntxt, 0, "_EVA_CONFIRMCHANGES", BUTN_SAVE_CLOSE | BUTN_CLOSE | BUTN_RESTORE, NULL)) STACK_ERROR;
 			RETURN_OK;
 		}
