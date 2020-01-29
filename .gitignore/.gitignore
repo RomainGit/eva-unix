@@ -2,6 +2,7 @@
 
 #Ignore all files
 *
+*/
 
 #allowed files and folders
 !*.c
