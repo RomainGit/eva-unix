@@ -157,7 +157,7 @@ int put_html_format_pos(
 		if(nobreak) DYNBUF_ADD_STR(html, "<nobr>");
 
 		/* Add font modifiers */
-		if(b_font) 
+		if(b_font)
 		{
 			DYNBUF_ADD_STR(html, "<font");
 			if(fontface && *fontface) DYNBUF_ADD3(html, " face='", fontface, 0, NO_CONV, "'");
@@ -178,7 +178,7 @@ int put_html_format_pos(
 		if(b_font) DYNBUF_ADD_STR(html, "</font>");
 
 		/* Terminate cell / paragraph */
-		if(tag) 
+		if(tag)
 		{
 			DYNBUF_ADD3(html, "</", tag, 0, NO_CONV, ">");
 		}
@@ -281,7 +281,7 @@ void put_html_page_header(
 		if(background) cntxt->txsize += fprintf(f ? f : stdout, " background='%s'", background);
 		if(*bgcolor) cntxt->txsize += fprintf(f ? f : stdout, " bgcolor=#%s", bgcolor);
 		cntxt->txsize += fprintf(f ? f : stdout, ">");
-		if(cntxt->imgwait && !f) cntxt->txsize += fprintf(f ? f : stdout,	"%s", 
+		if(cntxt->imgwait && !f) cntxt->txsize += fprintf(f ? f : stdout,	"%s",
 			"<script>document.write(\"<img src='../img/_eva_imgwait.gif'>\");</script>");
 		cntxt->b_bodyheader = 1;
 		M_FREE(background);
@@ -290,7 +290,7 @@ void put_html_page_header(
 	/* Output form header if applicable */
 	if(steps > 2 && !cntxt->b_formheader)
 	{
- 
+
 		/* Output links to specific javascript modules */
 		if(cntxt->jsColorInput)
 			cntxt->txsize += fprintf(f ? f : stdout, "\n<script type=text/javascript src=../js/color.js></script>");
@@ -335,7 +335,7 @@ void put_html_page_header(
 					"<script type=text/javascript src=../js/scw.js></script>");
 		}
 
-	
+
 		if(!(cntxt->b_terminate & 64))
 		{
 			cntxt->txsize += fprintf(f ? f : stdout, "<form name='mainform'");
@@ -348,7 +348,7 @@ void put_html_page_header(
 			}
 			cntxt->txsize += fprintf(f ? f : stdout, ">");
 		}
-		if(!f) cntxt->txsize += fprintf(stdout, 
+		if(!f) cntxt->txsize += fprintf(stdout,
 			"<script>%s"
 			"document.write(\"<input type=hidden name=JSINPUT>\");"
 			"</script>",
@@ -367,7 +367,7 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 	int b_stats = 1;
 	DynBuffer *focus = cntxt->focus1 ? cntxt->focus1 : cntxt->focus2 ? cntxt->focus2 : cntxt->focus3;
  	int t;
-	
+
 	if(!(cntxt->b_terminate & 64))
 	{
 		/* Get trailer format */
@@ -375,7 +375,7 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 		int b_usrbot = *trailfmt;
 		if(!b_usrbot) trailfmt = dyntab_val(&cntxt->pagebottom, 0, 0);
 		b_stats = !*trailfmt || !strcmp(trailfmt, "_EVA_NORMAL");
-		
+
 		t = ms_since(&cntxt->tm0);
 
 		/* Handle JavaScript end script & SetFocus */
@@ -384,10 +384,10 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 		if(!f && focus) cntxt->txsize += printf("document.mainform[\"%s\"].focus();", focus->data);
 		cntxt->txsize += fprintf(f ? f : stdout, "%s", "</script>");
 
-#define TIME_CELL(txt, bg) "<td align=center bgcolor=#" bg "><nowrap><font size=-2>&nbsp;" txt "&nbsp;</font></td>"	
+#define TIME_CELL(txt, bg) "<td align=center bgcolor=#" bg "><nowrap><font size=-2>&nbsp;" txt "&nbsp;</font></td>"
 		if(cntxt->b_terminate & 16)
 		{
-			fprintf(f ? f : stdout, "<br>Durée : %1.2lf s", (double)t/CLOCKS_PER_SEC);
+			fprintf(f ? f : stdout, "<br>Durée : %1.2lf s", (double)t/1000);
 		}
 		else if(!strcmp(trailfmt, "_EVA_HTML"))
 		{
@@ -427,7 +427,7 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 				char *rxsize, *rxrate, *txsize, *txrate;
 #define COPY_HUMANFILESIZE(dest, _sz) { size_t sz = _sz; char *src = sz ? human_filesize(sz) : "";  size_t size = strlen(src); \
 											dest = calloc(size + 1, 1); if((src) && size) memcpy(dest, src, size); }
-				COPY_HUMANFILESIZE(rxsize, cntxt->rxsize); 
+				COPY_HUMANFILESIZE(rxsize, cntxt->rxsize);
 				COPY_HUMANFILESIZE(rxrate, cntxt->rxtime > 200 ? (size_t)(1.0 * cntxt->rxsize / cntxt->rxtime * 1000) : 0);
 				COPY_HUMANFILESIZE(txsize, cntxt->txsize);
 				COPY_HUMANFILESIZE(txrate, cntxt->txtime > 200 ? (size_t)(1.0 * cntxt->txsize / cntxt->txtime * 1000) : 0);
@@ -440,7 +440,7 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 				fprintf(f ? f : stdout, TIME_CELL("%1.2lf s - %s", "DDDDFF"), (double)cntxt->txtime/1000, txsize);
 #undef TIME_CELL
 				fprintf(f ? f : stdout, "%s", "</tr></table></td>");
-				free(rxsize); free(rxrate); free(txsize); free(txrate); 
+				free(rxsize); free(rxrate); free(txsize); free(txrate);
 			}
 			fprintf(f ? f : stdout, "%s", "</tr></table>");
 		}
@@ -501,7 +501,7 @@ int put_html_bold_substring(
 		{
 			char *txt2 = dyntab_val(&words, i, 0);
 			char *txt1 = *txt2 ? strstr(txt0, txt2) : NULL;
-			if(!txt || txt1 && txt1 < txt) 
+			if(!txt || txt1 && txt1 < txt)
 			{
 				txt = txt1;
 				j = i;

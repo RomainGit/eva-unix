@@ -271,13 +271,13 @@ int sql_exec_query				/* return : 0 on success, other on error */
 	cntxt->sql_nbrows = (unsigned long)mysql_affected_rows(cntxt->sql_session);
  	t2 = ms_since(&cntxt->tm0);
 	cntxt->sqltime += t2 - t1;
-	cntxt->sql_restime = (double)(t2-t1)/CLOCKS_PER_SEC;
+	cntxt->sql_restime = (double)(t2-t1)/1000;
 
 	/* Output debug info */
 	if(cntxt->sql_trace)
 	{
 		DYNBUF_PRINTF(&cntxt->debug_msg, 64, "\n%4ld : ", cntxt->sql_cnt, NO_CONV);
-		DYNBUF_PRINTF(&cntxt->debug_msg, 64, "%1.3f s ", (double)(t2-t1)/CLOCKS_PER_SEC, NO_CONV);
+		DYNBUF_PRINTF(&cntxt->debug_msg, 64, "%1.3f s ", (double)(t2-t1)/1000, NO_CONV);
 	}
 	if(cntxt->sql_trace & DEBUG_SQL_RES)
 	{
@@ -301,7 +301,7 @@ int sql_exec_query				/* return : 0 on success, other on error */
 	else if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > DEBUG_SQL_SLOW_TH)
 	{
 		DYNBUF_ADD3_INT(&cntxt->debug_msg, "\n=========> Slow query #", cntxt->sql_cnt, "");
-		DYNBUF_PRINTF(&cntxt->debug_msg, 128, " - time = %1.3f s", (double)(t2-t1)/CLOCKS_PER_SEC, NO_CONV);
+		DYNBUF_PRINTF(&cntxt->debug_msg, 128, " - time = %1.3f s", (double)(t2-t1)/1000, NO_CONV);
 		DYNBUF_ADD3_INT(&cntxt->debug_msg, " - ", cntxt->sql_nbrows, " rows\n");
 		if(cntxt->form && cntxt->form->ctrl)
 		{
