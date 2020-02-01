@@ -1877,7 +1877,7 @@ int qry_parse_filter_nodes(			/* return : 0 on success, other on error */
 	{
 		/* OR combination of filters on same object - use temporary table to build matched objects list */
 		char tmptbl[32] = {0};
-		snprintf(add_sz_str(tmptbl), "Or%lX", ms_since(&cntxt->tm0));
+		snprintf(add_sz_str(tmptbl), "Or%X", ms_since(&cntxt->tm0));
 		snprintf(add_sz_str(printbuf),
 			"-- OR combination - use temporary table %s\n"
 			"CREATE TEMPORARY TABLE %s (IdObj INT) ENGINE=MEMORY", tmptbl, tmptbl);

@@ -139,7 +139,7 @@ int file_output_link(				/* return : 0 on success, other on error */
 	DYNBUF_ADD3(html, "'>", name, sz_name, TO_HTML, "</a> - ");
 	DYNBUF_ADD(html, human_filesize(fs.st_size), 0, NO_CONV);
 
-
+#ifdef ZIP_FILES
 	/* Zip result file if larger than 50k & output link to zip */
 	if(fs.st_size > 50000L && options & 2 && sz_fname > 4 && STRCMPCASE(fname + sz_fname - 4, ".zip"))
 	{
@@ -168,6 +168,7 @@ int file_output_link(				/* return : 0 on success, other on error */
 								NULL, 0, 0)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "</font>");
 	}
+#endif // ZIP_FILES
 
 	/* Output message */
 	if(options) DYNBUF_ADD_STR(html, "<hr>");

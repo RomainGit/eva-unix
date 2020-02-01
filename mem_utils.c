@@ -46,7 +46,7 @@ void mem_trace(
 	else
 	{
 		f = fopen(path,"a");
-		fprintf(f, "%lu\t%s\t0x%lx\t0x%lx\n", ms_since(&tv0) - t0, type, (unsigned long)mem, MSIZE(mem));
+		fprintf(f, "%u\t%s\t0x%lx\t0x%lx\n", ms_since(&tv0) - t0, type, (unsigned long)mem, MSIZE(mem));
 	}
 	fclose(f);
 }

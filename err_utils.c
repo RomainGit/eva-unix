@@ -356,16 +356,16 @@ void err_print_data(
 
 	if(!tab || !tab->nbrows)
 	{
-		dynbuf_add(buf, add_sz_str("(null)\r"), sr, sz_sr);
+		dynbuf_add(buf, add_sz_str("(null)\n"), sr, sz_sr);
 		return;
 	}
-	dynbuf_add(buf, add_sz_str("      IdObj ValObj   N   L  C  R Field                  Value\r"), sr, sz_sr);
+	dynbuf_add(buf, add_sz_str("      IdObj ValObj   N   L  C  R Field                  Value\n"), sr, sz_sr);
 	if(!end || end > tab->nbrows) end = tab->nbrows;
 	for(i = beg; i < end; i++)
 	{
 		DynTableCell *c = dyntab_cell(tab, i, 0);
 		dynbuf_print5(buf, "%3lu: %6lu %6lu %3lu %3lu", i, c->IdObj, c->IdValObj, c->Num, c->Line);
-		dynbuf_print4(buf, " %2lu %2lu %-20.20s %-50.50s\r", c->col, c->row, c->field ? c->field : "", c->txt);
+		dynbuf_print4(buf, " %2lu %2lu %-20.20s %-50.50s\n", c->col, c->row, c->field ? c->field : "", c->txt);
 	}
 }
 

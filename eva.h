@@ -583,7 +583,7 @@ typedef struct _PivotTableField
 	char *pos;								/* field position : Row|Col|Data */
 
 	DynTable srcdata;						/* source data for field definition */
-	char datatable[32];						/* name of table holding field values */
+	char datatable[24];						/* name of table holding field values */
 	char objtable[32];						/* name of table holding base objects field values */
 	char *srctable;							/* name of table holding source objects id to select field values */
 	int b_done;								/* set when values table has been computed */
@@ -809,7 +809,6 @@ typedef struct _EVA_context
 	/* SQL session handling */
 	char *dbname;				/* SQL database to use */
 	char *dbpwd;				/* SQL database password */
-	char *srvaddr;				/* SQL server address to select */
 	void *sql_session;			/* SQL engine dependent data */
 	DynBuffer *sql_qry;			/* last SQL query */
 	DynBuffer *id_wks;			/* workstation unique Id (cookie value) */

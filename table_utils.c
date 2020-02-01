@@ -2030,13 +2030,18 @@ int table_export_list(			/* return : 0 on success, other on error */
 	}
 	if(file_write_tabrc(cntxt, &tbl->cellval, "dumpfmt.txt")) STACK_ERROR;
 
+#ifdef PROD_VERSION
+    rename("dump.txt", b_xl ? "List.ods" : "List.odt");
+#else
 	/* Produce office document */
-	if(office_launchproc(cntxt, b_xl ? "_EVA_EXCEL" : "_EVA_WINWORD", b_xl ? "TableList.xls" : "TableList.doc")) CLEAR_ERROR;
+	if(office_launchproc(cntxt, b_xl ? "_EVA_EXCEL" : "_EVA_WORD", b_xl ? "TableList.ods" : "TableList.odt")) CLEAR_ERROR;
+#endif // PROD_VERSION
 
 	/* Clear temp files */
 	remove("dump.txt");
 	remove("dumpfmt.txt");
-	remove("TableList.xls");
+	remove("TableList.ods");
+	remove("TableList.odt");
 	remove("err.txt");
 	remove("msg.txt");
 
@@ -2045,10 +2050,10 @@ int table_export_list(			/* return : 0 on success, other on error */
 	sz_name = label ?
 		snprintf(add_sz_str(name), "%s %s", ctrl->LABEL, label->data) :
 		snprintf(add_sz_str(name), "%s", ctrl->LABEL);
-		snprintf(add_sz_str(fname), "%s.%s", name, b_xl ? "xls" : "doc");
+		snprintf(add_sz_str(fname), "%s.%s", name, b_xl ? "ods" : "odt");
 	sz_fname = file_compatible_name(fname);
 	remove(fname);
-	rename(b_xl ? "List.xls" : "TableList.doc", fname);
+	rename(b_xl ? "List.ods" : "List.odt", fname);
 
 	/* Output download dialog header */
 	DYNBUF_ADD3(&cntxt->html,

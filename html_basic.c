@@ -403,15 +403,21 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 		}
 		else if(strcmp(trailfmt, "_EVA_NONE") && !cntxt->b_pda)
 		{
+#ifdef PROD_VERSION
+#define EVA_VERSION "4.1.0"
+#else
+#define EVA_VERSION "4.1.0 debug"
+#endif // PROD_VERSION
+
 			/* Output page end block with webmaster email & process statistics */
 			cntxt->txsize += fprintf(f ? f : stdout, "%s%s%s%s%s%s",
 					"<font face=Arial>"
 					"<table cellspacing=0 cellpadding=0 width=100% border=0 bgcolor=#E0E0E0 rules=none><tr>\n"
 					"<td>&nbsp;<font size=-1><a href='mailto:",
-					dyntab_sz(&cntxt->mail_admin, 0, 0) ? dyntab_val(&cntxt->mail_admin, 0, 0) : "alain.boute@abing.fr",
+					dyntab_sz(&cntxt->mail_admin, 0, 0) ? dyntab_val(&cntxt->mail_admin, 0, 0) : "eva@abing.fr",
 					"'><img src='/img/letter_small.gif' border=0 align=absmiddle>Ecrire au webmaster</a></i></font>"
 					"</td><td align=", b_stats ? "center" : "right", "><nobr><i>"
-					"<font size=-2>Serveur EVA v4.0.1<br>&copy;<a href='http://abing.fr' target=_blank>ABI</a>"
+					"<font size=-2> EVA " EVA_VERSION "<br>&copy;<a href='http://abing.fr' target=_blank>ABI</a>"
 					" " __DATE__ "</font></td>",
 					!b_stats ? "" :
 					"<td align=right>"

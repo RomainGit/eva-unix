@@ -49,7 +49,7 @@ int sql_open_session(				/* return : 0 on success, other on error */
 #ifdef WIN32
 	mysql_options(cntxt->sql_session, MYSQL_OPT_NAMED_PIPE, NULL);
 #endif
-	if(!mysql_real_connect(cntxt->sql_session, cntxt->srvaddr, SQL_USER, cntxt->dbpwd, cntxt->dbname, 0, NULL, 0))
+	if(!mysql_real_connect(cntxt->sql_session, NULL, SQL_USER, cntxt->dbpwd, cntxt->dbname, 0, NULL, 0))
 	{
 		sql_control(cntxt, 0);
 		RETURN_ERROR("Pas de connexion au serveur SQL", NULL);

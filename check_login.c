@@ -27,7 +27,7 @@ void set_session_statistics(
 	unsigned long idfield		/* in : updated field (IdValue) */
 ){
 	char qry[1024] = {0};
-	unsigned long i; 
+	unsigned long i;
 	DynTableCell *c = NULL;
 
 	/* Return if no object */
@@ -47,7 +47,7 @@ void set_session_statistics(
 					c->Num + 1, cntxt->timestamp, dyntab_val(&cntxt->id_user, 0, 0), c->Pkey);
 	/* Else : create new record */
 	else if(idobj)
-		snprintf(add_sz_str(qry), "INSERT INTO TLink (IdObj,IdField,IdRelObj,Num,DateCr,IdWhoCr) VALUES (%s,%lu,%lu,1,%s,%s)", 
+		snprintf(add_sz_str(qry), "INSERT INTO TLink (IdObj,IdField,IdRelObj,Num,DateCr,IdWhoCr) VALUES (%s,%lu,%lu,1,%s,%s)",
 										cntxt->session.cell->txt, idfield, idobj, cntxt->timestamp,
 										cntxt->id_user.nbrows ? cntxt->id_user.cell->txt : "NULL");
 	if(*qry) sql_exec_query(cntxt, qry);
@@ -58,7 +58,7 @@ void set_session_statistics(
 ** Description : return information on a record
 *********************************************************************/
 #define ERR_FUNCTION "qry_get_rec_info"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int qry_get_rec_info(							/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	DynTable *res,								/* out : read information */
@@ -68,7 +68,7 @@ int qry_get_rec_info(							/* return : 0 on success, other on error */
 	char qry[256];
 	snprintf(add_sz_str(qry), "SELECT %s FROM TLink WHERE Pkey=%lu", fields, pkey);
 	if(sql_exec_query(cntxt, qry) || sql_get_table(cntxt, res, 2)) STACK_ERROR;
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -133,7 +133,7 @@ int handle_workstation_id(						/* return : 1 on success, other on error */
 
 	/* Check if cookie present */
 	if(cntxt->id_wks)
-	{ 
+	{
 		/* Check if object exist for workstation */
 		unsigned long valcook = get_id_value(cntxt, DYNBUF_VAL_SZ(cntxt->id_wks));
 		if(valcook)
@@ -155,7 +155,7 @@ int handle_workstation_id(						/* return : 1 on success, other on error */
 			cntxt->objwks = DYNTAB_TOUL(&sqlres);
 		}
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -209,7 +209,7 @@ int check_user_fraud(							/* return : 1 on success, other on error */
 			if(qry_add_idobj_field_val(cntxt, DYNTAB_TOULRC(&sqlres, i, 0), "_EVA_TERMINATE", fraudchk, len, 1, 0, 1))
 				STACK_ERROR;
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -262,7 +262,7 @@ int ckeck_user_validity(						/* return : 1 on success, other on error */
 		DYNTAB_FREE(cntxt->id_user);
 		DYNTAB_FREE(cntxt->user_data);
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -322,7 +322,7 @@ int ckeck_session_validity(						/* return : 1 on success, other on error */
 	if(minutes)
 	{
 		DynTableCell *c = DYNTAB_FIELD_CELL(&cntxt->sess_data, FORMSTAMP);
-		if(c && qry_get_rec_info(cntxt, &sqlres, c->Pkey, "DateCr")) STACK_ERROR; 
+		if(c && qry_get_rec_info(cntxt, &sqlres, c->Pkey, "DateCr")) STACK_ERROR;
 		datetxt_to_time(dyntab_val(&sqlres, 0, 0), &t, NULL);
 		if(cntxt->tcur - t > minutes * 60)
 		{
@@ -347,7 +347,7 @@ int ckeck_session_validity(						/* return : 1 on success, other on error */
 			RETURN_OK;
 		}
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -396,13 +396,13 @@ int check_login_pwd(							/* return : 1 on success, other on error */
 		passwd.nbrows = 1;
 
 		/* Build & exec query for matching account */
-		DYNBUF_ADD3_INT(&sql, 
+		DYNBUF_ADD3_INT(&sql,
 					"-- check_login_pwd : search for account\n"
 					"SELECT DISTINCT T1.IdObj FROM TLink AS T1\n"
 					"INNER JOIN TLink AS T2 ON T1.IdObj=T2.IdObj \n"
 					"WHERE T1.DateDel IS NULL AND T1.IdField=" , id_login, " AND T1.IdValue IN (");
 		if(qry_values_list(cntxt, &login, 1, &sql)) STACK_ERROR;
-		DYNBUF_ADD3_INT(&sql, 
+		DYNBUF_ADD3_INT(&sql,
 					")\n"
 					"AND T2.DateDel IS NULL AND T2.IdField=", id_pwd, " AND T2.IdValue IN (");
 		if(qry_values_list(cntxt, &passwd, 1, &sql)) STACK_ERROR;
@@ -438,7 +438,7 @@ int check_login_pwd(							/* return : 1 on success, other on error */
 					/* User has identified : update in session */
 					if(login.nbrows)
 					{
-						snprintf(add_sz_str(qry), "UPDATE TLink SET IdRelObj=%lu,DateCr='%s',IdWhoCr=%lu WHERE Pkey=%lu", 
+						snprintf(add_sz_str(qry), "UPDATE TLink SET IdRelObj=%lu,DateCr='%s',IdWhoCr=%lu WHERE Pkey=%lu",
 														DYNTAB_TOUL(&cntxt->id_user), cntxt->timestamp,
 														DYNTAB_TOUL(&cntxt->id_user), login.cell->Pkey);
 						if(sql_exec_query(cntxt, qry)) STACK_ERROR;
@@ -459,7 +459,7 @@ int check_login_pwd(							/* return : 1 on success, other on error */
 			*errmsg = "Identification incorrecte";
 		}
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -552,7 +552,7 @@ int check_user_identification(					/* return : 1 on success, other on error */
 			{
 				/* Check auto ident allowed for this workstation in user account */
 				DYNTAB_FIELD_TAB(&sqlres, &cntxt->user_data, USER_IDENT_WKS);
-				if(sqlres.nbrows) 
+				if(sqlres.nbrows)
 				{
 					unsigned long i;
 					for(b_ok = 0, i = 0; i < sqlres.nbrows && !b_ok; i++)
@@ -574,7 +574,7 @@ int check_user_identification(					/* return : 1 on success, other on error */
 				cntxt->txsize += printf("<b>Si vous êtes <u>%s</u></b><br><br>"
 					"<input type=submit name=B$#AUTO_IDENT value='Cliquez ici'><br><br><hr>",
 					DYNTAB_FIELD_VAL(&cntxt->user_data, USERNAME));
-				
+
 				/* Output input fields for other user identification  */
 				output_ident_inputs(cntxt, "Vous pouvez vous identifier sous un autre nom");
 				cntxt->txsize += printf("<hr><br><b>Vous pouvez aussi continuer en</b><br>"
@@ -606,7 +606,7 @@ int check_user_identification(					/* return : 1 on success, other on error */
 		if(sqlres.nbrows && qry_obj_field(cntxt, &cntxt->mail_admin, DYNTAB_TOUL(&sqlres), "EMAIL")) STACK_ERROR;
 		if(!dyntab_cell(&cntxt->mail_admin, 0, 0)) DYNTAB_ADD_STR(&cntxt->mail_admin, 0, 0, "eva@abing.fr");
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -727,9 +727,10 @@ int check_login(				/* return : 0 on success, other on error */
 		/* Delete trace file if trace not activated */
 		if(!(cntxt->debug & DEBUG_HTML_RAW))
 		{
-			char fname[128];
-			sprintf(fname, "%s-%s.html", cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0));
-			if(!chdir(cntxt->rootdir) && !chdir("trace")) remove(fname);
+			char fname[1024];
+			fname[sizeof(fname)-1] = 0;
+			snprintf(fname, sizeof(fname)-1, "%s" DD "trace" DD "%s-%s.html", cntxt->rootdir, cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0));
+			remove(fname);
 		}
 
 		/* Set option button mode */
@@ -754,7 +755,7 @@ int check_login(				/* return : 0 on success, other on error */
 	/* Add site image path */
 	if(dyntab_filter_field(&cntxt->imgpath, 0, &cntxt->cnf_data, "_EVA_IMGPATH", ~0UL, NULL)) RETURN_ERR_MEMORY;
 
-	/* Handle IP filter */	
+	/* Handle IP filter */
 	if(cntxt->user_ip && strcmp(cntxt->user_ip, "127.0.0.1"))
 	{
 		/* Get user or server filter */
@@ -824,9 +825,6 @@ int check_login(				/* return : 0 on success, other on error */
 
 	/* Store referer in session if applicable */
 	if(referer && qry_add_obj_field_val(cntxt, &cntxt->session, "_EVA_REFERER", referer, 0, 0, 1)) STACK_ERROR;
-
-	/* Set base directory */
-	chdir(cntxt->rootdir); chdir("cgi");
 
 	RETURN_OK_CLEANUP;
 }

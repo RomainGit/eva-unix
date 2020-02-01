@@ -187,38 +187,44 @@ int main(int argc, char **argv, char **envp)
 	/* Output HTML trace if applicable */
 	if(cntxt->debug & DEBUG_HTML_RAW)
 	{
+        struct stat fs;
 		FILE *f = NULL;
-		char fname[128];
-		sprintf(fname, "%s-%s.html", cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0));
-		if(!chdir(cntxt->rootdir) && !chdir("trace")) f = fopen(fname, "w");
-		if(f)
-		{
-			cntxt->b_header = 0;
-			cntxt->b_bodyheader = 0;
-			cntxt->b_formheader = 0;
-			put_html_page_header(cntxt, f, "Trace utilisateur - rafraichissement toutes les 10 secondes", NULL, 3);
-			fprintf(f, "%s%s%s%lu%s",
-				"<table noborder width=100%><tr><td align=center><b>Navigation partagée - copie d'écran </b></td><td>"
-				"<input type=submit name=TraceRefresh value='Afficher la page suivante' "
-						"Onclick=\"window.location.href='/trace/", cntxt->dbname, "-", DYNTAB_TOUL(&cntxt->id_user), ".html'\"></td></tr></table>");
-			if(cntxt->err.text)
-				fprintf(f,
-					"<font face=Arial><b><u>*** Erreur : </u><a href='../errlog/%s'>%s</a>", cntxt->err.file, cntxt->err.text);
-			else
-			{
-				if(cntxt->html0) fputs(cntxt->html0->data, f);
-				if(cntxt->html) fputs(cntxt->html->data, f);
-				if(cntxt->html1) fputs(cntxt->html1->data, f);
-			}
+        char fname[1024];
+        fname[sizeof(fname)-1] = 0;
+        snprintf(fname, sizeof(fname)-1, "%strace", cntxt->rootdir);
+        if(!stat(fname, &fs) || !MKDIR(fname))
+        {
+            snprintf(fname, sizeof(fname)-1, "%strace" DD "%s-%s.html", cntxt->rootdir, cntxt->dbname, dyntab_val(&cntxt->id_user, 0, 0));
+            f = fopen(fname, "w");
+            if(f)
+            {
+                cntxt->b_header = 0;
+                cntxt->b_bodyheader = 0;
+                cntxt->b_formheader = 0;
+                put_html_page_header(cntxt, f, "Trace utilisateur - rafraichissement toutes les 10 secondes", NULL, 3);
+                fprintf(f, "%s%s%s%lu%s",
+                    "<table noborder width=100%><tr><td align=center><b>Navigation partagée - copie d'écran </b></td><td>"
+                    "<input type=submit name=TraceRefresh value='Afficher la page suivante' "
+                            "Onclick=\"window.location.href='/trace/", cntxt->dbname, "-", DYNTAB_TOUL(&cntxt->id_user), ".html'\"></td></tr></table>");
+                if(cntxt->err.text)
+                    fprintf(f,
+                        "<font face=Arial><b><u>*** Erreur : </u><a href='../errlog/%s'>%s</a>", cntxt->err.file, cntxt->err.text);
+                else
+                {
+                    if(cntxt->html0) fputs(cntxt->html0->data, f);
+                    if(cntxt->html) fputs(cntxt->html->data, f);
+                    if(cntxt->html1) fputs(cntxt->html1->data, f);
+                }
 
-			/* Set refresh timeout */
-			fprintf(f, "%s%s%s%lu%s",
-				"<script type=text/javascript>"
-				"setTimeout('window.location.href=\"/trace/", cntxt->dbname, "-", DYNTAB_TOUL(&cntxt->id_user), ".html\"',10000);"
-				"document.mainform['TraceRefresh'].focus();</script>");
-			put_html_page_trailer(cntxt, f);
-			fclose(f);
-		}
+                /* Set refresh timeout */
+                fprintf(f, "%s%s%s%lu%s",
+                    "<script type=text/javascript>"
+                    "setTimeout('window.location.href=\"/trace/", cntxt->dbname, "-", DYNTAB_TOUL(&cntxt->id_user), ".html\"',10000);"
+                    "document.mainform['TraceRefresh'].focus();</script>");
+                put_html_page_trailer(cntxt, f);
+                fclose(f);
+            }
+        }
 	}
 	sql_control(NULL, 6);
 	return 0;

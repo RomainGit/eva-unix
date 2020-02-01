@@ -14,6 +14,29 @@
 #include "eva.h"
 
 /*********************************************************************
+** Fonction : strip_rc
+** Description : remove \r char from windows text files
+*********************************************************************/
+size_t strip_rc(                /* return : new length of v */
+	char *v,					/* in/out : text to strip in place */
+	size_t s					/* in : size of v */
+){
+	size_t src = 0, dst = 0;
+	while(src < s && v[src])
+	{
+        if(v[src] == '\r')
+        {
+            if(v[src+1] == '\n' || (src && v[src-1] == '\n')) { src++; continue; }
+            v[src] = '\n';
+        }
+        if(src != dst) v[dst] = v[src];
+        src++; dst++;
+	}
+    v[dst] = 0;
+    return dst;
+}
+
+/*********************************************************************
 ** Fonction : dyntab_add_strip
 ** Description : store text data in a dyntable
 *********************************************************************/
@@ -142,8 +165,9 @@ int file_read_tabrc(				/* return : 0 on success, other on error */
 	f = fopen(file, "r");
 	if(!f)  RETURN_ERROR("Impossible d'ouvrir le fichier", NULL);
 	sz = fread(fdata, 1, sts.st_size+2, f);
-	fdata[sz] = 0;
 	fclose(f);
+	fdata[sz] = 0;
+	sz = strip_rc(fdata, sz + 1);
 
 	/* Read records in DynTable */
 	if(file_tabrc_to_dyntab(cntxt, res, fdata, sz)) STACK_ERROR;
@@ -165,15 +189,13 @@ int file_read_config(				/* return : 0 on success, other on error */
 	chdir(cntxt->path);
 	if(file_read_tabrc(cntxt, &cntxt->cnf_server, "serverconfig.conf"))
 	{
-		DYNTAB_SET(&cntxt->cnf_server, 0, 0, "C:\\Program Files\\MSOfficeEVA");
-		cntxt->dbpwd = "";
+		cntxt->dbpwd = NULL;
 		CLEAR_ERROR_NOWARN;
 	}
 	else
 	{
 		cntxt->dbpwd = dyntab_val(&cntxt->cnf_server, 1, 0);
 	}
-
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -237,8 +259,9 @@ int file_read_import_data(			/* return : 0 on success, other on error */
 	if(!f)  RETURN_ERROR("Cannot open import file", NULL);
 	sz = fread(fdata, 1, sts.st_size + 2, f);
 	if(!sz)  RETURN_ERROR("Cannot read import file", NULL);
-	fdata[sz] = 0;
 	fclose(f); f = NULL;
+	fdata[sz] = 0;
+	sz = strip_rc(fdata, sz + 1);
 
 	/* Find end of forms marker : two consecutive \n */
 	p1 = strstr(fdata, "\n\n");

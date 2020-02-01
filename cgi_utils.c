@@ -71,7 +71,7 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 		}
 		else
 			f = fopen(cntxt->logfile, "a");
-		fprintf(f, "%lu\t%u\t%lu\t%s\n", time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname);
+		fprintf(f, "%lu\t%u\t%u\t%s\n", time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname);
 		fclose(f);
 	}
 
@@ -163,7 +163,7 @@ void output_log_end(EVA_context *cntxt)
 	chdir(cntxt->rootdir);
 	chdir("logs");
 	f = fopen(cntxt->logfile, "a");
-	fprintf(f, "%lu\t%u\t%lu\t%s\t%lu\t%lu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+	fprintf(f, "%lu\t%u\t%u\t%s\t%lu\t%lu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 					time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname,
 					cntxt->log_clkbtn,										/* clicked button id */
 					cntxt->log_clkform,										/* clicked button form id */
