@@ -111,33 +111,27 @@ void put_html_error(EVA_context *cntxt)
 	char *wd = getcwd(NULL, 0);
 
 	/* Build errlog file name */
-	snprintf(cntxt->err.file, sizeof(cntxt->err.file), "%s-%lu-%lu.htm", cntxt->err.text, time(NULL), (unsigned long)getpid());
+	snprintf(cntxt->err.file, sizeof(cntxt->err.file), "%s-%s-%X.htm", cntxt->err.text, cntxt->timestamp, getpid());
 	file_compatible_name(cntxt->err.file);
 
 	/* Output error message */
 	cntxt->txsize += printf("<font face=Arial><hr><b><font size=+3>Erreur du serveur</font> : %s</b><hr>\n", cntxt->err.text);
 	cntxt->txsize += printf("<br><p align=center>Le programme n'a pas pu exécuter votre commande.<br>\n"
 		"<br>Retournez à la page précédente avec le bouton ou le menu de votre navigateur et essayez une autre commande.<br>\n"
-		"<br>Contactez le <a href='mailto:alain.boute@abing.fr?subject=%s'>responsable du site</a> "
+		"<br>Contactez le <a href='mailto:eva@abing.fr?subject=%s'>responsable du site</a> "
 		"si cette erreur est bloquante (conservez le titre du message).<br>\n"
 		"<br>Vous pouvez consulter des <a href='../errlog/%s'>informations détaillées sur l'erreur</a> (pour les développeurs)<br>\n"
 		"</p>\n", cntxt->err.file, cntxt->err.file);
 
 	/* Open file in errlog directory */
-	chdir(cntxt->rootdir);
-	MKDIR("errlog");
-	chdir("errlog");
+	if (chdir(cntxt->rootdir) || (chdir("errlog") && (MKDIR("errlog") || chdir("errlog")))) return;
 	f = fopen(cntxt->err.file, "w");
 	if(!f)
 	{
 		f = stdout;
 		*cntxt->err.file = 0;
 	}
-	if(wd)
-	{
-		chdir(wd);
-		free(wd);
-	}
+	if(wd && !chdir(wd)) free(wd);
 
 	/* Clear focus settings */
 	M_FREE(cntxt->focus1);

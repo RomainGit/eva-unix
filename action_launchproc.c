@@ -544,8 +544,7 @@ int result_file(				/* return : 0 on success, other on error */
 #define ERR_CLEANUP	DYNTAB_FREE(res); \
 					DYNTAB_FREE(data); \
 					M_FREE(msg); \
-					chdir(cntxt->rootdir); chdir("cgi"); \
-					if(f) fclose(f); f = NULL
+					if(chdir(cntxt->path) || f) fclose(f)
 int action_launchproc(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
@@ -571,7 +570,7 @@ int action_launchproc(				/* return : 0 on success, other on error */
 	form = cntxt->form;
 	ctrl = form->ctrl + i_ctrl;
 
-	/* Handle integrated DLL functions */
+	/* Handle integrated specific functions */
 	if(!strcmp(proctyp, "_EVA_DLL"))
 	{
 		if(!strcmp(procname, "FactureAEMO"))
@@ -704,8 +703,7 @@ int action_launchproc(				/* return : 0 on success, other on error */
 #else
 		system("rm -r *.*");
 #endif
-		chdir("..");
-		rmdir(procid);
+		if(!chdir("..")) rmdir(procid);
 	}
 
 	RETURN_OK_CLEANUP;

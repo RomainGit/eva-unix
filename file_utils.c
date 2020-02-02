@@ -186,7 +186,7 @@ int file_read_tabrc(				/* return : 0 on success, other on error */
 int file_read_config(				/* return : 0 on success, other on error */
 	EVA_context *cntxt				/* in/out : execution context data */
 ){
-	chdir(cntxt->path);
+	if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY;
 	if(file_read_tabrc(cntxt, &cntxt->cnf_server, "serverconfig.conf"))
 	{
 		cntxt->dbpwd = NULL;
@@ -288,9 +288,9 @@ int file_read_import_data(			/* return : 0 on success, other on error */
 int chdir_user_doc(				/* return : 0 on success, other on error */
 	EVA_context *cntxt			/* in : execution context data */
 ){
+	char* user_id = dyntab_val(&cntxt->id_user, 0, 0);
 	if(chdir_db_doc(cntxt)) STACK_ERROR;
-	MKDIR(dyntab_val(&cntxt->id_user, 0, 0));
-	if(chdir(dyntab_val(&cntxt->id_user, 0, 0))) RETURN_ERR_DIRECTORY;
+	if(chdir(user_id) || (MKDIR(user_id) && chdir(user_id))) RETURN_ERR_DIRECTORY;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -305,11 +305,10 @@ int chdir_user_doc(				/* return : 0 on success, other on error */
 int chdir_db_doc(				/* return : 0 on success, other on error */
 	EVA_context *cntxt			/* in : execution context data */
 ){
-	if(chdir(cntxt->rootdir)) RETURN_ERR_DIRECTORY;
-	MKDIR(DIRECTORY_DOCS);
-	if(chdir(DIRECTORY_DOCS)) RETURN_ERR_DIRECTORY;
-	MKDIR(cntxt->dbname);
-	if(chdir(cntxt->dbname)) RETURN_ERR_DIRECTORY;
+	if(chdir(cntxt->rootdir) ||
+		(chdir(DIRECTORY_DOCS) && (MKDIR(DIRECTORY_DOCS) || chdir(DIRECTORY_DOCS))) ||
+		(chdir(cntxt->dbname) && (MKDIR(cntxt->dbname) || chdir(cntxt->dbname)))
+	) RETURN_ERR_DIRECTORY;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION

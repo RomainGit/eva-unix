@@ -233,7 +233,7 @@ int ctrl_output_planning_frame(		/* return : 0 on success, other on error */
 		t = mktime(&dt);
 		dt1 = localtime(&t);
 		if(!dt1) break;
-		mdays = (t - t0 + 4000) / 86400;
+		mdays = (int)((t - t0 + 4000L) / 86400L);
 		DYNBUF_ADD3_INT(form->html, "<td class=PlanningMonthCell colspan=", mdays + (col ? 0 : 1), ">");
 		DYNBUF_ADD(form->html, month, snprintf(add_sz_str(month), "%s %d",
 			dyntab_val(&cntxt->monthlong, (dt1->tm_mon + 11) % 12, 0), dt1->tm_year + 1900 - (dt1->tm_mon ? 0 : 1)), TO_HTML);

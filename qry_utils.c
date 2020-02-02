@@ -12,6 +12,7 @@
 **********************************************************************/
 
 #include "eva.h"
+void trans_string(char* str, int salt);
 
 /*********************************************************************
 ** Function : qry_recursive_relation
@@ -947,6 +948,13 @@ int qry_add_val(					/* return : 0 on success, other on error */
 
 	/* Return if no field */
 	if(!val->IdField) RETURN_OK;
+
+	/* Salt password before writing */
+	if (val->IdField == cntxt->val_PASSWORD && storage == 1 && val->len)
+	{
+		trans_string(val->txt, cntxt->salt);
+		val->IdValue = 0;
+	}
 
 	/* Search & Create value if needed */
 	if(storage == 1 && !val->IdValue &&

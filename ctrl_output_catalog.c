@@ -391,7 +391,7 @@ int output_catalog_index(				/* return : 0 on success, other on error */
 
 	/* Check if cache file exists */
 	if(chdir_db_doc(cntxt)) STACK_ERROR;
-	MKDIR("cache"); chdir("cache");
+	if(chdir("cache") && (MKDIR("cache") || chdir("cache"))) RETURN_ERR_DIRECTORY;
 	b_cache = !stat(fname->data, &fs);
 
 	/* Check if page data was modified after cache file creation */
@@ -418,7 +418,7 @@ int output_catalog_index(				/* return : 0 on success, other on error */
 		size_t pos = (html && *html) ? (*html)->cnt : 0;
 
 		/* Output catalog list for each lower level value */
-		chdir(cntxt->path);
+		if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY;
 		for(i = 0; i < cat->k[lvl].val.nbrows; i++)
 		{
 			/* Output value button */
@@ -442,11 +442,11 @@ int output_catalog_index(				/* return : 0 on success, other on error */
 		}
 
 		/* Save page to cache file */
-		chdir_db_doc(cntxt); chdir("cache");
+		if(chdir_db_doc(cntxt) || chdir("cache")) RETURN_ERR_DIRECTORY;
 		f = fopen(fname->data, "wbc");
 		if(!f || fwrite((*html)->data + pos, (*html)->cnt - pos, 1, f) != 1) RETURN_ERROR("Cache write error", NULL);
 	}
-	chdir(cntxt->path);
+	if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY;
 
 	RETURN_OK_CLEANUP;
 }

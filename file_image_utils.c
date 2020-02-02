@@ -239,7 +239,7 @@ char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if n
 	imgType imgtyp = imgUnkonwn;
 
 	/* Init params - return NULL on error */
-	if(!imgpath || !*imgpath || (!dw && !dh)) return NULL;
+	if(!imgpath || !*imgpath || (!dw && !dh) || (chdir(cntxt->path) && (MKDIR(path) || chdir(cntxt->path)))) return NULL;
 	if(ow) *ow = 0;
 	if(oh) *oh = 0;
 
@@ -254,9 +254,7 @@ char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if n
 
 	/* Check if thumbnail exist - return path if so */
 	memcpy(path, imgpath, p0);
-	p0 += snprintf(path + p0, sz - p0, "cache");
-	chdir(cntxt->path); MKDIR(path);
-	p0 += snprintf(path + p0, sz - p0, "/T%lux%lu-%s", dw, dh, imgfname);
+	p0 += snprintf(path + p0, sz - p0, "cache/T%lux%lu-%s", dw, dh, imgfname);
 	if(!stat(path, &fs))
 	{
 		if(ow || oh) get_image_size(path, ow, oh);

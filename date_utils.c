@@ -13,7 +13,6 @@
 
 #include "eva.h"
 
-
 /*********************************************************************
 ** Macro : ENSURE_VALID_DATE
 ** Description : prevent invalid dates like Feb 30
@@ -97,7 +96,7 @@ int date_difference(									/* return : date difference in given unit */
 	{
 	case 's':
 		/* Unix time implementation */
-		if(b_unix) return t1 - t0;
+		if(b_unix) return (int)(t1 - t0);
 
 		/* Simple implementation for days in same month */
 		if(Y0 == Y1 && M0 == M1)
@@ -107,7 +106,7 @@ int date_difference(									/* return : date difference in given unit */
 		*fmt = 'm';
 	case 'm':
 		/* Unix time implementation */
-		if(b_unix) return t1/60 - t0/60;
+		if(b_unix) return (int)(t1 - t0) / 60;
 
 		/* Simple implementation for days in same month */
 		if(Y0 == Y1 && M0 == M1)
@@ -117,7 +116,7 @@ int date_difference(									/* return : date difference in given unit */
 		*fmt = 'h';
 	case 'h':
 		/* Unix time implementation */
-		if(b_unix) return (t1 - t0)/3600;
+		if(b_unix) return (int)(t1 - t0)/3600;
 
 		/* Simple implementation for days in same month */
 		if(Y0 == Y1 && M0 == M1)
@@ -127,7 +126,7 @@ int date_difference(									/* return : date difference in given unit */
 		*fmt = 'D';
 	case 'D':
 		/* Unix time implementation */
-		if(b_unix) return (t1 - t0)/86400;
+		if(b_unix) return (int)((t1 - t0)/86400L);
 
 		/* Simple implementation for days in same month */
 		if(Y0 == Y1 && M0 == M1) return (D1 - D0);
@@ -948,35 +947,20 @@ int ms_since(struct timeval *t0)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return (int)((tv.tv_sec - t0->tv_sec)*1000 + tv.tv_usec/1000 - t0->tv_usec/1000);
+	return (int)((tv.tv_sec - t0->tv_sec)*1000 + tv.tv_usec - t0->tv_usec);
 }
 
 
-#if defined _WIN64 || defined _WIN32
+#ifdef _WIN32
 /*********************************************************************
 * Fonction : gettimeofday
-** Description : windows implementation thanks to Mathieu Turcotte - turcotte.mat@gmail.com
+** Description : win32 implementation based on clock - will not work after 2038
 *********************************************************************/
 int gettimeofday(struct timeval* p, void* tz) {
-	ULARGE_INTEGER ul; // As specified on MSDN.
-	FILETIME ft;
-
-	// Returns a 64-bit value representing the number of
-	// 100-nanosecond intervals since January 1, 1601 (UTC).
-	GetSystemTimeAsFileTime(&ft);
-
-	// Fill ULARGE_INTEGER low and high parts.
-	ul.LowPart = ft.dwLowDateTime;
-	ul.HighPart = ft.dwHighDateTime;
-	// Convert to microseconds.
-	ul.QuadPart /= 10ULL;
-	// Remove Windows to UNIX Epoch delta.
-	ul.QuadPart -= 11644473600000000ULL;
-	// Modulo to retrieve the microseconds.
-	p->tv_usec = (long)(ul.QuadPart % 1000000LL);
-	// Divide to retrieve the seconds.
-	p->tv_sec = (long)(ul.QuadPart / 1000000LL);
-
+	static time_t t0 = 0;
+	if (!t0) t0 = time(NULL);
+	p->tv_usec = clock();
+	p->tv_sec = (long)t0;
 	return 0;
 }
 #endif

@@ -15,6 +15,7 @@
 
 #define FRAUD_WARNING "Utilisation simultanée du compte sur plusieurs postes - Session terminée"
 #define FRAUD_BLOKMSG "Utilisation simultanée du compte sur plusieurs postes - Compte bloqué"
+void trans_string(char* str, int salt);
 
 /*********************************************************************
 ** Function : set_session_statistics
@@ -394,6 +395,7 @@ int check_login_pwd(							/* return : 1 on success, other on error */
 		unsigned long id_pwd = IDVAL("_EVA_PASSWORD");
 		login.nbrows = 1;
 		passwd.nbrows = 1;
+		if (cntxt->salt) trans_string(passwd.cell->txt, cntxt->salt);
 
 		/* Build & exec query for matching account */
 		DYNBUF_ADD3_INT(&sql,

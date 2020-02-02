@@ -17,12 +17,12 @@
 ** Function : cgi_free_files
 ** Description : free allocated memory for uploaded files
 *********************************************************************/
-void cgi_free_files(EVA_context *cntxt)
+void cgi_free_files(EVA_context* cntxt)
 {
-	if(cntxt && cntxt->cgi_file)
+	if (cntxt && cntxt->cgi_file)
 	{
 		unsigned long i;
-		for(i = 0; i < cntxt->cgi_file_nb; i++)
+		for (i = 0; i < cntxt->cgi_file_nb; i++)
 			dyntab_free(&cntxt->cgi_file[i].descr);
 		M_FREE(cntxt->cgi_file);
 	}
@@ -51,18 +51,15 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 	MEM_TRACE(NULL, NULL);
 
 	/* Output log start */
-	if(!cntxt->b_task)
+	if(!(chdir(cntxt->rootdir) || (chdir("logs") && MKDIR("logs")) || chdir("logs")))
 	{
-		time_to_datetxt(cntxt->tm0.tv_sec, tmp);
-		datetxt_to_format(cntxt, cntxt->logfile, tmp, "_EVA_DATE_SORT");
+		datetxt_to_format(cntxt, cntxt->logfile, cntxt->timestamp, "_EVA_DATE_SORT");
 		sprintf(cntxt->logfile + strlen(cntxt->logfile), ".txt");
-		chdir(cntxt->rootdir);
-		if(chdir("logs")) { MKDIR("logs"); chdir("logs"); }
 		if(stat(cntxt->logfile, &st))
 		{
 			/* Create new log file every day */
 			f = fopen(cntxt->logfile, "w");
-			fprintf(f, "time\tpid\tclock\tcgi\tClickBtn\tClickForm\tClickSubField\tSession\tMainForm\tMainObj\tAltForm\tAltObj\tSrchTxt\n");
+			if (f) fprintf(f, "date\tpid\tclock\tcgi\tClickBtn\tClickForm\tClickSubField\tSession\tMainForm\tMainObj\tAltForm\tAltObj\tSrchTxt\n");
 
 			/* Send mail report */
 			snprintf(tmp, sizeof(tmp), "%s" "/BLAT.EXE - -body \"http://%s%s\" -s \"Notification EVA CGI %s\" -noh2 -to eva@abing.fr",
@@ -71,8 +68,11 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 		}
 		else
 			f = fopen(cntxt->logfile, "a");
-		fprintf(f, "%lu\t%u\t%u\t%s\n", time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname);
-		fclose(f);
+		if (f)
+		{
+			fprintf(f, "%s\t%u\t%u\t%s\n", cntxt->timestamp, getpid(), ms_since(&cntxt->tm0), cntxt->dbname);
+			fclose(f);
+		}
 	}
 
 	/* Read	CGI input data */
@@ -85,7 +85,14 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 	snprintf(add_sz_str(tmp), "SELECT DISTINCT IdObj FROM TLink WHERE IdField=%lu AND DateDel IS NULL", IDVAL("_EVA_ADMINISTRATOR"));
 	if(sql_exec_query(cntxt, tmp) || sql_get_table(cntxt, &cntxt->id_cnf, 0)) STACK_ERROR;
 	if(qry_obj_data(cntxt, &cntxt->cnf_data, &cntxt->id_cnf, NULL)) STACK_ERROR;
-	if(cntxt->id_cnf.nbrows != 1 || !cntxt->cnf_data.nbrows) RETURN_ERROR("Configuration du serveur incorrecte", NULL);
+	if(!cntxt->id_cnf.nbrows || !cntxt->cnf_data.nbrows) RETURN_ERROR("Configuration du serveur incorrecte", NULL);
+	cntxt->salt = abs(atoi(dyntab_field_val(&cntxt->cnf_data, "_EVA_SALT", ~0UL, 0)));
+
+	/* Read value constants */
+	if(sql_id_value(cntxt, add_sz_str("_EVA_FORMSTAMP"), &cntxt->val_FORMSTAMP)) STACK_ERROR;
+	if(sql_id_value(cntxt, add_sz_str("_EVA_TYPE"), &cntxt->val_TYPE)) STACK_ERROR;
+	if(sql_id_value(cntxt, add_sz_str("_EVA_FIELD"), &cntxt->val_FIELD)) STACK_ERROR;
+	if(sql_id_value(cntxt, add_sz_str("_EVA_PASSWORD"), &cntxt->val_PASSWORD)) STACK_ERROR;
 
 	/* Read date labels */
 	dyntab_from_list(&cntxt->daylong, add_sz_str("dimanche,lundi,mardi,mercredi,jeudi,vendredi,samedi"), ",", 0, 0);
@@ -95,11 +102,6 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 
 	/* Read public user account */
 	cntxt->id_public = strtoul(DYNTAB_FIELD_VAL(&cntxt->cnf_data, UNKNOWNUSER), NULL, 10);
-
-	/* Read value constants */
-	if(sql_id_value(cntxt, add_sz_str("_EVA_FORMSTAMP"), &cntxt->val_FORMSTAMP)) STACK_ERROR;
-	if(sql_id_value(cntxt, add_sz_str("_EVA_TYPE"), &cntxt->val_TYPE)) STACK_ERROR;
-	if(sql_id_value(cntxt, add_sz_str("_EVA_FIELD"), &cntxt->val_FIELD)) STACK_ERROR;
 
 	/* Handle URL dependent settings : menubar, homepage, page title */
 	DYNTAB_FIELD_TAB(&urlswitch, &cntxt->cnf_data, URL_SWITCH);
@@ -160,11 +162,11 @@ void output_log_end(EVA_context *cntxt)
 {
 	FILE *f;
 
-	chdir(cntxt->rootdir);
-	chdir("logs");
+	if (chdir(cntxt->rootdir) || chdir("logs")) return;
 	f = fopen(cntxt->logfile, "a");
-	fprintf(f, "%lu\t%u\t%u\t%s\t%lu\t%lu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					time(NULL), getpid(), ms_since(&cntxt->tm0), cntxt->dbname,
+	if (!f) return;
+	fprintf(f, "%s\t%u\t%u\t%s\t%lu\t%lu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					cntxt->timestamp, getpid(), ms_since(&cntxt->tm0), cntxt->dbname,
 					cntxt->log_clkbtn,										/* clicked button id */
 					cntxt->log_clkform,										/* clicked button form id */
 					(cntxt->cgi && cntxt->cgi[cntxt->cgibtn].subfield) ?
@@ -1413,13 +1415,11 @@ int cgi_read_multipart(		/* return : 0 on success, other on error */
 void cgi_trace_input(EVA_context *cntxt)
 {
 	FILE *f = NULL;
-	chdir(cntxt->path);
+	if(!cntxt->input || !cntxt->input->cnt || !cntxt->input->data || chdir(cntxt->path)) return;
 	f = fopen("cgi.txt", "wb");
-	if(f)
-	{
-		fwrite(cntxt->input->data, cntxt->input->cnt, 1, f);
-		fclose(f);
-	}
+	if (!f) return;
+	fwrite(cntxt->input->data, cntxt->input->cnt, 1, f);
+	fclose(f);
 }
 
 /*********************************************************************
@@ -1428,21 +1428,15 @@ void cgi_trace_input(EVA_context *cntxt)
 *********************************************************************/
 void cgi_read_trace_input(EVA_context *cntxt)
 {
-	struct stat fs;
+	FILE* f = NULL;
 	char *fname = "cgi.txt";
-	chdir(cntxt->path);
-	if(!stat(fname, &fs))
-	{
-		FILE *f = NULL;
-		f = fopen(fname, "rb");
-		if(f)
-		{
-			cntxt->input = dynbuf_init(fs.st_size + 4);
-			if(cntxt->input) fread(cntxt->input->data, fs.st_size, 1, f);
-			fclose(f);
-			if(cntxt->input) cntxt->input->cnt = fs.st_size;
-		}
-	}
+	struct stat fs;
+	if (chdir(cntxt->path) || stat(fname, &fs)) return;
+	f = fopen(fname, "rb");
+	if (!f) return;
+	cntxt->input = dynbuf_init(fs.st_size + 4);
+	if(cntxt->input) cntxt->input->cnt = fread(cntxt->input->data, 1, fs.st_size, f);
+	fclose(f);
 }
 
 /*********************************************************************
@@ -1479,11 +1473,11 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 		cntxt->input = dynbuf_init(len + 4);
 		if(!cntxt->input) RETURN_ERR_MEMORY;
 #ifdef WIN32
-		setmode(fileno(stdin), _O_BINARY);
+		r = setmode(fileno(stdin), _O_BINARY);
 #endif
 
 		/* Read input from stdin */
-		r = fread(cntxt->input->data + r, 1, len, stdin);
+		r = fread(cntxt->input->data, 1, len, stdin);
 		if(r < len) RETURN_ERROR("CGI read error from stdin", { ERR_PUT_INT("\n\texpected size = ", len); ERR_PUT_INT("\n\tinput size = ", cntxt->input->cnt); });
 
 		cntxt->rxtime = ms_since(&cntxt->tm0) - t0;

@@ -30,7 +30,7 @@
 /**********************************************************************
 ** System dependent includes & macros
 ***********************************************************************/
-#if defined _WIN64 || defined _WIN32
+#ifdef _WIN32
 /**********************************************************************
 ** Windows declarations
 ***********************************************************************/
@@ -48,7 +48,7 @@
 #define SLEEP(arg) Sleep(arg)
 #define snprintf _snprintf
 #define DD "\\"
-int gettimeofday(struct timeval* tv, struct timezone* tz);
+int gettimeofday(struct timeval* tv, void* tz);
 #else
 /**********************************************************************
 ** UNIX declarations
@@ -726,7 +726,7 @@ typedef struct _EVA_context
  	DynBuffer *focus3;			/* CGI name of 3rd control to set focus on */
 
 /* Static data to hold form info cache - TODO : handle dynamic size */
-#define FORM_CACHE_SIZE 100
+#define FORM_CACHE_SIZE 200
 	FormsCache fc[FORM_CACHE_SIZE];
 	unsigned int nbfc;			/* # of forms in fc */
 
@@ -754,6 +754,7 @@ typedef struct _EVA_context
 	int b_noipcheck;			/* set when IP changes must not be checked */
 	DynTable mail_admin;		/* administrator email */
 	unsigned long id_public;	/* id of public user account */
+	int salt;					/* salt info for reversible string transformation */
 
 	/* CGI data */
 	DynBuffer *input;			/* CGI input data */
@@ -857,6 +858,7 @@ typedef struct _EVA_context
 	unsigned long val_FORMSTAMP;
 	unsigned long val_TYPE;
 	unsigned long val_FIELD;
+	unsigned long val_PASSWORD;
 	DynTable objdata_FORMLIST_FILTER;
 	DynTable daylong;			/* long day labels (for date output) */
 	DynTable dayshort;			/* short day labels (for date output) */
