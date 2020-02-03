@@ -239,7 +239,7 @@ char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if n
 	imgType imgtyp = imgUnkonwn;
 
 	/* Init params - return NULL on error */
-	if(!imgpath || !*imgpath || (!dw && !dh) || (chdir(cntxt->path) && (MKDIR(path) || chdir(cntxt->path)))) return NULL;
+	if(!imgpath || !*imgpath || (!dw && !dh) || (chdir(cntxt->path) && (MKDIR("cache") || chdir("cache")))) return NULL;
 	if(ow) *ow = 0;
 	if(oh) *oh = 0;
 

@@ -112,7 +112,7 @@ char *table_row_bgcolor(				/* return : RGB color code - empty string for transp
 int table_prepare_rows(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl,				/* in : control index in cntxt->form->ctrl */
-	char *pfx							/* in : values prefix */
+	char b_obj_lbl						/* in : add object label afer IdObj if not 0 */
 );
 
 /*********************************************************************

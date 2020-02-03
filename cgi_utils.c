@@ -19,10 +19,10 @@
 *********************************************************************/
 void cgi_free_files(EVA_context* cntxt)
 {
-	if (cntxt && cntxt->cgi_file)
+	if(cntxt && cntxt->cgi_file)
 	{
 		unsigned long i;
-		for (i = 0; i < cntxt->cgi_file_nb; i++)
+		for(i = 0; i < cntxt->cgi_file_nb; i++)
 			dyntab_free(&cntxt->cgi_file[i].descr);
 		M_FREE(cntxt->cgi_file);
 	}
@@ -51,7 +51,7 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 	MEM_TRACE(NULL, NULL);
 
 	/* Output log start */
-	if(!(chdir(cntxt->rootdir) || (chdir("logs") && MKDIR("logs")) || chdir("logs")))
+	if(!chdir(cntxt->rootdir) && (!chdir("logs") || !MKDIR("logs") && !chdir("logs")))
 	{
 		datetxt_to_format(cntxt, cntxt->logfile, cntxt->timestamp, "_EVA_DATE_SORT");
 		sprintf(cntxt->logfile + strlen(cntxt->logfile), ".txt");
@@ -59,16 +59,16 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 		{
 			/* Create new log file every day */
 			f = fopen(cntxt->logfile, "w");
-			if (f) fprintf(f, "date\tpid\tclock\tcgi\tClickBtn\tClickForm\tClickSubField\tSession\tMainForm\tMainObj\tAltForm\tAltObj\tSrchTxt\n");
+			if(f) fprintf(f, "date\tpid\tclock\tcgi\tClickBtn\tClickForm\tClickSubField\tSession\tMainForm\tMainObj\tAltForm\tAltObj\tSrchTxt\n");
 
 			/* Send mail report */
 			snprintf(tmp, sizeof(tmp), "%s" "/BLAT.EXE - -body \"http://%s%s\" -s \"Notification EVA CGI %s\" -noh2 -to eva@abing.fr",
 							cntxt->path, cntxt->srvname, cntxt->requri, cntxt->srvname);
-			system(tmp);
+			if(system(tmp));
 		}
 		else
 			f = fopen(cntxt->logfile, "a");
-		if (f)
+		if(f)
 		{
 			fprintf(f, "%s\t%u\t%u\t%s\n", cntxt->timestamp, getpid(), ms_since(&cntxt->tm0), cntxt->dbname);
 			fclose(f);
@@ -162,9 +162,9 @@ void output_log_end(EVA_context *cntxt)
 {
 	FILE *f;
 
-	if (chdir(cntxt->rootdir) || chdir("logs")) return;
+	if(chdir(cntxt->rootdir) || chdir("logs")) return;
 	f = fopen(cntxt->logfile, "a");
-	if (!f) return;
+	if(!f) return;
 	fprintf(f, "%s\t%u\t%u\t%s\t%lu\t%lu\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 					cntxt->timestamp, getpid(), ms_since(&cntxt->tm0), cntxt->dbname,
 					cntxt->log_clkbtn,										/* clicked button id */
@@ -1417,7 +1417,7 @@ void cgi_trace_input(EVA_context *cntxt)
 	FILE *f = NULL;
 	if(!cntxt->input || !cntxt->input->cnt || !cntxt->input->data || chdir(cntxt->path)) return;
 	f = fopen("cgi.txt", "wb");
-	if (!f) return;
+	if(!f) return;
 	fwrite(cntxt->input->data, cntxt->input->cnt, 1, f);
 	fclose(f);
 }
@@ -1431,9 +1431,9 @@ void cgi_read_trace_input(EVA_context *cntxt)
 	FILE* f = NULL;
 	char *fname = "cgi.txt";
 	struct stat fs;
-	if (chdir(cntxt->path) || stat(fname, &fs)) return;
+	if(chdir(cntxt->path) || stat(fname, &fs)) return;
 	f = fopen(fname, "rb");
-	if (!f) return;
+	if(!f) return;
 	cntxt->input = dynbuf_init(fs.st_size + 4);
 	if(cntxt->input) cntxt->input->cnt = fread(cntxt->input->data, 1, fs.st_size, f);
 	fclose(f);

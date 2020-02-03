@@ -22,13 +22,14 @@ EVA_context *Cntxt;
 int main(int argc, char **argv, char **envp)
 {
 	EVA_context c = {0}, *cntxt = &c;
-	clock_t t0;
+	int t0;
 
 	/* Initialize SQL library */
 	sql_control(NULL, 5);
 
 	/* Set process time counters */
-	if(gettimeofday(&cntxt->tm0, NULL) )cntxt->tm0.tv_usec = 0;
+	if(gettimeofday(&cntxt->tm0, NULL))
+        cntxt->tm0.tv_usec = 0;
 	strcpy(cntxt->timestamp, datetxt_now());
 	datetxt_to_time(cntxt->timestamp, &cntxt->tcur, NULL);
 
@@ -119,7 +120,7 @@ int main(int argc, char **argv, char **envp)
 	}
 
 	/* Output page header (form) */
-	t0 = clock();
+	t0 = ms_since(&cntxt->tm0);
 	put_html_page_header(cntxt, NULL, NULL, NULL, 3);
 
 	if(!(cntxt->b_terminate & 64))

@@ -186,16 +186,29 @@ int file_read_tabrc(				/* return : 0 on success, other on error */
 int file_read_config(				/* return : 0 on success, other on error */
 	EVA_context *cntxt				/* in/out : execution context data */
 ){
+	DynTable *usr = &cntxt->cnf_users;
+
+	/* Read SQL users configuration file */
 	if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY;
-	if(file_read_tabrc(cntxt, &cntxt->cnf_server, "serverconfig.conf"))
+	if(file_read_tabrc(cntxt, usr, "users.conf"))
 	{
-		cntxt->dbpwd = NULL;
+		/* No config file : use root */
 		CLEAR_ERROR_NOWARN;
+		cntxt->dbuser = "root";
 	}
-	else
-	{
-		cntxt->dbpwd = dyntab_val(&cntxt->cnf_server, 1, 0);
+	else {
+		/* Look for first matching account */
+		for(unsigned long i = 0; i < usr->nbrows; i++)
+		{
+			char* c = dyntab_val(usr, i, 0);
+			if(*c && strcmp(cntxt->dbname, c)) continue;
+			cntxt->dbuser = dyntab_val(usr, i, 1);
+			cntxt->dbpwd = dyntab_val(usr, i, 2);
+			break;
+		}
 	}
+	if(file_read_tabrc(cntxt, &cntxt->cnf_extproc, "extproc.conf")) CLEAR_ERROR_NOWARN;
+	if(file_read_tabrc(cntxt, &cntxt->cnf_lstproc, "lstproc.conf")) CLEAR_ERROR_NOWARN;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -290,7 +303,7 @@ int chdir_user_doc(				/* return : 0 on success, other on error */
 ){
 	char* user_id = dyntab_val(&cntxt->id_user, 0, 0);
 	if(chdir_db_doc(cntxt)) STACK_ERROR;
-	if(chdir(user_id) || (MKDIR(user_id) && chdir(user_id))) RETURN_ERR_DIRECTORY;
+	if(chdir(user_id) && (MKDIR(user_id) || chdir(user_id))) RETURN_ERR_DIRECTORY;
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -463,8 +476,7 @@ char *get_image_file(					/* return : image file path (alloc-ed memory), NULL if
 	int b_found = 0;
 
 	/* Initialize size & check params (no quotes in filenames) */
-	if(!sz || strpbrk(img, "'\"")) return NULL;
-	chdir(cntxt->path);
+	if(!sz || strpbrk(img, "'\"") || chdir(cntxt->path)) return NULL;
 
 	/* If path is given */
 	if(strchr("/.", *img))

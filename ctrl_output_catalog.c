@@ -33,10 +33,10 @@ typedef struct _Catalog
 	DynTable key;				/* input fields used for catalog key index */
 	DynTable img;				/* image group field for catalog lists */
 	DynTable imgdir;			/* images base directory */
-	char dw1[16];				/* desired with for thumbnails (0 for no resize) */
-	char dh1[16];				/* desired height for thumbnails (0 for no resize) */
-	char dw2[16];				/* desired with for small thumbnails (0 for no resize) */
-	char dh2[16];				/* desired height for small thumbnails (0 for no resize) */
+	char dw1[24];				/* desired with for thumbnails (0 for no resize) */
+	char dh1[24];				/* desired height for thumbnails (0 for no resize) */
+	char dw2[24];				/* desired with for small thumbnails (0 for no resize) */
+	char dh2[24];				/* desired height for small thumbnails (0 for no resize) */
 	DynTable categ;				/* clicked image values for catalog key index */
 	unsigned long idimg;		/* image field value id for catalog lists  */
 	unsigned long idimg_r;		/* 1 if image field is a relation, 0 else */
@@ -148,12 +148,12 @@ int output_catalog_sublist(				/* return : 0 on success, other on error */
 			if(b_dyn_size)
 			{
 				/* Traitement cas sans dimensions (pour bricometal) */
-				char path[4096], dh[16], dw[16];
+				char path[4096], dh[24], dw[24];
 				snprintf(add_sz_str(path), "../docs/%s/%s/%s", cntxt->dbname, imgdir, c->txt);
 				get_image_size(path, &w, &h);
 				w /= 2; h /= 2;
-				snprintf(add_sz_str(dw), "%lu", w);
-				snprintf(add_sz_str(dh), "%lu", h);
+				snprintf(add_sz_str(dw) - 1, "%lu", w);
+				snprintf(add_sz_str(dh) - 1, "%lu", h);
 				if(put_html_image_dir(cntxt, name ? name->data : NULL, imgdir, c->txt, sql ? sql->data : NULL,
 												dw, dh, 0, c->IdObj, NULL, NULL)) STACK_ERROR;
 			}

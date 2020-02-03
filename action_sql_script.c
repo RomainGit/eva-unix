@@ -724,7 +724,7 @@ int action_sql_script(				/* return : 0 on success, other on error */
 		{
 			while(j < sm.nbqry && sm.qry[j].L0 < sm.mark[i].L) j++;
 
-			if (sm.qry[j].L0 > sm.mark[i].L) sm.mark[i].qry = j;
+			if(sm.qry[j].L0 > sm.mark[i].L) sm.mark[i].qry = j;
 			else sm.mark[i].qry = ~0UL;
 		}
 
@@ -743,7 +743,7 @@ int action_sql_script(				/* return : 0 on success, other on error */
 			typstruc[cntstruc] = sm.mark[i].type;
 			for(k = i + 1; k < sm.nbmarks; k++)
 			{
-				if (sm.mark[k].type == MrkUnknown || sm.mark[k].type == MrkComment) continue;
+				if(sm.mark[k].type == MrkUnknown || sm.mark[k].type == MrkComment) continue;
 
 				/* End/next match with IF/FOR : erase beginning mark from typstruc */
 				if(PARENT_PARSED_SUCCESS || CHILD_PARSED_SUCCESS)
@@ -772,7 +772,7 @@ int action_sql_script(				/* return : 0 on success, other on error */
 		}
 
 		/* END/NEXT mark : Search for beginning mark */
-		if (END_STRUCT(i))
+		if(END_STRUCT(i))
 		{
 			k = i;
 			while(k > 0 && sm.mark[k - 1].end != i) k--;

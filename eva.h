@@ -735,7 +735,9 @@ typedef struct _EVA_context
 	DynTable sess_data;			/* data of the current session */
 	DynTable id_cnf;			/* id of the server configuration object */
 	DynTable cnf_data;			/* server configuration data from DB [#SRVCNF] object */
-	DynTable cnf_server;		/* server configuration data from file serverconfig.txt */
+	DynTable cnf_users;			/* server configuration data for db users */
+	DynTable cnf_extproc;		/* server configuration data for external procedures of action_launchproc */
+	DynTable cnf_lstproc;		/* server configuration data for list procedures of output controls */
 	int b_identified;			/* 1 if user is identified with a valid account */
 	int b_login_pwd;			/* 1 if user has entered valid login / pwd on this page */
 	DynTable id_user;			/* id of the logged in user */
@@ -754,7 +756,7 @@ typedef struct _EVA_context
 	int b_noipcheck;			/* set when IP changes must not be checked */
 	DynTable mail_admin;		/* administrator email */
 	unsigned long id_public;	/* id of public user account */
-	int salt;					/* salt info for reversible string transformation */
+	unsigned int salt;			/* salt info for reversible string transformation */
 
 	/* CGI data */
 	DynBuffer *input;			/* CGI input data */
@@ -809,7 +811,8 @@ typedef struct _EVA_context
 
 	/* SQL session handling */
 	char *dbname;				/* SQL database to use */
-	char *dbpwd;				/* SQL database password */
+	char* dbuser;				/* SQL database user */
+	char* dbpwd;				/* SQL database password */
 	void *sql_session;			/* SQL engine dependent data */
 	DynBuffer *sql_qry;			/* last SQL query */
 	DynBuffer *id_wks;			/* workstation unique Id (cookie value) */

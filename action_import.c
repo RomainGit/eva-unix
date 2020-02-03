@@ -613,7 +613,7 @@ int import_objdata_file(			/* return : 0 on success, other on error */
 	/* Read selected files if absent - return if none selected */
 	if(chdir(cntxt->rootdir) || chdir("objlib")) RETURN_ERR_DIRECTORY;
 	if(!files->nbrows && cgi_select_files(cntxt, i_ctrl, files)) STACK_ERROR;
-	if (!files->nbrows) RETURN_OK;
+	if(!files->nbrows) RETURN_OK;
 
 	/* Read object data & value Ids */
 	if(file_read_import_data(cntxt, &forms, &objdata, dyntab_val(files, 0, 0)) ||

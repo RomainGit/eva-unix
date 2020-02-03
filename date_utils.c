@@ -931,10 +931,10 @@ size_t dbl_str(			/* return : # of chars output to txt */
 char* mystrdup(char* src, size_t sz)
 {
 	char* r = malloc(sz + 2);
-	if (r)
+	if(r)
 	{
 		memset(r, 0, sz + 1);
-		if (src) memcpy(r, src, sz);
+		if(src) memcpy(r, src, sz);
 	}
 	return r;
 }
@@ -947,7 +947,7 @@ int ms_since(struct timeval *t0)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return (int)((tv.tv_sec - t0->tv_sec)*1000 + tv.tv_usec - t0->tv_usec);
+	return (int)((tv.tv_sec - t0->tv_sec)*1000L + (tv.tv_usec - t0->tv_usec) / 1000L);
 }
 
 
@@ -958,8 +958,8 @@ int ms_since(struct timeval *t0)
 *********************************************************************/
 int gettimeofday(struct timeval* p, void* tz) {
 	static time_t t0 = 0;
-	if (!t0) t0 = time(NULL);
-	p->tv_usec = clock();
+	if(!t0) t0 = time(NULL);
+	p->tv_usec = clock() * 1000L;
 	p->tv_sec = (long)t0;
 	return 0;
 }

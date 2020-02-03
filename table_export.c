@@ -458,18 +458,17 @@ int table_read_obj_list(				/* return : 0 on success, other on error */
 int table_prepare_rows(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl,				/* in : control index in cntxt->form->ctrl */
-	char *pfx							/* in : values prefix */
+	char b_obj_lbl						/* in : add object label afer IdObj if not 0 */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	ObjTableFormat *tbl = ctrl->objtbl;
-	DynTable data = {0};
+	DynTable data = { 0 };
 	DynBuffer *outval = NULL;
 	DynBuffer *val = NULL;
 	unsigned long i, j, k;
 	unsigned long rowstart;
 	DynTableCell *cell;
-	size_t pfx_sz = pfx ? strlen(pfx) : 0;
 
 	/* Prepare title line */
 	DYNTAB_SET(&tbl->cellval, 0, 0, "IdObj");
@@ -484,12 +483,11 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 		char *idend;
 		unsigned long idobj = strtoul(dyntab_val(&tbl->idobj, i, 0), &idend, 10);
 
-		/* First colummn contains object Id */
-		DYNTAB_ADD_CELL(&tbl->cellval, i + 1, 0, &tbl->idobj, i, 0);
 
 		/* If object is not valid */
 		if(!idobj || *idend)
 		{
+			DYNTAB_ADD_CELL(&tbl->cellval, i + 1, 0, &tbl->idobj, i, 0);
 			DYNTAB_SET(&tbl->cellval, i + 1, 1, "#NAR#");
 		}
 		else
@@ -497,6 +495,16 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 			/* Find object in objects data */
 			for(j = 0; j < tbl->data.nbrows && dyntab_cell(&tbl->data, j, 0)->IdObj != idobj; j++);
 			rowstart = j;
+
+			/* First colummn contains object Id + object label if required */
+			if(b_obj_lbl)
+			{
+				DYNBUF_ADD3_CELL(&val, "'", &tbl->idobj, i, 0, NO_CONV, " ");
+				if(!qry_obj_label(cntxt, NULL, NULL, NULL, &outval, NULL, NULL, NULL, NULL, 0, &tbl->data, rowstart)) DYNBUF_ADD_BUF(&val, outval, NO_CONV);
+				DYNTAB_ADD_BUF(&tbl->cellval, i + 1, 0, val);
+			}
+			else
+				DYNTAB_ADD_CELL(&tbl->cellval, i + 1, 0, &tbl->idobj, i, 0);
 
 			/* Output line data in tbl->field order */
 			for(j = 0; j < tbl->field.nbrows; j++)
@@ -508,6 +516,8 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 				unsigned long i0;
 				int b_distinct = dyntab_sz(&tbl->distinctval, j, 0);
 				char *align = dyntab_val(&tbl->align, j, 0);
+				val->cnt = 0;
+				outval->cnt = 0;
 
 				/* Set alignment & value separator */
 				if(!strcmp(align, "newline")) { align = ""; separ = "\n"; }
@@ -515,8 +525,6 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 				else if(!strcmp(align, "index")) { align = ""; b_index = 1; }
 
 				/* Concat formated cell values */
-				M_FREE(outval);
-				if(pfx_sz) DYNBUF_ADD(&outval, pfx, pfx_sz, NO_CONV);
 				for(k = 0; rowstart < tbl->data.nbrows; k++, rowstart++)
 				{
 					/* Break if column changes */
@@ -538,7 +546,7 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 						if(line >= cell->Line && k) DYNBUF_ADD(&outval, separ, 0, NO_CONV)
 						else while(line < cell->Line) { DYNBUF_ADD_STR(&outval, "\n"); line++; }
 					}
-					else if(outval && outval->cnt > pfx_sz) DYNBUF_ADD(&outval, separ, 0, NO_CONV);
+					else if(outval && outval->cnt) DYNBUF_ADD(&outval, separ, 0, NO_CONV);
 
 					/* Use relation format if applicable */
 					idrelobj = cell->txt ? strtoul(cell->txt, &idend, 10) : 0;
@@ -555,7 +563,7 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 					else if(put_value_fmt(cntxt, &outval, DYNTAB_VAL_SZ(&tbl->data, rowstart, 0), dyntab_val(&tbl->format, j, 0)))
 						STACK_ERROR;
 				}
-				if(outval && outval->cnt > pfx_sz) DYNTAB_ADD_BUF(&tbl->cellval, i + 1, j + 1, outval);
+				if(outval && outval->cnt) DYNTAB_ADD_BUF(&tbl->cellval, i + 1, j + 1, outval);
 			}
 		}
 	}

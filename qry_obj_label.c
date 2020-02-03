@@ -360,7 +360,7 @@ int qry_obj_label(						/* return : 0 on success, other on error */
 	/* If object is a control : use special naming & imaging function */
 	if(id_form == OBJ_FORM_CONTROL)
 	{
-		if(!objdata) { data = &cntxt->form->objdata; beg = 0; }
+		if(!objdata) { data = cntxt->form ? &cntxt->form->objdata : NULL; beg = cntxt->form ? 0 : 1; }
 		if(ctrl_get_label_img(cntxt, img, imgsel, label, notes, data, beg)) STACK_ERROR;
 		if(objname) DYNBUF_ADD_CELLP(objname, dyntab_field_cell(data, "_EVA_LABEL", ~0UL, beg), NO_CONV);
 		if(objtitle) DYNBUF_ADD_CELLP(objtitle, dyntab_field_cell(data, "_EVA_LABEL", ~0UL, beg), NO_CONV);

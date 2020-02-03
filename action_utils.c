@@ -22,7 +22,7 @@
 int form_get_field_values(						/* return : 0 on success, other on error */
 	EVA_context *cntxt,							/* in/out : execution context data */
 	DynTable *res,								/* out : copied values */
-	char *fieldlist,							/* in : fields to search for (comma separated) */
+	char *fieldlist,							/* in : fields to search for - comma separated */
 	unsigned long idform,						/* in : source form id (use current form if 0 and idobj = 0) */
 	unsigned long idobj							/* in : source object id (use current obj if 0 and idform = 0) */
 ){

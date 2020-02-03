@@ -18,6 +18,12 @@ int EcheancierAEMO(EVA_context *cntxt, unsigned long i_ctrl);
 int FactureTPS(EVA_context *cntxt, unsigned long i_ctrl);
 int EcheancierTPS(EVA_context *cntxt, unsigned long i_ctrl);
 
+#if defined _WIN32  || defined _WIN64
+#define CP_CMD "COPY"
+#else
+#define CP_CMD "cp"
+#endif
+
 /*********************************************************************
 ** Function : office_launchproc
 ** Description : lauch an external office program
@@ -33,42 +39,27 @@ int office_launchproc(			/* return : 0 on success, other on error */
 	char filename[1024] = {0};
 	char cmd[4096] = {0};
 	char wd[1024];
-	char exepath[1024] = {0};
+	DynTable* ext = &cntxt->cnf_extproc;
+	unsigned long i;
 
 	/* Get current dir */
-	if(getcwd(add_sz_str(wd))) RETURN_ERR_DIRECTORY;
+	if(!getcwd(add_sz_str(wd))) RETURN_ERR_DIRECTORY;
+
+	/* Search for executable path */
+	for(i = 0; i < ext->nbrows && strcmp(proctyp, dyntab_val(ext, i, 0)); i++);
+	if(i == ext->nbrows) RETURN_ERROR("Procedure not available - see extproc.conf", { ERR_PUT_TXT("TYPE=", proctyp, 0) });
 
 	/* Prepare template procedure file path : look first in templates database subdir */
 	snprintf(add_sz_str(filename), "%stemplates" DD "%s" DD "%s", cntxt->rootdir, cntxt->dbname, procname);
 	if(stat(filename, &fs)) snprintf(add_sz_str(filename), "%stemplates" DD "%s", cntxt->rootdir, procname);
 	if(stat(filename, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier modèle non trouvé : ", procname ? procname : "(null)", 0));
 
-	/* Build executable path */
-#ifdef WIN32
-#define CP_CMD "COPY"
-	{
-		char *exe_path = dyntab_val(&cntxt->cnf_server, 0, 0);
-		char *exe_name = !strcmp(proctyp, "_EVA_EXCEL") ? "EXCEL" :
-						!strcmp(proctyp, "_EVA_WORD") ? "WINWORD" :
-						!strcmp(proctyp, "_EVA_ACCESS") ? "MSACCESS" :
-						NULL;
-
-		/* Prepare executable path */
-		if(exe_name) snprintf(add_sz_str(exepath), "call \"%s%s" DD "%s.EXE\" ", exe_path + (*exe_path == '*' ? 1 : 0), *exe_path == '*' ? "" : "" DD "Office", exe_name);
-	}
-#else
-#define CP_CMD "cp"
-	if (!strcmp(proctyp, "_EVA_EXCEL") || !strcmp(proctyp, "_EVA_WORD") || !strcmp(proctyp, "_EVA_ACCESS")) strcpy(exepath, "soffice --headless --invisible ");
-	else if (!strcmp(proctyp, "_EVA_SHELL")) strcpy(exepath, "./");
-#endif
-	if (!*exepath) RETURN_ERROR("Type de traitement non disponible", {});
-
 	/* Copy template procedure */
 	snprintf(add_sz_str(cmd), CP_CMD " %s . >exe.txt 2>exeerr.txt", filename);
-	if(system(cmd) == -1 || stat(filename, &fs)) RETURN_ERROR("Erreur durant la préparation du traitement (copie fichier modèle)", NULL);
+	if(system(cmd) == -1 || stat(filename, &fs)) RETURN_ERR_DIRECTORY;
 
 	/* Launch program with file procedure argument */
-	snprintf(cmd, sizeof(cmd) - 1, "%s%s" DD "%s>exe.txt 2>exeerr.txt", exepath, wd, procname);
+	snprintf(cmd, sizeof(cmd) - 1, "%s %s" DD "%s>exe.txt 2>exeerr.txt", dyntab_val(ext, i, 1), wd, procname);
 	if(system(cmd) == -1 || stat("exe.txt", &fs) || stat("exeerr.txt", &fs) || fs.st_size > 0)
 		RETURN_ERROR("Erreur lors de l'appel du traitement", { ERR_PUT_FILE("\nexe : ", "exe.txt"); ERR_PUT_FILE("\nexeerr : ", "exeerr.txt"); });
 	remove("exe.txt");
@@ -283,7 +274,7 @@ int proc_output_params(				/* return : 0 on success, other on error */
 			tbl->lines = tbl->totlines;
 			if(table_sort_obj_list(cntxt, ictrl, b_selobj)) STACK_ERROR;
 			if(table_read_obj_list(cntxt, ictrl, b_selobj)) STACK_ERROR;
-			if(table_prepare_rows(cntxt, ictrl, "")) STACK_ERROR;
+			if(table_prepare_rows(cntxt, ictrl, 0)) STACK_ERROR;
 			if(file_write_tabrc(cntxt, &tbl->cellval, fname)) STACK_ERROR;
 			fprintf(f, "%s", fname);
 			if(ictrl == form->nb_ctrl) form_free_ctrl(cntxt, ictrl);
@@ -701,7 +692,7 @@ int action_launchproc(				/* return : 0 on success, other on error */
 #ifdef WIN32
 		system("del /q *.*");
 #else
-		system("rm -r *.*");
+		if(system("rm -r *.*"));
 #endif
 		if(!chdir("..")) rmdir(procid);
 	}

@@ -94,7 +94,7 @@ int table_process_controls(				/* return : 0 on success, other on error */
 	{
 		/* Add new object if add button */
 		char *btn = CGI_CLICK_BTN_SUBFIELD;
-		tbl->ctrlline = cntxt->cgi[cntxt->cgibtn].Line;
+		tbl->ctrlline = cntxt->cgi ? cntxt->cgi[cntxt->cgibtn].Line : ~0UL;
 		if(!tbl->input) tbl->input = dyntab_val(&tbl->cgiinput, 0, 0);
 
 		if(!strcmp(btn, "ADDNEWOBJ"))
@@ -258,7 +258,7 @@ int table_process_controls(				/* return : 0 on success, other on error */
 		else if(ctrl->val.nbrows &&! strncmp(btn, add_sz_str("MOVE")))
 		{
 			unsigned long dest;
-			unsigned long src = cntxt->cgi[cntxt->cgibtn].Num - 1;
+			unsigned long src = cntxt->cgi ? cntxt->cgi[cntxt->cgibtn].Num - 1 : 0;
 
 			/* Choose destination row */
 			dest = src;
@@ -596,6 +596,7 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 	ObjTableFormat *tbl = ctrl->objtbl;
 	DynBuffer *name = NULL;
 	char *b_export = DYNTAB_FIELD_VAL(tbl->attr, EXPORTLIST);
+	DynTable* lst = &cntxt->cnf_lstproc;
 	CHECK_HTML_STATUS;
 
 	/* If export available */
@@ -603,23 +604,15 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 
 	/* Output export buttons */
 	DYNBUF_ADD_STR(html, "<td align=right>");
-	CTRL_CGINAMEBTN(&name, NULL, add_sz_str("EXPORT_EXCEL"));
-	if(put_html_button(cntxt, name->data, "Exporter", "_eva_excel_icon_small.gif", "_eva_excel_icon_small_s.gif",
-		"Cliquez pour obtenir la liste des fiches au format Excel", 0, 0)) STACK_ERROR;
-	CTRL_CGINAMEBTN(&name, NULL, add_sz_str("EXPORT_WORD"));
-	if(put_html_button(cntxt, name->data, "Exporter", "_eva_word_icon_small.gif", "_eva_word_icon_small_s.gif",
-		"Cliquez pour obtenir la liste des fiches au format Word", 0, 0)) STACK_ERROR;
+	for(unsigned long i = 0; i < lst->nbrows; i++)
+	{
+		char img[256], img_s[256];
+		if(ctrl_cgi_name(cntxt, ctrl, NULL, 1, &name, 'B', dyntab_val(lst, i, 0), dyntab_sz(lst, i, 0))) STACK_ERROR;
+		snprintf(add_sz_str(img) - 1, "%s.gif", dyntab_val(lst, i, 4));
+		snprintf(add_sz_str(img_s) - 1, "%s_s.gif", dyntab_val(lst, i, 4));
+		if(put_html_button(cntxt, name->data, dyntab_val(lst, i, 5), img, img_s, "Cliquez pour obtenir la liste des fiches", 0, 0)) STACK_ERROR;
+	}
 	DYNBUF_ADD_STR(html, "</td>");
-
-	/* Output print mode button
-	DYNBUF_ADD_STR(html, "<td align=right>");
-	CTRL_CGINAMEBTN(&name, NULL, add_sz_str("PRINT"));
-	if(tbl->status & TblCtrl_printmode ?
-		put_html_button(cntxt, name->data, NULL, "_eva_print_s.gif", "_eva_print.gif",
-			"Mode impression en cours\n\nCliquez pour afficher la liste en mode normal", 0, 0) :
-		put_html_button(cntxt, name->data, NULL, "_eva_print.gif", "_eva_print_s.gif",
-			"Mode impression\n\nCliquez pour copier / coller directement la liste depuis la page", 0, 0)) STACK_ERROR;
-	DYNBUF_ADD_STR(html, "</td>"); */
 
 	RETURN_OK_CLEANUP;
 }
@@ -1994,26 +1987,27 @@ int table_export_list(			/* return : 0 on success, other on error */
 	int step = form->step;
 	int b_selobj = 0;
 	unsigned long i;
+	size_t j;
 	char *btn = CGI_CLICK_BTN_SUBFIELD;
-	int b_xl = strstr(btn, "EXCEL") ? 1 : 0;
 	char name[4090] = {0}; size_t sz_name;
 	char fname[4096] = {0}; size_t sz_fname;
-	char cmd[4096];
-	char cwd[4096];
+	char cwd[1024];
+	DynTable* lst = &cntxt->cnf_lstproc;
+	struct stat fs;
 	if(!tbl) RETURN_OK;
 
 	/* Set temp directory for user */
 	if(chdir_user_doc(cntxt)) STACK_ERROR;
-	getcwd(add_sz_str(cwd));
+	if(!getcwd(add_sz_str(cwd))) RETURN_ERR_DIRECTORY;
 
 	/* Prepare text file with table data */
 	form->step = form->prevstep;
 	if(table_init_obj_list(cntxt, i_ctrl, &b_selobj)) STACK_ERROR;
 	tbl->line = 0;
-	tbl->lines = b_xl ? 65000 : tbl->totlines;
+	tbl->lines = tbl->totlines;
 	if(table_sort_obj_list(cntxt, i_ctrl, b_selobj)) STACK_ERROR;
 	if(table_read_obj_list(cntxt, i_ctrl, b_selobj)) STACK_ERROR;
-	if(table_prepare_rows(cntxt, i_ctrl, "")) STACK_ERROR;
+	if(table_prepare_rows(cntxt, i_ctrl, 1)) STACK_ERROR;
 	if(file_write_tabrc(cntxt, &tbl->cellval, "dump.txt")) STACK_ERROR;
 
 	/* Prepare output format file */
@@ -2030,43 +2024,43 @@ int table_export_list(			/* return : 0 on success, other on error */
 	}
 	if(file_write_tabrc(cntxt, &tbl->cellval, "dumpfmt.txt")) STACK_ERROR;
 
-#ifdef PROD_VERSION
-    rename("dump.txt", b_xl ? "List.ods" : "List.odt");
-#else
 	/* Produce office document */
-	if(office_launchproc(cntxt, b_xl ? "_EVA_EXCEL" : "_EVA_WORD", b_xl ? "TableList.ods" : "TableList.odt")) CLEAR_ERROR;
-#endif // PROD_VERSION
+	for(i = 0; i < lst->nbrows && strcmp(btn, dyntab_val(lst, i, 0)); i++);
+	if(office_launchproc(cntxt, dyntab_val(lst, i, 1), dyntab_val(lst, i, 2))) CLEAR_ERROR;
 
 	/* Clear temp files */
 	remove("dump.txt");
 	remove("dumpfmt.txt");
-	remove("TableList.ods");
-	remove("TableList.odt");
 	remove("err.txt");
 	remove("msg.txt");
+	remove(dyntab_val(lst, i, 2));
+
+	/* Check result presence */
+	if(stat(dyntab_val(lst, i, 3), &fs)) RETURN_ERROR("Erreur durant la production du document liste", { ERR_PUT_CELL("\nFichier source : ", lst, i, 2); ERR_PUT_CELL("\nFichier attendu : ", lst, i, 3) });
 
 	/* Build destination file name */
 	qry_obj_label(cntxt, NULL, NULL, NULL, &label, NULL, NULL, NULL, NULL, 0, &form->objdata, 0);
-	sz_name = label ?
-		snprintf(add_sz_str(name), "%s %s", ctrl->LABEL, label->data) :
-		snprintf(add_sz_str(name), "%s", ctrl->LABEL);
-		snprintf(add_sz_str(fname), "%s.%s", name, b_xl ? "ods" : "odt");
+	sz_name = snprintf(add_sz_str(name), "%s", ctrl->LABEL);
+	if(label && strcmp(ctrl->LABEL, label->data)) sz_name += snprintf(name + sz_name, sizeof(name) - sz_name, "  - %s", label->data);
+	btn = dyntab_val(lst, i, 3);
+	for(j = dyntab_sz(lst, i, 3); j > 1 && btn[j] != '.'; j--);
+	if(btn[j] == '.') snprintf(add_sz_str(fname), "%s%s", name, btn + j);
 	sz_fname = file_compatible_name(fname);
 	remove(fname);
-	rename(b_xl ? "List.ods" : "List.odt", fname);
+	if(rename(dyntab_val(lst, i, 3), fname)) RETURN_ERR_DIRECTORY;
 
 	/* Output download dialog header */
 	DYNBUF_ADD3(&cntxt->html,
-		"<font face=Arial><center><hr>"
-		"<b>Contenu de [", name, sz_name, TO_HTML, "]</b><hr>");
+		"<div class=EVA_downlod_dialog>"
+		"<hr><p>Contenu de [", name, sz_name, TO_HTML, "]</p><hr>");
 
 	/* Output link to file */
 	if(file_output_link(cntxt, &cntxt->html,
-				cmd, snprintf(add_sz_str(cmd), "Fichier %s : ", b_xl ? "Excel" : "Word"),
+				dyntab_val(lst, i, 5), dyntab_sz(lst, i, 5),
 				name, sz_name, fname, sz_fname, "#user", NULL, 0, NULL, 0,
 				7 | (form->b_modified ? 0 : 8))) STACK_ERROR;
 
-	DYNBUF_ADD_STR(&cntxt->html, "</center></font><br>");
+	DYNBUF_ADD_STR(&cntxt->html, "</div>");
 	cntxt->b_terminate = 15;
 
 	RETURN_OK_CLEANUP;

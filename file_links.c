@@ -76,11 +76,9 @@ int file_output_link(				/* return : 0 on success, other on error */
 	struct stat fs = {0};
 
 	/* Output help if applicable */
-	if(options) DYNBUF_ADD_STR(html, "<center>");
+	if(options) DYNBUF_ADD_STR(html, "<div class=EVA_filelinks>");
 	if(options & 1) DYNBUF_ADD_STR(html,
-		"Cliquez sur le lien ci-dessous pour télécharger le fichier<br><br>"
-		"<font size=-1>Si vous utilisez Internet Explorer, le fichier s'ouvrira dans une nouvelle fenêtre<br>"
-		"Pour enregistrer le fichier sur votre ordinateur, cliquez avec le bouton de droite et choisissez Enregistrer la cible sous ...</font><br><br>");
+		"Cliquez sur le lien ci-dessous pour télécharger le fichier<br><br>");
 
 	/* Handle directories */
 	if(fdir)
@@ -109,7 +107,7 @@ int file_output_link(				/* return : 0 on success, other on error */
 	if(sz_dir) snprintf(add_sz_str(path), "%s%s", dir, fname);
 
 	/* Output title if present */
-	if(title && *title && sz_title) DYNBUF_ADD(html, title, sz_title, NO_CONV);
+	if(title && *title && sz_title) DYNBUF_ADD3(html, "<i>", title, sz_title, NO_CONV, "</i> : ");
 
 	/* Check file status */
 	if(stat(path, &fs))
@@ -190,7 +188,7 @@ int file_output_link(				/* return : 0 on success, other on error */
 							"Retourne au formulaire précédent", 0, 0)) STACK_ERROR;
 		cntxt->form->html = h;
 	}
-	if(options) DYNBUF_ADD_STR(html, "</center>");
+	if(options) DYNBUF_ADD_STR(html, "</div>");
 
 	RETURN_OK_CLEANUP;
 }

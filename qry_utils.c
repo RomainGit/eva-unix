@@ -950,7 +950,7 @@ int qry_add_val(					/* return : 0 on success, other on error */
 	if(!val->IdField) RETURN_OK;
 
 	/* Salt password before writing */
-	if (val->IdField == cntxt->val_PASSWORD && storage == 1 && val->len)
+	if(val->IdField == cntxt->val_PASSWORD && storage == 1 && val->len)
 	{
 		trans_string(val->txt, cntxt->salt);
 		val->IdValue = 0;

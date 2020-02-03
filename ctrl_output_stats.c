@@ -2041,7 +2041,7 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 					ctrl->objtbl->line = 0;
 					ctrl->objtbl->lines = ctrl->objtbl->totlines;
 					if(table_read_obj_list(cntxt, i_ctrl, 0)) STACK_ERROR;
-					if(table_prepare_rows(cntxt, i_ctrl, "")) STACK_ERROR;
+					if(table_prepare_rows(cntxt, i_ctrl, 0)) STACK_ERROR;
 					if(file_write_tabrc(cntxt, &ctrl->objtbl->cellval, "dump.txt")) CLEAR_ERROR;
 					memcpy(&ctrl->attr, &tmp, sizeof(tmp));
 					table_free(ctrl->objtbl);
@@ -2079,7 +2079,7 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 				DYNBUF_ADD_STR(&cntxt->html,
 					"Erreur dans Microsoft Excel - le fichier n'a pas pu être produit au format Office<br><br>"
 					"Vous pouvez télécharger le fichier au format HTML et l'ouvrir avec un tableur sur votre poste<br><br>");
-				rename(htmname, "TableStatsRes.xls");
+				if(rename(htmname, "TableStatsRes.xls")) RETURN_ERR_DIRECTORY;
 			}
 			remove(htmname);
 
@@ -2089,7 +2089,7 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 				sprintf(filename, "%s.doc", fname);
 				sz_filename = file_compatible_name(filename);
 				remove(filename);
-				rename("TableStatsRes.doc", filename);
+				if(rename("TableStatsRes.doc", filename)) RETURN_ERR_DIRECTORY;
 				if(file_output_link(cntxt, &cntxt->html,
 							add_sz_str("<b><u>Fichier document</u></b> : "),
 							fname, sz_fname, filename, sz_filename, "#user", NULL, 0, NULL, 0, 3)) STACK_ERROR;
@@ -2099,7 +2099,7 @@ int ctrl_add_output_stats(			/* return : 0 on success, other on error */
 			sprintf(filename, "%s.xls", fname);
 			sz_filename = file_compatible_name(filename);
 			remove(filename);
-			rename("TableStatsRes.xls", filename);
+			if(rename("TableStatsRes.xls", filename)) RETURN_ERR_DIRECTORY;
 			if(file_output_link(cntxt, &cntxt->html,
 						add_sz_str("<b><u>Fichier tableur</u></b> : "),
 						fname, sz_fname, filename, sz_filename, "#user", NULL, 0, NULL, 0,

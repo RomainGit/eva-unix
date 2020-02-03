@@ -124,7 +124,7 @@ void put_html_error(EVA_context *cntxt)
 		"</p>\n", cntxt->err.file, cntxt->err.file);
 
 	/* Open file in errlog directory */
-	if (chdir(cntxt->rootdir) || (chdir("errlog") && (MKDIR("errlog") || chdir("errlog")))) return;
+	if(chdir(cntxt->rootdir) || (chdir("errlog") && (MKDIR("errlog") || chdir("errlog")))) return;
 	f = fopen(cntxt->err.file, "w");
 	if(!f)
 	{

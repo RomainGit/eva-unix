@@ -142,11 +142,11 @@ void trans_string(
 	int s = abs(salt);
 	int r = salt > 0 ? 1 : -1;
 	//printf("SALT=%i *** str=%s", salt, str);
-	if (!salt) return;
-	for (size_t i = 0; str[i]; i++)
+	if(!salt) return;
+	for(size_t i = 0; str[i]; i++)
 	{
 		int c = str[i];
-		if (c < 33 || c > 126) continue;
+		if(c < 33 || c > 126) continue;
 		str[i] = 33 + ((c + 155 + r * (((i + 1) * s) % 94)) % 94);
 	}
 	//printf(" - res=%s<br>", str);
@@ -202,14 +202,14 @@ int ctrl_read_values(				/* return : 0 on success, other on error */
 	}
 	else
 		/* Read control values from DB if no CGI */
-		if (!form->b_newobj)
+		if(!form->b_newobj)
 		{
 			if(dyntab_filter_field(&ctrl->val, 0, &form->objdata, ctrl->FIELD, ~0UL, NULL)) RETURN_ERR_MEMORY;
 			if(salt && ctrl->val.nbrows) trans_string(ctrl->val.cell->txt, -salt);
 		}
 
 	/* Read DB values if applicable */
-	if (!form->b_newobj)
+	if(!form->b_newobj)
 	{
 		if(dyntab_filter_field(&ctrl->dbval, 0, &form->objdata, ctrl->FIELD, ~0UL, NULL)) RETURN_ERR_MEMORY;
 		if(salt && ctrl->dbval.nbrows) trans_string(ctrl->dbval.cell->txt, -salt);
