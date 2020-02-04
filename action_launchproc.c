@@ -36,7 +36,7 @@ int office_launchproc(			/* return : 0 on success, other on error */
 	char *procname				/* in : office template to transfer to current directory & open */
 ){
 	struct stat fs = {0};
-	char filename[1024] = {0};
+	char filename[_MAX_PATH] = {0};
 	char cmd[4096] = {0};
 	char wd[1024];
 	DynTable* ext = &cntxt->cnf_extproc;
@@ -49,19 +49,28 @@ int office_launchproc(			/* return : 0 on success, other on error */
 	for(i = 0; i < ext->nbrows && strcmp(proctyp, dyntab_val(ext, i, 0)); i++);
 	if(i == ext->nbrows) RETURN_ERROR("Procedure not available - see extproc.conf", { ERR_PUT_TXT("TYPE=", proctyp, 0) });
 
-	/* Prepare template procedure file path : look first in templates database subdir */
-	snprintf(add_sz_str(filename), "%stemplates" DD "%s" DD "%s", cntxt->rootdir, cntxt->dbname, procname);
-	if(stat(filename, &fs)) snprintf(add_sz_str(filename), "%stemplates" DD "%s", cntxt->rootdir, procname);
-	if(stat(filename, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier modèle non trouvé : ", procname ? procname : "(null)", 0));
+	/* Check template procedure copy mode */
+	if(!dyntab_sz(ext, i, 2))
+	{
+        /* Prepare template procedure file path : look first in templates database subdir (Typically for MSOffice) */
+        snprintf(add_sz_str(filename), "%stemplates" DD "%s" DD "%s", cntxt->rootdir, cntxt->dbname, procname);
+        if(stat(filename, &fs)) snprintf(add_sz_str(filename), "%stemplates" DD "%s", cntxt->rootdir, procname);
+        if(stat(filename, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier modèle non trouvé : ", procname ? procname : "(null)", 0));
 
-	/* Copy template procedure */
-	snprintf(add_sz_str(cmd), CP_CMD " %s . >exe.txt 2>exeerr.txt", filename);
-	if(system(cmd) == -1 || stat(filename, &fs)) RETURN_ERR_DIRECTORY;
+        /* Copy template procedure */
+        snprintf(add_sz_str(cmd), CP_CMD " %s . >exe.txt 2>exeerr.txt", filename);
+        if(system(cmd) == -1 || stat(filename, &fs)) RETURN_ERR_DIRECTORY;
 
-	/* Launch program with file procedure argument */
-	snprintf(cmd, sizeof(cmd) - 1, "%s %s" DD "%s>exe.txt 2>exeerr.txt", dyntab_val(ext, i, 1), wd, procname);
-	if(system(cmd) == -1 || stat("exe.txt", &fs) || stat("exeerr.txt", &fs) || fs.st_size > 0)
-		RETURN_ERROR("Erreur lors de l'appel du traitement", { ERR_PUT_FILE("\nexe : ", "exe.txt"); ERR_PUT_FILE("\nexeerr : ", "exeerr.txt"); });
+        /* Launch program with path & file procedure argument */
+        snprintf(cmd, sizeof(cmd) - 1, "%s %s" DD "%s>exe.txt 2>exeerr.txt", dyntab_val(ext, i, 1), wd, procname);
+	} else {
+        /* Launch program with procedure argument contaning path (Typically for soffice macro call) */
+        snprintf(add_sz_str(filename) - 1, procname, wd);
+        snprintf(cmd, sizeof(cmd) - 1, "%s \"%s\">exe.txt 2>exeerr.txt", dyntab_val(ext, i, 1), filename);
+    }
+	if(system(cmd) == -1 || stat("exe.txt", &fs) || stat("exeerr.txt", &fs) || fs.st_size > 10)
+		RETURN_ERROR("There is an error message",
+            { ERR_PUT_TXT("Command : ", cmd, 0); ERR_PUT_FILE("\nexe.txt : ", "exe.txt"); ERR_PUT_FILE("\nexeerr.txt : ", "exeerr.txt"); });
 	remove("exe.txt");
 	remove("exeerr.txt");
 
