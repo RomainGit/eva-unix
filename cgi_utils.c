@@ -137,17 +137,7 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 	}
 
 	/* Disable / enable javascript if applicable */
-	{
-		char *msie = cntxt->user_agent ? strstr(cntxt->user_agent, " MSIE ") : NULL;
-		int vers = msie ? atoi(msie + 6) : -1;
-		cntxt->b_pda = cntxt->user_agent && strstr(cntxt->user_agent, " IEMobile ") != 0;
-		if(vers > 0 && vers < 5 || cntxt->b_pda)
-		{
-			cntxt->jsenabled = 0;
-			cntxt->imgwait = 0;
-		}
-		else if(!cntxt->cgi) cntxt->jsenabled = 1;
-	}
+	cntxt->jsenabled = 1;
 
 	RETURN_OK_CLEANUP;
 }
@@ -1492,7 +1482,7 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 	}
 
 	/* If debug mode from trace input */
-	else if(!enctype)
+	else if(!cntxt->user_agent)
 		cgi_read_trace_input(cntxt);
 
 	/* Call CGI read function depending on encoding type */

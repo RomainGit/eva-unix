@@ -62,6 +62,25 @@ int FILE_write_tabrc(				/* return : 0 on success, other on error */
 );
 
 /*********************************************************************
+** Fonction : file_copy_template
+** Description : copy a template from db or main dir to current dir
+*********************************************************************/
+int file_copy_template(				/* return : 0 on success, other on error */
+	EVA_context* cntxt,				/* in : execution context data */
+	char* src						/* in : template file name */
+);
+
+/*********************************************************************
+** Fonction : file_write_soffice
+** Description : write a StarOffice compatible file
+*********************************************************************/
+int file_write_soffice(				/* return : 0 on success, other on error */
+	EVA_context * cntxt,				/* in : execution context data */
+	DynTable * data,					/* in : table to write */
+	unsigned long idx				/* in : export format index in cntxt->cnf_lstproc */
+);
+
+/*********************************************************************
 ** Fonction : file_write_tabrc
 ** Description : write a table in a tabulated text file
 *********************************************************************/

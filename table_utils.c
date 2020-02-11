@@ -586,7 +586,8 @@ int table_put_opensearch_btn(			/* return : 0 on success, other on error */
 ** Description : output export list data button
 *********************************************************************/
 #define ERR_FUNCTION "table_put_export_btn"
-#define ERR_CLEANUP	M_FREE(name)
+#define ERR_CLEANUP	M_FREE(name); \
+					M_FREE(note)
 int table_put_export_btn(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl				/* in : control index in cntxt->form->ctrl */
@@ -595,6 +596,7 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	ObjTableFormat *tbl = ctrl->objtbl;
 	DynBuffer *name = NULL;
+	DynBuffer *note = NULL;
 	char *b_export = DYNTAB_FIELD_VAL(tbl->attr, EXPORTLIST);
 	DynTable* lst = &cntxt->cnf_lstproc;
 	CHECK_HTML_STATUS;
@@ -604,13 +606,15 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 
 	/* Output export buttons */
 	DYNBUF_ADD_STR(html, "<td align=right>");
-	for(unsigned long i = 0; i < lst->nbrows; i++)
+	for(unsigned long i = 1; i < lst->nbrows; i++)
 	{
 		char img[256], img_s[256];
 		if(ctrl_cgi_name(cntxt, ctrl, NULL, 1, &name, 'B', dyntab_val(lst, i, 0), dyntab_sz(lst, i, 0))) STACK_ERROR;
-		snprintf(add_sz_str(img) - 1, "%s.gif", dyntab_val(lst, i, 4));
-		snprintf(add_sz_str(img_s) - 1, "%s_s.gif", dyntab_val(lst, i, 4));
-		if(put_html_button(cntxt, name->data, dyntab_val(lst, i, 5), img, img_s, "Cliquez pour obtenir la liste des fiches", 0, 0)) STACK_ERROR;
+		snprintf(add_sz_str(img) - 1, "%s.gif", dyntab_val(lst, i, 5));
+		snprintf(add_sz_str(img_s) - 1, "%s_s.gif", dyntab_val(lst, i, 5));
+		DYNBUF_ADD3_CELL(&note, "Export au format ", lst, i, 6, NO_CONV, "\nCliquez pour obtenir la liste des fiches")
+		if(put_html_button(cntxt, name->data, dyntab_val(lst, i, 6), img, img_s, note->data, 0, 0)) STACK_ERROR;
+		note->cnt = 0;
 	}
 	DYNBUF_ADD_STR(html, "</td>");
 
@@ -1994,60 +1998,78 @@ int table_export_list(			/* return : 0 on success, other on error */
 	char cwd[1024];
 	DynTable* lst = &cntxt->cnf_lstproc;
 	struct stat fs;
+	char *proc;
 	if(!tbl) RETURN_OK;
 
 	/* Set temp directory for user */
 	if(chdir_user_doc(cntxt)) STACK_ERROR;
 	if(!getcwd(add_sz_str(cwd))) RETURN_ERR_DIRECTORY;
 
-	/* Prepare text file with table data */
+	/* Search for export button in config list */
+	for(i = 1; i < lst->nbrows && strcmp(btn, dyntab_val(lst, i, 0)); i++);
+	proc = dyntab_val(lst, i, 1);
+
+	/* Prepare table data */
 	form->step = form->prevstep;
 	if(table_init_obj_list(cntxt, i_ctrl, &b_selobj)) STACK_ERROR;
 	tbl->line = 0;
 	tbl->lines = tbl->totlines;
-	if(table_sort_obj_list(cntxt, i_ctrl, b_selobj)) STACK_ERROR;
-	if(table_read_obj_list(cntxt, i_ctrl, b_selobj)) STACK_ERROR;
-	if(table_prepare_rows(cntxt, i_ctrl, 1)) STACK_ERROR;
-	if(file_write_tabrc(cntxt, &tbl->cellval, "dump.txt")) STACK_ERROR;
+	if(table_sort_obj_list(cntxt, i_ctrl, b_selobj) ||
+		table_read_obj_list(cntxt, i_ctrl, b_selobj) ||
+		table_prepare_rows(cntxt, i_ctrl, atoi(dyntab_val(lst, i, 2)))) STACK_ERROR;
 
-	/* Prepare output format file */
-	dyntab_free(&tbl->cellval);
-	DYNTAB_SET(&tbl->cellval, 0, 0, "Fields");
-	DYNTAB_SET(&tbl->cellval, 1, 0, "Formats");
-	DYNTAB_SET(&tbl->cellval, 2, 0, "Fixed");
-	for(i = 0; i < tbl->field.nbrows; i++)
+	/* Handle built-in procedures for soffice files */
+	if(!strncmp(proc, add_sz_str("EVA_")))
 	{
-		if(!strcmp("_EVA_RELATION_BTN0", dyntab_val(&tbl->format, i, 0))) continue;
-		DYNTAB_SET_CELL(&tbl->cellval, 0, i + 1, &tbl->field, i, 0);
-		DYNTAB_SET_CELL(&tbl->cellval, 1, i + 1, &tbl->format, i, 0);
-		if(!strcmp("0", dyntab_val(&tbl->strip, i, 0))) DYNTAB_SET(&tbl->cellval, 2, i + 1, "X");
-	}
-	if(file_write_tabrc(cntxt, &tbl->cellval, "dumpfmt.txt")) STACK_ERROR;
+		/* Copy template in current dir */
+		if (file_copy_template(cntxt, dyntab_val(lst, i, 3))) STACK_ERROR;
 
-	/* Produce office document */
-	for(i = 0; i < lst->nbrows && strcmp(btn, dyntab_val(lst, i, 0)); i++);
-	if(office_launchproc(cntxt, dyntab_val(lst, i, 1), dyntab_val(lst, i, 2))) CLEAR_ERROR;
+		/* Handle table data to produce a soffice file */
+		if (file_write_soffice(cntxt, &tbl->cellval, i)) STACK_ERROR;
+	}
+	else
+	{
+		/* Write table data in file */
+		if (file_write_tabrc(cntxt, &tbl->cellval, "dump.txt")) STACK_ERROR;
+
+		/* Prepare output format file */
+		dyntab_free(&tbl->cellval);
+		DYNTAB_SET(&tbl->cellval, 0, 0, "Fields");
+		DYNTAB_SET(&tbl->cellval, 1, 0, "Formats");
+		DYNTAB_SET(&tbl->cellval, 2, 0, "Fixed");
+		for(i = 0; i < tbl->field.nbrows; i++)
+		{
+			if(!strcmp("_EVA_RELATION_BTN0", dyntab_val(&tbl->format, i, 0))) continue;
+			DYNTAB_SET_CELL(&tbl->cellval, 0, i + 1, &tbl->field, i, 0);
+			DYNTAB_SET_CELL(&tbl->cellval, 1, i + 1, &tbl->format, i, 0);
+			if(!strcmp("0", dyntab_val(&tbl->strip, i, 0))) DYNTAB_SET(&tbl->cellval, 2, i + 1, "X");
+		}
+		if(file_write_tabrc(cntxt, &tbl->cellval, "dumpfmt.txt")) STACK_ERROR;
+
+		/* Produce office document */
+		if(!proc && office_launchproc(cntxt, dyntab_val(lst, i, 1), dyntab_val(lst, i, 3))) CLEAR_ERROR;
+	}
 
 	/* Clear temp files */
 	remove("dump.txt");
 	remove("dumpfmt.txt");
 	remove("err.txt");
 	remove("msg.txt");
-	remove(dyntab_val(lst, i, 2));
+	remove(dyntab_val(lst, i, 3));
 
 	/* Check result presence */
-	if(stat(dyntab_val(lst, i, 3), &fs)) RETURN_ERROR("Erreur durant la production du document liste", { ERR_PUT_CELL("\nFichier source : ", lst, i, 2); ERR_PUT_CELL("\nFichier attendu : ", lst, i, 3) });
+	btn = dyntab_val(lst, i, 4);
+	if(stat(btn, &fs)) RETURN_ERROR("Erreur durant la production du document liste", { ERR_PUT_CELL("\nFichier source : ", lst, i, 3); ERR_PUT_CELL("\nFichier attendu : ", lst, i, 4) });
 
 	/* Build destination file name */
 	qry_obj_label(cntxt, NULL, NULL, NULL, &label, NULL, NULL, NULL, NULL, 0, &form->objdata, 0);
 	sz_name = snprintf(add_sz_str(name), "%s", ctrl->LABEL);
 	if(label && strcmp(ctrl->LABEL, label->data)) sz_name += snprintf(name + sz_name, sizeof(name) - sz_name, "  - %s", label->data);
-	btn = dyntab_val(lst, i, 3);
-	for(j = dyntab_sz(lst, i, 3); j > 1 && btn[j] != '.'; j--);
+	for(j = dyntab_sz(lst, i, 4); j > 1 && btn[j] != '.'; j--);
 	if(btn[j] == '.') snprintf(add_sz_str(fname), "%s%s", name, btn + j);
 	sz_fname = file_compatible_name(fname);
 	remove(fname);
-	if(rename(dyntab_val(lst, i, 3), fname)) RETURN_ERR_DIRECTORY;
+	if(rename(btn, fname)) RETURN_ERR_DIRECTORY;
 
 	/* Output download dialog header */
 	DYNBUF_ADD3(&cntxt->html,
@@ -2056,7 +2078,7 @@ int table_export_list(			/* return : 0 on success, other on error */
 
 	/* Output link to file */
 	if(file_output_link(cntxt, &cntxt->html,
-				dyntab_val(lst, i, 5), dyntab_sz(lst, i, 5),
+				dyntab_val(lst, i, 6), dyntab_sz(lst, i, 6),
 				name, sz_name, fname, sz_fname, "#user", NULL, 0, NULL, 0,
 				7 | (form->b_modified ? 0 : 8))) STACK_ERROR;
 

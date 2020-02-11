@@ -117,7 +117,7 @@ int file_to_dynbuf(					/* return : 0 on success, other on error */
 	*res = dynbuf_init(sts.st_size+16);
 
 	/* Open file & read data */
-	f = fopen(file, "r");
+	f = fopen(file, "rb");
 	if(!f)  RETURN_ERROR("Impossible d'ouvrir le fichier", NULL);
 	(*res)->cnt = fread((*res)->data, 1, sts.st_size+2, f);
 	fclose(f);
@@ -189,7 +189,7 @@ int file_read_config(				/* return : 0 on success, other on error */
 	DynTable *usr = &cntxt->cnf_users;
 
 	/* Read SQL users configuration file */
-	if(chdir(cntxt->path)) RETURN_ERR_DIRECTORY;
+	if(chdir(cntxt->rootdir) || chdir("..") || chdir("conf")) RETURN_ERROR("No ~/conf directory", {});
 	if(file_read_tabrc(cntxt, usr, "users.conf"))
 	{
 		/* No config file : use root */
@@ -207,8 +207,13 @@ int file_read_config(				/* return : 0 on success, other on error */
 			break;
 		}
 	}
-	if(file_read_tabrc(cntxt, &cntxt->cnf_extproc, "extproc.conf")) CLEAR_ERROR_NOWARN;
-	if(file_read_tabrc(cntxt, &cntxt->cnf_lstproc, "lstproc.conf")) CLEAR_ERROR_NOWARN;
+
+	/* Read external procedures & list export buttons configuration files */
+	if( file_read_tabrc(cntxt, &cntxt->cnf_extproc, "extproc.conf") ||
+        file_read_tabrc(cntxt, &cntxt->cnf_lstproc, "lstproc.conf")) CLEAR_ERROR_NOWARN;
+
+	if(chdir(cntxt->path)) CLEAR_ERROR_NOWARN;
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -357,6 +362,217 @@ int FILE_write_tabrc(				/* return : 0 on success, other on error */
 #undef ERR_FUNCTION
 #undef ERR_CLEANUP
 
+#if defined _WIN32  || defined _WIN64
+#define CP_CMD "COPY"
+#else
+#define CP_CMD "cp"
+#endif
+
+/*********************************************************************
+** Fonction : file_copy_template
+** Description : copy a template from db or main dir to current dir
+*********************************************************************/
+#define ERR_FUNCTION "file_copy_template"
+#define ERR_CLEANUP
+int file_copy_template(				/* return : 0 on success, other on error */
+	EVA_context* cntxt,				/* in : execution context data */
+	char *src						/* in : template file name */
+) {
+	struct stat fs = { 0 };
+	char filename[_MAX_PATH];
+	char cmd[_MAX_PATH + 100] = { 0 };
+
+	/* Prepare template file path : look first in templates database subdir */
+	snprintf(add_sz_str(filename), "%stemplates" DD "%s" DD "%s", cntxt->rootdir, cntxt->dbname, src);
+	if (stat(filename, &fs)) snprintf(add_sz_str(filename) , "%stemplates" DD "%s", cntxt->rootdir, src);
+	if (stat(filename, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier modèle non trouvé : ", src ? src : "(null)", 0));
+
+	/* Copy template procedure */
+	snprintf(add_sz_str(cmd), CP_CMD " %s . >exe.txt 2>exeerr.txt", filename);
+	if (system(cmd) == -1 || stat(filename, &fs)) RETURN_ERR_DIRECTORY;
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+#define MY_STRSTR(a, b) (((a) && (b)) ? strstr(a, b) : NULL)
+#define SOFF_END_PARA "</text:p>"
+#define SOFF_END_CELL "</table:table-cell>"
+#define SOFF_END_ROW "</table:table-row>"
+/*********************************************************************
+** Fonction : file_write_tblcell
+** Description : write a text value in a StarOffice cell
+*********************************************************************/
+size_t file_write_tblcell(		/* return : 0 on success, other on error */
+	FILE* f,						/* in : output file stream */
+	char* p0,						/* in : start of template text for cell */
+	char* txt,						/* in : value to output in cell */
+	char options					/* in : bitmask options for output
+											bit 0 : split \n in paragraphs if set
+											bit 1 : first cell - output row header if set (p0 is start of row)
+											bit 2 : last cell - output row footer if set */
+) {
+	char* p1 = MY_STRSTR(p0, SOFF_END_CELL), *p, * ps, * pe, * pr;
+	size_t sz = 0;
+	if (!p0 || !p1) return 0;
+	p1 += sizeof(SOFF_END_CELL) - 1;
+
+	/* Handle first cell : output row start */
+	if (options & 2)
+	{
+		p = MY_STRSTR(p0, "<table:table-cell ");
+		if (!p || p - p0 < 10) return 0;
+		sz += fwrite(p0, p - p0, 1, f);
+		p0 = p;
+	}
+
+	/* Find paragraph in template */
+	p = MY_STRSTR(p0, "<text:p ");
+	ps = MY_STRSTR(p, ">");
+	pe = MY_STRSTR(ps, SOFF_END_PARA);
+	if (!pe) return 0;
+	ps++;
+
+	/* Output template cell header */
+	sz += fwrite(p0, p - p0, 1, f);
+
+	/* Split end of lines in paragraphs */
+	do {
+		sz += fwrite(p, ps - p, 1, f);
+		pr = (options & 1) ? strstr(txt, "\n") : NULL;
+		if (pr)
+		{
+			*pr = 0;
+			sz += fprintf(f, "\n%s\n", txt);
+			txt = pr + 1;
+		}
+		else sz += fprintf(f, "\n%s\n", txt);
+		sz += fprintf(f, "%s\n", SOFF_END_PARA);
+	} while (pr);
+
+	/* Output template up to cell or row end */
+	pe += sizeof(SOFF_END_PARA) - 1;
+	p = MY_STRSTR(pe, (options & 4) ? SOFF_END_ROW : SOFF_END_CELL);
+	if (!p) return sz;
+	sz += fwrite(pe, p - pe + ((options & 4) ? sizeof(SOFF_END_ROW) : sizeof(SOFF_END_CELL)) - 1, 1, f);
+
+	return sz;
+}
+
+/*********************************************************************
+** Fonction : file_write_soffice
+** Description : write a StarOffice compatible file
+*********************************************************************/
+#define ERR_FUNCTION "file_write_soffice"
+#define ERR_CLEANUP if(f) fclose(f); \
+				M_FREE(src); \
+				M_FREE(dst); \
+				M_FREE(tmp)
+int file_write_soffice(					/* return : 0 on success, other on error */
+	EVA_context * cntxt,				/* in : execution context data */
+	DynTable * data,					/* in : table data to export */
+	unsigned long idx					/* in : export procedure index in cntxt->cnf_lstproc */
+) {
+	DynBuffer* src = NULL;
+	DynBuffer* dst = NULL;
+	DynBuffer* tmp = NULL;
+	DynTable* lst = &cntxt->cnf_lstproc;
+	char* proc = dyntab_val(lst, idx, 1);
+	FILE* f = NULL;
+	char cmd[_MAX_PATH + 10] = { 0 };
+	char *p_utf, *p_tbl, *p_row1, *p_row2, *p_row3, *p_lbl, * p_val, *p_endt;
+	unsigned long i;
+	size_t sz = 0;
+
+	if (!data) RETURN_OK;
+
+	/* Unzip xml files from soffice source document */
+	remove("content.xml");
+	snprintf(add_sz_str(cmd), "unzip %s content.xml >exe.txt 2>exeerr.txt", dyntab_val(lst, idx, 3));
+	if (system(cmd) == -1) RETURN_ERR_DIRECTORY;
+
+	/* Read content.xml file */
+	if (file_to_dynbuf(cntxt, &src, "content.xml")) STACK_ERROR;
+	src->cnt = strip_rc(src->data, src->cnt);
+
+	/* Reopen content.xml file for output */
+	f = fopen("content.xml", "wb");
+	if (!f) RETURN_ERR_DIRECTORY;
+
+	/* Mark documents limits for table & rows duplication */
+	p_utf = MY_STRSTR(src->data, "UTF-8");
+	p_tbl = MY_STRSTR(p_utf, "<table:table ");
+	p_row1 = MY_STRSTR(p_tbl, "<table:table-row ");
+	p_row2 = MY_STRSTR(p_row1 + 1, "<table:table-row ");
+	p_lbl = MY_STRSTR(p_row2, "<table:table-cell ");
+	p_val = MY_STRSTR(p_lbl + 1, "<table:table-cell ");
+	p_row3 = MY_STRSTR(p_val, "<table:table-row ");
+	p_endt = MY_STRSTR(p_row3, "</table:table>");
+	if (!p_endt) RETURN_ERROR("Invalid format for template file - expecting table 3 rows x 2 columns", ERR_PUT_TXT("File name : ", proc, 0));
+
+	/* Output header up to first table - replace UTF-8 with latin1 */
+	sz += fwrite(src->data, p_utf - src->data, 1, f);
+	sz += fprintf(f, "latin1");
+	sz += fwrite(p_utf + 5, p_tbl - p_utf - 5, 1, f);
+
+	/* Loop on data rows */
+	for(i = 1; i < data->nbrows; i++)
+	{
+		char* obj = dyntab_val(data, i, 0);
+		char* lbl = dyntab_val(data, i, 1);
+		char* val = dyntab_val(data, i, 2);
+
+		/* New object : start new table */
+		if (i == 1 || strcmp(obj, dyntab_val(data, i - 1, 0)))
+		{
+			if(i > 1) sz += fprintf(f, "</table:table><text:p></text:p>");
+			sz += fwrite(p_tbl, p_row1 - p_tbl, 1, f);
+		}
+
+		/* Title cell (empty value) */
+		if (!*val)
+		{
+			DYNBUF_ADD3_CELL(&tmp, "Fiche n° ", data, i, 0, NO_CONV, " : ");
+			DYNBUF_ADD_CELL(&tmp, data, i, 1, NO_CONV);
+			sz += file_write_tblcell(f, p_row1, tmp->data, 6);
+			tmp->cnt = 0;
+		}
+		/* Cell value with label */
+		else if (*lbl)
+		{
+			/* Output cell label */
+			sz += file_write_tblcell(f, p_row2, lbl, 2);
+
+			/* Output cell value with paragraphs & &close row */
+			sz += file_write_tblcell(f, p_val, val, 5);
+		}
+		/* Cell value without label */
+		else
+		{
+			sz += file_write_tblcell(f, p_row3, val, 7);
+		}
+	}
+
+	/* Output template trailer & close file */
+	sz += fprintf(f, "%s", p_endt);
+	fclose(f);
+
+	/* Zip back content.xml to template document & rename as result document */
+	snprintf(add_sz_str(cmd), "zip %s content.xml >exe.txt 2>exeerr.txt", dyntab_val(lst, idx, 3));
+	if (system(cmd) == -1) RETURN_ERR_DIRECTORY;
+	remove(dyntab_val(lst, idx, 4));
+	if(rename(dyntab_val(lst, idx, 3), dyntab_val(lst, idx, 4))) RETURN_ERR_DIRECTORY;
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+#undef MY_STRSTR
+#undef SOFF_END_PARA
+#undef SOFF_END_CELL
+#undef SOFF_END_ROW
+
 /*********************************************************************
 ** Fonction : file_write_tabrc
 ** Description : write a table in a tabulated text file
@@ -365,20 +581,20 @@ int FILE_write_tabrc(				/* return : 0 on success, other on error */
 #define ERR_CLEANUP if(f) fclose(f); \
 					M_FREE(buf)
 int file_write_tabrc(				/* return : 0 on success, other on error */
-	EVA_context *cntxt,				/* in : execution context data */
-	DynTable *data,					/* in : table to write */
-	char *file						/* in : output file name */
-){
-	DynBuffer *buf = NULL;
-	FILE *f = NULL;
+	EVA_context* cntxt,				/* in : execution context data */
+	DynTable* data,					/* in : table to write */
+	char* file						/* in : output file name */
+) {
+	DynBuffer* buf = NULL;
+	FILE* f = NULL;
 
-	if(!data) RETURN_OK;
+	if (!data) RETURN_OK;
 
 	/* Open export file */
 	f = fopen(file, "w");
-	if(!f) RETURN_ERROR("Impossible d'écrire dans le fichier", NULL);
+	if (!f) RETURN_ERR_DIRECTORY;
 
-	if(!FILE_write_tabrc(cntxt, data, f)) STACK_ERROR;
+	if (!FILE_write_tabrc(cntxt, data, f)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }

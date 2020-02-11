@@ -263,13 +263,15 @@ int qry_obj_label(						/* return : 0 on success, other on error */
 	}
 
 	/* Initialize output buffers */
-	if(label) M_FREE(*label);
-	if(objname) M_FREE(*objname);
-	if(objtitle) M_FREE(*objtitle);
-	if(fnotes) M_FREE(*fnotes);
-	if(notes) M_FREE(*notes);
-	if(img) M_FREE(*img);
-	if(imgsel) M_FREE(*imgsel);
+#define INIT_BUFLBL(x) if (x && *x) (*x)->cnt = 0;
+	INIT_BUFLBL(label);
+	INIT_BUFLBL(objname);
+	INIT_BUFLBL(objtitle);
+	INIT_BUFLBL(fnotes);
+	INIT_BUFLBL(notes);
+	INIT_BUFLBL(img);
+	INIT_BUFLBL(imgsel);
+#undef INIT_BUFLBL
 
 	/* Use current form & object if no data given */
 	if(!objdata && cntxt->form) id_form = DYNTAB_TOUL(&cntxt->form->id_form);

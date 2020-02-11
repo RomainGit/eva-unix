@@ -18,12 +18,6 @@ int EcheancierAEMO(EVA_context *cntxt, unsigned long i_ctrl);
 int FactureTPS(EVA_context *cntxt, unsigned long i_ctrl);
 int EcheancierTPS(EVA_context *cntxt, unsigned long i_ctrl);
 
-#if defined _WIN32  || defined _WIN64
-#define CP_CMD "COPY"
-#else
-#define CP_CMD "cp"
-#endif
-
 /*********************************************************************
 ** Function : office_launchproc
 ** Description : lauch an external office program
@@ -52,14 +46,8 @@ int office_launchproc(			/* return : 0 on success, other on error */
 	/* Check template procedure copy mode */
 	if(!dyntab_sz(ext, i, 2))
 	{
-        /* Prepare template procedure file path : look first in templates database subdir (Typically for MSOffice) */
-        snprintf(add_sz_str(filename), "%stemplates" DD "%s" DD "%s", cntxt->rootdir, cntxt->dbname, procname);
-        if(stat(filename, &fs)) snprintf(add_sz_str(filename), "%stemplates" DD "%s", cntxt->rootdir, procname);
-        if(stat(filename, &fs)) RETURN_ERROR("Impossible de lancer le traitement", ERR_PUT_TXT("\nFichier modèle non trouvé : ", procname ? procname : "(null)", 0));
-
-        /* Copy template procedure */
-        snprintf(add_sz_str(cmd), CP_CMD " %s . >exe.txt 2>exeerr.txt", filename);
-        if(system(cmd) == -1 || stat(filename, &fs)) RETURN_ERR_DIRECTORY;
+        /* Copy template in current dir (Typically for MSOffice) */
+        if(file_copy_template(cntxt, procname)) STACK_ERROR;
 
         /* Launch program with path & file procedure argument */
         snprintf(cmd, sizeof(cmd) - 1, "%s %s" DD "%s>exe.txt 2>exeerr.txt", dyntab_val(ext, i, 1), wd, procname);
