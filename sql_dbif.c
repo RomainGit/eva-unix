@@ -43,11 +43,8 @@ int sql_open_session(				/* return : 0 on success, other on error */
 		RETURN_ERROR("Problème d'initialisation du serveur SQL", NULL);
 	}
 
-	/* Connect to MySql server using named pipes - return on error */
-#ifdef WIN32
-	//mysql_options(cntxt->sql_session, MYSQL_OPT_NAMED_PIPE, NULL);
-#endif
-	if(!mysql_real_connect(cntxt->sql_session, NULL, cntxt->dbuser, cntxt->dbpwd, cntxt->dbname, 0, NULL, 0))
+	/* Connect to MySql server - return on error */
+	if(!mysql_real_connect(cntxt->sql_session, cntxt->dbhost, cntxt->dbuser, cntxt->dbpwd, cntxt->dbname, MYSQL_PORT, NULL, 0))
 	{
 		sql_control(cntxt, 0);
 		RETURN_ERROR("Pas de connexion au serveur SQL", NULL);
@@ -225,7 +222,7 @@ int sql_exec_query				/* return : 0 on success, other on error */
 								  out : cntxt->sql_result */
 	char *query					/* in : SQL query */
 ){
-	int t1, t2;
+	unsigned int t1, t2;
 	int sql_trace = cntxt->sql_trace;
 	size_t query_sz = query ? strlen(query) : 0;
 

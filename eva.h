@@ -30,7 +30,7 @@
 /**********************************************************************
 ** System dependent includes & macros
 ***********************************************************************/
-#ifdef _WIN32
+#if defined _WIN32  || defined _WIN64
 /**********************************************************************
 ** Windows declarations
 ***********************************************************************/
@@ -810,6 +810,7 @@ typedef struct _EVA_context
 	DynBuffer *endjs;			/* JavaScript code output at end of page */
 
 	/* SQL session handling */
+	char *dbhost;           	/* SQL host to use */
 	char *dbname;				/* SQL database to use */
 	char* dbuser;				/* SQL database user */
 	char* dbpwd;				/* SQL database password */
@@ -831,9 +832,9 @@ typedef struct _EVA_context
 
 	/* Logs handling values */
 	char logfile[64];			/* log file name */
-	int sqltime;				/* MySql process time in ms */
-	int rxtime;					/* CGI receive clock time in ms */
-	int txtime;					/* HTML transmit clock time in ms */
+	unsigned int sqltime;				/* MySql process time in ms */
+	unsigned int rxtime;					/* CGI receive clock time in ms */
+	unsigned int txtime;					/* HTML transmit clock time in ms */
 	size_t rxsize;				/* CGI input data size */
 	size_t txsize;				/* HTML output data size */
 	struct timeval tm0;			/* process start time */

@@ -28,7 +28,7 @@ void err_add_context(
 
 	dyntab_add(&cntxt->err.stack, cntxt->err.stack.nbrows, 0,
 				tmp,
-				snprintf(tmp, sizeof(tmp), "%s - %s:%d", function, basename(file, 0), line),
+				snprintf(tmp, sizeof(tmp), "%s - %s:%d", function, fbasename(file, 0), line),
 				NO_CONV);
 }
 

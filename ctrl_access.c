@@ -158,7 +158,7 @@ int ctrl_check_user_access(			/* return : 0 on success, other on error */
 			if(!dyntab_sz(&ctrlgroup, line, 0))
 			{
 				matchline = line;
-				break; 
+				break;
 			}
 
 			/* Search for user groups in control */
@@ -167,7 +167,7 @@ int ctrl_check_user_access(			/* return : 0 on success, other on error */
 					if(!dyntab_cmp(&ctrlgroup, line, i, &cntxt->user_groups, j, 0))
 						matchline = line;
 		}
-			
+
 		/* Select access of 1st line matching user group */
 		if(!lines || matchline < lines)
 		{
@@ -317,7 +317,7 @@ int ctrl_check_access_v0(			/* return : 0 on success, other on error */
 			else matchline = line;
 		}
 	}
-		
+
 	/* Select access of 1st line matching user group */
 	if(!lines || matchline < lines)
 	{
@@ -501,7 +501,7 @@ int qry_values(						/* return : 0 on success, other on error */
 		}
 		else if(!strcmp(ctrltyp, "_EVA_INPUT"))
 		{
-			
+
 			/* Input : Check input type */
 			if(qry_cache_idobj_field(cntxt, &data, DYNTAB_TOUL(fields), "_EVA_TYPE", 2)) STACK_ERROR;
 			ctrltyp = dyntab_val(&data, 0, 0);
@@ -583,7 +583,7 @@ int ctrl_check_cond(				/* return : 0 on success, other on error */
 	}
 	else if(altdata && altdata->cell && altdata->cell->field)
 		typ = altdata->cell->field;
-	
+
 	/* Check condition type */
 	if(!strcmp(typ, "_EVA_USERINGROUP") || !strcmp(typ, "_EVA_USERNOTINGROUP"))
 	{
@@ -607,8 +607,12 @@ int ctrl_check_cond(				/* return : 0 on success, other on error */
 		if(idobj->nbrows && qry_filterlist_to_sql(cntxt, &buf, idobj, "AND")) CLEAR_ERROR_RETURN;
 		if(buf && form_eval_fieldexpr(cntxt, &obj, DYNTAB_TOUL(&form->id_form), DYNTAB_TOUL(&form->id_obj), DYNBUF_VAL_SZ(buf), NULL, 0)) CLEAR_ERROR_RETURN;
 
-		/* Matched if CONDTRUE and 1 or CONDFALSE and not 1 */
-		*res = !strcmp(typ, "_EVA_CURCONDTRUE") ^ (strcmp(dyntab_val(&obj, 0, 0), "1") != 0);
+		/* OR on results */
+		for(i = 0; i < obj.nbrows; i++)
+		{
+            /* Matched if CONDTRUE and 1 or CONDFALSE and not 1 */
+            *res |= !strcmp(typ, "_EVA_CURCONDTRUE") ^ (strcmp(dyntab_val(&obj, i, 0), "1") != 0);
+		}
 	}
 	else if(!strcmp(typ, "_EVA_CONDTRUE") || !strcmp(typ, "_EVA_CONDFALSE"))
 	{
@@ -664,7 +668,7 @@ int ctrl_check_cond(				/* return : 0 on success, other on error */
 	}
 	else
 		/* Check other condition */
-		*res = 
+		*res =
 			/* Empty or always true */
 			!*typ || !strcmp(typ, "_EVA_ALWAYS") ||
 			/* New object */
@@ -724,7 +728,7 @@ int ctrl_check_condlist(			/* return : 0 on success, other on error */
 		unsigned long idcond = DYNTAB_TOULRC(cond, r, c);
 		if(!idcond) continue;
 		if(qry_cache_idobj(&data, idcond)) STACK_ERROR;
-		
+
 		/* Split conditions, user groups & filters */
 		tab =	DYNTAB_FIELD_CELL(&data, TYPE_COND) ? &conds :
 				DYNTAB_FIELD_CELL(&data, CONTROL) ? &controls :
@@ -747,7 +751,7 @@ int ctrl_check_condlist(			/* return : 0 on success, other on error */
 		controls.cell->b_dontfreefield = 1;
 		if(ctrl_check_cond(cntxt, res, 0, &controls)) STACK_ERROR;
 	}
-		
+
 	/* Check conditions */
 	if(*res) for(i = 0; i < conds.nbrows && *res; i++)
 		if(ctrl_check_cond(cntxt, res, DYNTAB_TOULRC(&conds, i, 0), NULL)) STACK_ERROR;
@@ -777,7 +781,7 @@ int ctrl_check_condlist(			/* return : 0 on success, other on error */
 ** Description : evaluate a condition sequence - return matched line
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_check_condseq"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int ctrl_check_condseq(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	DynTable *cond,					/* in : table of conditions to process (IdObj) */

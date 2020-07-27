@@ -159,13 +159,13 @@ int mail_file_link(					/* return : 0 on success, other on error */
 	{
 		DYNBUF_ADD_CELLP(&buf, fname, HTML_NO_QUOTE);
 		DYNBUF_ADD3_BUF(res, "<a href='", buf, NO_CONV, "' target=_blank>");
- 		DYNBUF_ADD3(res, "", basename(name->txt, name->len), 0, TO_HTML, "</a> - ");
+ 		DYNBUF_ADD3(res, "", fbasename(name->txt, name->len), 0, TO_HTML, "</a> - ");
 		DYNBUF_ADD(res, size, 0, NO_CONV);
 	}
 	else
 	{
 		if(cgi_output_string(cntxt, &buf, fname->txt, fname->len)) STACK_ERROR;
-		DYNBUF_ADD(res, basename(name->txt, name->len), 0, NO_CONV);
+		DYNBUF_ADD(res, fbasename(name->txt, name->len), 0, NO_CONV);
 		DYNBUF_ADD3(res, " - ", size, 0, NO_CONV, "\n\t");
 		DYNBUF_ADD_BUF(res, buf, NO_CONV);
 	}
@@ -478,7 +478,7 @@ int prepare_mail(					/* return : 0 on success, other on error */
 	}
 
 	/* Build body */
-	if(mailmerge_brackets(cntxt, &sm->txtbody, c->txt, c->len, sm->i_ctrl, sm->b_html ? 2 : 0)) CLEAR_ERROR;
+	if(c && mailmerge_brackets(cntxt, &sm->txtbody, c->txt, c->len, sm->i_ctrl, sm->b_html ? 2 : 0)) CLEAR_ERROR;
 
 	/* Output attachements list to end of body if applicable */
 	if(*link_pos != '0' && sm->att.nbrows)

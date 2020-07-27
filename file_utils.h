@@ -11,7 +11,6 @@
 **     Created : April 28 2002
 *********************************************************************/
 
-
 /*********************************************************************
 ** Fonction : file_to_dynbuf
 ** Description : read a file in a dynbuffer
@@ -77,7 +76,8 @@ int file_copy_template(				/* return : 0 on success, other on error */
 int file_write_soffice(				/* return : 0 on success, other on error */
 	EVA_context * cntxt,				/* in : execution context data */
 	DynTable * data,					/* in : table to write */
-	unsigned long idx				/* in : export format index in cntxt->cnf_lstproc */
+	unsigned long idx,				/* in : export procedure index in cntxt->cnf_lstproc */
+	char* fname						/* in : final destination file name for header title */
 );
 
 /*********************************************************************
@@ -182,7 +182,6 @@ int get_image_size(			/* return : 0 if file found & params correct, 1 else */
 ** Description : return thumbnail file for the given image - build if necessary
 *********************************************************************/
 char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if not found */
-	EVA_context *cntxt,		/* in/out : execution context data */
 	char *imgpath,			/* in : image file path */
 	size_t imgpath_sz,		/* in : image file path size */
 	unsigned long dw,		/* in : desired image width - 0 if no constraint */
@@ -190,3 +189,15 @@ char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if n
 	unsigned long *ow,		/* out : thumbnail width - 0 if not available */
 	unsigned long *oh		/* out : thumbnail height - 0 if not available */
 );
+
+/*********************************************************************
+** Fonction : fbasename
+** Description : return the base name of a path as pointer in path
+*********************************************************************/
+char *fbasename(char *path, size_t path_len);
+
+/*********************************************************************
+** Fonction : fdirname
+** Description : return the directory of a path as static memory
+*********************************************************************/
+char *fdirname(char *path, size_t path_len);

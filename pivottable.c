@@ -828,34 +828,6 @@ int pivottable_add_field(					/* return : 0 on success, other on error */
 #undef ERR_CLEANUP
 
 /*********************************************************************
-** Function : pivottable_handle_relation_label
-** Description : handle label with relation format
-*********************************************************************/
-#define ERR_FUNCTION "pivottable_handle_relation_label"
-#define ERR_CLEANUP DYNTAB_FREE(objdata); \
-					M_FREE(buf)
-int pivottable_handle_relation_label(		/* return : 0 on success, other on error */
-	EVA_context *cntxt,						/* in/out : execution context data */
-	PivotTableField *pvf,					/* in/out : pivot field data */
-	unsigned long i							/* in : index to process in pvf->labels */
-){
-	DynTable objdata = {0};
-	DynBuffer *buf = NULL;
-	unsigned long id_obj = DYNTAB_TOULRC(&pvf->labels, i, 0);
-	if(id_obj)
-	{
-		dyntab_cell(&pvf->labels, i, 0)->IdObj = id_obj;
-		if(qry_obj_field(cntxt, &objdata, id_obj, NULL)) STACK_ERROR;
-		if(qry_obj_label(cntxt, NULL, NULL, &buf, NULL, NULL, NULL, NULL, NULL, 0, &objdata, 0)) STACK_ERROR;
-		DYNTAB_ADD_BUF(&pvf->labels, i, 0, buf);
-	}
-
-	RETURN_OK_CLEANUP;
-}
-#undef ERR_FUNCTION
-#undef ERR_CLEANUP
-
-/*********************************************************************
 ** Function : pivottable_build_labels
 ** Description : build labels for the given pivot table field
 *********************************************************************/
@@ -948,6 +920,7 @@ int pivottable_build_labels(				/* return : 0 on success, other on error */
 			c->IdObj = id_obj;
 			c->col = 1;
 			if(qry_obj_field(cntxt, &objdata, id_obj, NULL)) STACK_ERROR;
+			M_FREE(sql);
 			if(qry_obj_label(cntxt, NULL, NULL, &sql, NULL, NULL, NULL, NULL, NULL, 0, &objdata, 0)) STACK_ERROR;
 			DYNTAB_ADD_BUF(&pvf->labels, i, 0, sql);
 		}

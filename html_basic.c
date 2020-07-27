@@ -218,18 +218,24 @@ void put_html_page_header(
 		{
 			/* Read existing workstation Id in cookies */
 			char *cook = getenv("HTTP_COOKIE");
-			char *end = cook ? strchr(cook, ';') : NULL;
-			if(end) *end = 0;
-			if(cook) cook = strchr(cook, '=');
-			if(cook) dynbuf_add(&cntxt->id_wks, cook + 1, 0, NO_CONV);
+			if (cook && strncmp(cook, add_sz_str("WKS=")))
+			{
+				cook = strstr(cook, "; WKS=");
+				if (cook) cook += 2;
+			}
+			if (cook && !strncmp(cook, add_sz_str("WKS=")))
+			{
+				char* end = strchr(cook, ';');
+				cook += 4;
+				dynbuf_add(&cntxt->id_wks, cook, end ? end - cook : 0 , NO_CONV);
+			}
 
-			/* Build new Id & set cookie if none found */
+			/* Build new Id & set cookie for 10 years if none found */
 			if(!cntxt->id_wks)
 			{
 				char id[128];
 				snprintf(add_sz_str(id), "%s-%x", datetxt_now(), rand());
-				if(*id) cntxt->txsize += printf(
-					"Set-Cookie: WKS=%s; expires=Monday, 15-Jun-2020 00:00:00 GMT;\n", id);
+				cntxt->txsize += printf("Set-Cookie: WKS=%s; Max-age=315576000\n", id);
 			}
 
 			/* Put HTML Content-Type header */
@@ -366,7 +372,7 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 {
 	int b_stats = 1;
 	DynBuffer *focus = cntxt->focus1 ? cntxt->focus1 : cntxt->focus2 ? cntxt->focus2 : cntxt->focus3;
- 	int t;
+	unsigned int t;
 
 	if(!(cntxt->b_terminate & 64))
 	{
@@ -384,7 +390,6 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 		if(!f && focus) cntxt->txsize += printf("document.mainform[\"%s\"].focus();", focus->data);
 		cntxt->txsize += fprintf(f ? f : stdout, "%s", "</script>");
 
-#define TIME_CELL(txt, bg) "<td align=center bgcolor=#" bg "><nowrap><font size=-2>&nbsp;" txt "&nbsp;</font></td>"
 		if(cntxt->b_terminate & 16)
 		{
 			fprintf(f ? f : stdout, "<br>Durée : %1.2lf s", (double)t/1000);
@@ -403,11 +408,12 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 		}
 		else if(strcmp(trailfmt, "_EVA_NONE") && !cntxt->b_pda)
 		{
-#ifdef PROD_VERSION
-#define EVA_VERSION "4.1.0"
+#ifdef _DEBUG
+#define EVA_VERSION "4.1.1 debug"
 #else
-#define EVA_VERSION "4.1.0 debug"
-#endif // PROD_VERSION
+#define EVA_VERSION "4.1.1"
+#endif
+#define TIME_CELL(txt, bg) "<td align=center bgcolor=#" bg "><nowrap><font size=-2>&nbsp;" txt "&nbsp;</font></td>"
 
 			/* Output page end block with webmaster email & process statistics */
 			cntxt->txsize += fprintf(f ? f : stdout, "%s%s%s%s%s%s",

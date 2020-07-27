@@ -7,30 +7,30 @@
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="Debug">
-				<Option output="~/EVA/cgi/evasoft.cgi" prefix_auto="0" extension_auto="0" />
-				<Option working_dir="~/EVA/cgi/" />
+				<Option output="/home/EVA/web/cgi/gipsa.cgi" prefix_auto="0" extension_auto="0" />
+				<Option working_dir="/home/EVA/web/cgi/" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
 				<Compiler>
 					<Add option="-g" />
+					<Add option="-D_DEBUG" />
 				</Compiler>
 			</Target>
 			<Target title="Release">
-				<Option output="~/EVA/cgi/eva.cgi" prefix_auto="0" extension_auto="0" />
-				<Option working_dir="~/EVA/cgi/" />
+				<Option output="/home/EVA/install/eva.cgi" prefix_auto="0" extension_auto="0" />
+				<Option working_dir="/home/EVA/web/cgi/" />
 				<Option object_output="obj/Release/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
 				<Compiler>
 					<Add option="-O2" />
-					<Add option="-DPROD_VERSION" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
 				</Linker>
 				<ExtraCommands>
-					<Add after="~/EVA/cgi/update-cgi.sh" />
+					<Add after="~/update-cgi.sh" />
 				</ExtraCommands>
 			</Target>
 		</Build>

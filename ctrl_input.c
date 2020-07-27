@@ -141,13 +141,14 @@ void trans_string(
 ) {
 	int s = abs(salt);
 	int r = salt > 0 ? 1 : -1;
+	size_t i;
 	//printf("SALT=%i *** str=%s", salt, str);
 	if(!salt) return;
-	for(size_t i = 0; str[i]; i++)
+	for(i = 0; str[i]; i++)
 	{
 		int c = str[i];
 		if(c < 33 || c > 126) continue;
-		str[i] = 33 + ((c + 155 + r * (((i + 1) * s) % 94)) % 94);
+		str[i] = (char)(33 + ((c + 155 + r * (((i + 1) * s) % 94)) % 94));
 	}
 	//printf(" - res=%s<br>", str);
 }

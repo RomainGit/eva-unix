@@ -1218,7 +1218,7 @@ int qry_eval_sql_fieldexpr(				/* return : 0 on success, other on error */
 		DYNBUF_ADD_STR(&member, "NULL");
 	DYNBUF_ADD_STR(&sql, ",");
 	DYNBUF_ADD_BUF(&sql, member, NO_CONV);
-	if(!strstr(member->data, " AS Val,") && !strstr(member->data, " AS Line"))
+	if(member && !strstr(member->data, " AS Val,") && !strstr(member->data, " AS Line"))
 		DYNBUF_ADD_STR(&sql, " AS Val, NULL AS Line \n");
 
 	/* Handle FROM / JOIN / WHERE clauses */

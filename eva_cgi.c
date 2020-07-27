@@ -40,7 +40,7 @@ int main(int argc, char **argv, char **envp)
 	cntxt->envp = envp;
 
 	/* Extract DB name from executable path (basename) */
-	cntxt->dbname = basename(argv[0], 0);
+	cntxt->dbname = fbasename(argv[0], 0);
 	cntxt->path = mem_strdup(cntxt->argv[0]);
 	cntxt->path[cntxt->dbname - cntxt->argv[0]] = 0;
 	cntxt->rootdir = mem_strdup(cntxt->path);

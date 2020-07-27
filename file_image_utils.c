@@ -59,7 +59,7 @@ int get_image_size_head(	/* return : 1 if size found, 0 else */
 		if(width) *width = BYTES_TO_WORD(header, 19, 18);
 		if(height) *height = BYTES_TO_WORD(header, 23, 22);
 	}
-	else 
+	else
 	{
 		/* Check for JPEG image markers FF/D8/FF*/
 		size_t sz1;
@@ -155,7 +155,7 @@ char *get_image_data(		/* return : image data (alloc-ed memory), NULL on error *
 			if(imgtyp) *imgtyp = imgBMP;
 			*img = gdImageCreateFromWBMPPtr(sz, data);
 		}
-		else 
+		else
 		{
 			if(imgtyp) *imgtyp = imgJPG;
 			*img = gdImageCreateFromJpegPtr(sz, data);
@@ -219,7 +219,6 @@ int get_image_size(			/* return : 0 if file found & params correct, 1 else */
 ** Description : return thumbnail file for the given image - build if necessary
 *********************************************************************/
 char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if not found */
-	EVA_context *cntxt,		/* in/out : execution context data */
 	char *imgpath,			/* in : image file path */
 	size_t imgpath_sz,		/* in : image file path size */
 	unsigned long dw,		/* in : desired image width - 0 if no constraint */
@@ -233,13 +232,14 @@ char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if n
 	char *data = NULL;
 	gdImagePtr img = NULL;
 	unsigned long w = 0, h = 0;
-	char *imgfname = basename(imgpath, imgpath_sz);
+	char *imgfname = fbasename(imgpath, imgpath_sz);
+	char *dir = fdirname(imgpath, imgpath_sz);
 	size_t sz, imgsz, p0 = imgfname - imgpath;
 	int b_noresize = 1;
 	imgType imgtyp = imgUnkonwn;
 
-	/* Init params - return NULL on error */
-	if(!imgpath || !*imgpath || (!dw && !dh) || (chdir(cntxt->path) && (MKDIR("cache") || chdir("cache")))) return NULL;
+	/* Init params - return NULL if no data */
+	if(!imgpath || !*imgpath || (!dw && !dh) || !dir || (chdir(dir) && (MKDIR("cache") || chdir("cache")))) return NULL;
 	if(ow) *ow = 0;
 	if(oh) *oh = 0;
 
@@ -263,7 +263,7 @@ char *get_image_thumb(		/* return : image file path (alloc-ed memory), NULL if n
 
 	/* Read image - skip processing on error */
 	data = get_image_data(imgpath, imgsz, &img, &imgtyp);
-	if(data) 
+	if(data)
 	{
 		/* Handle image if it was read with GD */
 		if(img)

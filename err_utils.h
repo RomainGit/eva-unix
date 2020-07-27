@@ -108,25 +108,25 @@ void debug_put_info(EVA_context *cntxt);
 ** Macro : RETURN_ERR_MEMORY
 ** Description : handles out of memory error
 *********************************************************************/
-#define RETURN_ERR_MEMORY RETURN_ERROR("Mémoire serveur saturée", NULL)
+#define RETURN_ERR_MEMORY RETURN_ERROR("Out of memory", NULL)
 
 /*********************************************************************
-** Macro : RETURN_ERR_MEMORY
+** Macro : RETURN_ERR_DIRECTORY
 ** Description : handles directory access error
 *********************************************************************/
-#define RETURN_ERR_DIRECTORY	RETURN_ERROR("Droits d'accès incorrects sur un dossier", NULL)
+#define RETURN_ERR_DIRECTORY	RETURN_ERROR("Cannot access file or folder", NULL)
 
 /*********************************************************************
 ** Macro : RETURN_ERR_PARAM
 ** Description : handles programmer's errors
 *********************************************************************/
-#define RETURN_ERR_PARAM(code)	RETURN_ERROR("Il y a un bug - mauvais paramètres", code)
+#define RETURN_ERR_PARAM(code)	RETURN_ERROR("Wrong parameters", code)
 
 /*********************************************************************
 ** Macro : RETURN_ERR_PROG
 ** Description : handles programmer's errors
 *********************************************************************/
-#define RETURN_ERR_PROG(code)	RETURN_ERROR("Il y a un bug - incohérence du programme", code)
+#define RETURN_ERR_PROG(code)	RETURN_ERROR("Unhandeld error", code)
 
 /*********************************************************************
 ** Macro : RETURN_ERROR

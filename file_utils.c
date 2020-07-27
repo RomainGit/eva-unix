@@ -1,4 +1,4 @@
-	/*********************************************************************
+/*********************************************************************
 ** ---------------------- Copyright notice ---------------------------
 ** This source code is part of the EVASoft project
 ** It is property of Alain Boute Ingenierie - www.abing.fr and is
@@ -198,7 +198,8 @@ int file_read_config(				/* return : 0 on success, other on error */
 	}
 	else {
 		/* Look for first matching account */
-		for(unsigned long i = 0; i < usr->nbrows; i++)
+		unsigned long i;
+		for(i = 0; i < usr->nbrows; i++)
 		{
 			char* c = dyntab_val(usr, i, 0);
 			if(*c && strcmp(cntxt->dbname, c)) continue;
@@ -413,8 +414,9 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 											bit 1 : first cell - output row header if set (p0 is start of row)
 											bit 2 : last cell - output row footer if set */
 ) {
-	char* p1 = MY_STRSTR(p0, SOFF_END_CELL), *p, * ps, * pe, * pr;
+	char* p1 = MY_STRSTR(p0, SOFF_END_CELL), * p, * ps, * pe, * pr;
 	size_t sz = 0;
+	DynBuffer* buf = NULL;
 	if (!p0 || !p1) return 0;
 	p1 += sizeof(SOFF_END_CELL) - 1;
 
@@ -434,6 +436,10 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 	if (!pe) return 0;
 	ps++;
 
+	/* Convert text to XML */
+	if (dynbuf_add(&buf, txt, 0, TO_XML)) return 0;
+	if (buf) txt = buf->data;
+
 	/* Output template cell header */
 	sz += fwrite(p0, p - p0, 1, f);
 
@@ -450,6 +456,7 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 		else sz += fprintf(f, "\n%s\n", txt);
 		sz += fprintf(f, "%s\n", SOFF_END_PARA);
 	} while (pr);
+	M_FREE(buf);
 
 	/* Output template up to cell or row end */
 	pe += sizeof(SOFF_END_PARA) - 1;
@@ -461,44 +468,26 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 }
 
 /*********************************************************************
-** Fonction : file_write_soffice
-** Description : write a StarOffice compatible file
+** Fonction : file_write_soffice_doc
+** Description : write a StarOffice compatible writer (document) file
 *********************************************************************/
-#define ERR_FUNCTION "file_write_soffice"
-#define ERR_CLEANUP if(f) fclose(f); \
-				M_FREE(src); \
-				M_FREE(dst); \
+#define ERR_FUNCTION "file_write_soffice_doc"
+#define ERR_CLEANUP M_FREE(dst); \
 				M_FREE(tmp)
-int file_write_soffice(					/* return : 0 on success, other on error */
-	EVA_context * cntxt,				/* in : execution context data */
-	DynTable * data,					/* in : table data to export */
-	unsigned long idx					/* in : export procedure index in cntxt->cnf_lstproc */
+int file_write_soffice_doc(			/* return : 0 on success, other on error */
+	EVA_context* cntxt,				/* in : execution context data */
+	DynTable* data,					/* in : table data to export */
+	char* srcfile,					/* in : template file name */
+	DynBuffer* src,					/* in : template file contents */
+	FILE* f							/* in : output stream */
 ) {
-	DynBuffer* src = NULL;
 	DynBuffer* dst = NULL;
 	DynBuffer* tmp = NULL;
-	DynTable* lst = &cntxt->cnf_lstproc;
-	char* proc = dyntab_val(lst, idx, 1);
-	FILE* f = NULL;
-	char cmd[_MAX_PATH + 10] = { 0 };
-	char *p_utf, *p_tbl, *p_row1, *p_row2, *p_row3, *p_lbl, * p_val, *p_endt;
+	char* p_utf, * p_tbl, * p_row1, * p_row2, * p_row3, * p_lbl, * p_val, * p_endt;
 	unsigned long i;
 	size_t sz = 0;
 
-	if (!data) RETURN_OK;
-
-	/* Unzip xml files from soffice source document */
-	remove("content.xml");
-	snprintf(add_sz_str(cmd), "unzip %s content.xml >exe.txt 2>exeerr.txt", dyntab_val(lst, idx, 3));
-	if (system(cmd) == -1) RETURN_ERR_DIRECTORY;
-
-	/* Read content.xml file */
-	if (file_to_dynbuf(cntxt, &src, "content.xml")) STACK_ERROR;
-	src->cnt = strip_rc(src->data, src->cnt);
-
-	/* Reopen content.xml file for output */
-	f = fopen("content.xml", "wb");
-	if (!f) RETURN_ERR_DIRECTORY;
+	if (!data || !src) RETURN_OK;
 
 	/* Mark documents limits for table & rows duplication */
 	p_utf = MY_STRSTR(src->data, "UTF-8");
@@ -509,7 +498,7 @@ int file_write_soffice(					/* return : 0 on success, other on error */
 	p_val = MY_STRSTR(p_lbl + 1, "<table:table-cell ");
 	p_row3 = MY_STRSTR(p_val, "<table:table-row ");
 	p_endt = MY_STRSTR(p_row3, "</table:table>");
-	if (!p_endt) RETURN_ERROR("Invalid format for template file - expecting table 3 rows x 2 columns", ERR_PUT_TXT("File name : ", proc, 0));
+	if (!p_endt) RETURN_ERROR("Invalid format for template file - expecting table 3 rows x 2 columns", ERR_PUT_TXT("File name : ", srcfile, 0));
 
 	/* Output header up to first table - replace UTF-8 with latin1 */
 	sz += fwrite(src->data, p_utf - src->data, 1, f);
@@ -517,7 +506,7 @@ int file_write_soffice(					/* return : 0 on success, other on error */
 	sz += fwrite(p_utf + 5, p_tbl - p_utf - 5, 1, f);
 
 	/* Loop on data rows */
-	for(i = 1; i < data->nbrows; i++)
+	for (i = 1; i < data->nbrows; i++)
 	{
 		char* obj = dyntab_val(data, i, 0);
 		char* lbl = dyntab_val(data, i, 1);
@@ -526,7 +515,7 @@ int file_write_soffice(					/* return : 0 on success, other on error */
 		/* New object : start new table */
 		if (i == 1 || strcmp(obj, dyntab_val(data, i - 1, 0)))
 		{
-			if(i > 1) sz += fprintf(f, "</table:table><text:p></text:p>");
+			if (i > 1) sz += fprintf(f, "</table:table><text:p></text:p>");
 			sz += fwrite(p_tbl, p_row1 - p_tbl, 1, f);
 		}
 
@@ -556,13 +545,131 @@ int file_write_soffice(					/* return : 0 on success, other on error */
 
 	/* Output template trailer & close file */
 	sz += fprintf(f, "%s", p_endt);
-	fclose(f);
 
-	/* Zip back content.xml to template document & rename as result document */
-	snprintf(add_sz_str(cmd), "zip %s content.xml >exe.txt 2>exeerr.txt", dyntab_val(lst, idx, 3));
-	if (system(cmd) == -1) RETURN_ERR_DIRECTORY;
-	remove(dyntab_val(lst, idx, 4));
-	if(rename(dyntab_val(lst, idx, 3), dyntab_val(lst, idx, 4))) RETURN_ERR_DIRECTORY;
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Fonction : file_zip
+** Description : zip / unzip files
+*********************************************************************/
+#define ERR_FUNCTION "file_zip"
+#define ERR_CLEANUP
+int file_zip(						/* return : 0 on success, other on error */
+	EVA_context* cntxt,				/* in : execution context data */
+	int b_zip,						/* in : 1 top zip, 0 to unzip */
+	char* zipfile,					/* in : zip file to process */
+	char* fname,					/* in : file to add / extract */
+	DynBuffer **src,				/* out : file contents */
+	FILE **f						/* out : output stream to replace file contents
+										Note : out parameters are only set when b_zip = 0 */
+	) {
+	char cmd[_MAX_PATH + 64] = { 0 };
+	size_t sz = 0;
+	char* zipcmd = b_zip ? "zip" : "unzip";
+
+	/* If zip selected : close file & reset src buffer */
+	if (b_zip)
+	{
+		fclose(*f);
+		*f = NULL;
+		(*src)->cnt = 0;
+	}
+	/* Else : del destination file before extraction */
+	else remove(fname);
+
+#if defined WIN32  || defined _WIN64
+	sz = snprintf(add_sz_str(cmd), "%s%s.exe", cntxt->path, zipcmd);
+#else
+	sz = snprintf(add_sz_str(cmd), "%s", zipcmd);
+#endif
+	sz += snprintf(cmd + sz, sizeof(cmd) - sz, " %s %s >exe.txt 2>exeerr.txt", zipfile, fname);
+	if (system(cmd) == -1) RETURN_ERROR("Error during zip process", { ERR_PUT_TXT("Command :", cmd, sz); ERR_PUT_FILE("Error : ", "exerr.txt") });
+	remove("exe.txt");
+	remove("exeerr.txt");
+
+	/* If zip selected : del zipped file */
+	if (b_zip) remove(fname);
+	else
+	{
+		/* Read unzipped file */
+		if (file_to_dynbuf(cntxt, src, fname)) STACK_ERROR;
+		(*src)->cnt = strip_rc((*src)->data, (*src)->cnt);
+
+		/* Open content.xml file for output */
+		*f = fopen(fname, "wb");
+		if (!*f) RETURN_ERR_DIRECTORY;
+	}
+
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Fonction : file_write_soffice
+** Description : write a StarOffice compatible file
+*********************************************************************/
+#define ERR_FUNCTION "file_write_soffice"
+#define ERR_CLEANUP if(f) fclose(f); \
+				M_FREE(src); \
+				M_FREE(dst); \
+				M_FREE(tmp)
+int file_write_soffice(				/* return : 0 on success, other on error */
+	EVA_context* cntxt,				/* in : execution context data */
+	DynTable* data,					/* in : table data to export */
+	unsigned long idx,				/* in : export procedure index in cntxt->cnf_lstproc */
+	char *fname						/* in : final destination file name for header title */
+) {
+	DynBuffer* src = NULL;
+	DynBuffer* dst = NULL;
+	DynBuffer* tmp = NULL;
+	FILE* f = NULL;
+	DynTable* lst = &cntxt->cnf_lstproc;
+	char* proc = dyntab_val(lst, idx, 1);
+	char* srcfile = dyntab_val(lst, idx, 3);
+	DynTableCell* dstfile = dyntab_cell(lst, idx, 4);
+
+	if (!data) RETURN_OK;
+
+	/* Unzip content.xml file from soffice template document */
+	if (file_zip(cntxt, 0, srcfile, "content.xml", &src, &f)) STACK_ERROR;
+
+	/* Call handler for procedure */
+	if (!strcmp(proc, "EVA_DOC") && file_write_soffice_doc(cntxt, data, srcfile, src, f)) STACK_ERROR;
+
+	/* Zip back content.xml to template document */
+	if (file_zip(cntxt, 1, srcfile, "content.xml", &src, &f)) STACK_ERROR;
+
+	/* Unzip styles.xml file from soffice template document */
+	if (file_zip(cntxt, 0, srcfile, "styles.xml", &src, &f)) STACK_ERROR;
+
+	/* Replace markers in header */
+	{
+		char datetime[64];
+		ReplaceTable sr[] = {
+			{ add_sz_str("UTF-8"), add_sz_str("latin1") },
+			{ add_sz_str("$DateTime"), NULL, 0 },
+			{ add_sz_str("$FileName"), NULL, 0 }, {NULL} };
+
+		datetxt_to_format(cntxt, datetime, cntxt->timestamp, "_EVA_DATETIME");
+		sr[0].replace = datetime;
+		sr[0].sz_replace = strlen(datetime);
+		sr[1].replace = fname;
+		sr[1].sz_replace = strlen(fname);
+		if(dynbuf_add(&tmp, src->data, src->sz, sr, 1)) RETURN_ERR_MEMORY;
+	}
+	fprintf(f,"%s", tmp->data);
+
+	/* Zip back styles.xml to template document */
+	if (file_zip(cntxt, 1, srcfile, "styles.xml", &src, &f)) STACK_ERROR;
+
+	/* Rename updated template as result document */
+	remove(dstfile->txt);
+	if (rename(srcfile, dstfile->txt)) RETURN_ERR_DIRECTORY;
 
 	RETURN_OK_CLEANUP;
 }
@@ -730,5 +837,36 @@ char *get_image_file(					/* return : image file path (alloc-ed memory), NULL if
 	/* Get image size */
 	if(b_found && width && height) get_image_size(path, width, height);
 	return path;
+}
+
+/*********************************************************************
+** Fonction : fbasename
+** Description : return the base name of a path as pointer in path
+*********************************************************************/
+char *fbasename(char *path, size_t path_len){
+#define DIR_DELIM "\\/:"
+	char *bname;
+	if(!path || !*path) return "";
+	if(!path_len) path_len = strlen(path);
+	bname = path + path_len - 1;
+	while(!strchr(DIR_DELIM, *bname) && bname > path) bname--;
+	if(strchr(DIR_DELIM, *bname)) bname++;
+	return bname;
+}
+#undef DIR_DELIM
+
+/*********************************************************************
+** Fonction : fdirname
+** Description : return the directory of a path in a static memory zone
+*********************************************************************/
+char *fdirname(char *path, size_t path_len)
+{
+	static char dname[_MAX_PATH];
+	char *bname = fbasename(path, path_len);
+	size_t p0 = bname - path;
+	if(p0 <= 0 || p0 >= path_len) return ".";
+    memcpy(dname, bname, p0);
+    dname[p0] = 0;
+    return dname;
 }
 

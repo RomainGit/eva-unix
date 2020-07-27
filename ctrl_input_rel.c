@@ -55,7 +55,7 @@ int ctrl_relation_optionslist(			/* return : 0 on success, other on error */
 	for(i = 0; i < optlist->nbrows; i++)
 	{
 		unsigned long idobj = DYNTAB_TOULRC(optlist, i, 0);
-		if(val) val->cnt = 0;
+		if (val) M_FREE(val);
 
 		/* Handle valid relation */
 		if(idobj) 
@@ -199,12 +199,13 @@ int ctrl_relation_put_values(		/* return : 0 on success, other on error */
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	ObjTableFormat *tbl = ctrl->objtbl;
+	unsigned long tblline = tbl ? tbl->line : 0;
+	unsigned long tbllines = tbl ? tbl->lines : ctrl->val.nbrows;
 	DynTable objdata = { 0 };
 	DynBuffer *name = NULL;
 	unsigned long i;
 	DynBuffer **html = cntxt->form->html;
 	char *openbutton = (tbl && tbl->attr) ? DYNTAB_FIELD_VAL(tbl->attr, OPENBUTTON) : CTRL_ATTR_VAL(OPENBUTTON);
-
 
 	/* Handle empty value in view mode */
 	if(!ctrl->val.nbrows)
@@ -215,18 +216,18 @@ int ctrl_relation_put_values(		/* return : 0 on success, other on error */
 
 	if(!*openbutton) openbutton = "SYMBOL+LABEL+OBJNOTES";
 	DYNBUF_ADD_STR(html, "<table border=0 cellpadding=1 cellspacing=0 rules=none>");
-	if(tbl->lines < ctrl->val.nbrows)
+	for (i = 0; i < tbllines && i + tblline < ctrl->val.nbrows; i++)
 	{
 		DYNBUF_ADD_STR(html, "<tr bgcolor=#EEEEEE>");
 		tbl->totlines = ctrl->val.nbrows;
 		if(table_put_page_navigator(cntxt, i_ctrl, 0)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "</tr>");
 	}
-	for(i = 0; i < tbl->lines && i + tbl->line < ctrl->val.nbrows; i++) 
+	for(i = 0; i < tbllines; i++) 
 	{
 		DYNBUF_ADD_STR(html, "<tr>"); 
-		if(qry_obj_idfield(cntxt, &objdata, DYNTAB_TOULRC(&ctrl->val, i + tbl->line, 0), 0) ||
-			ctrl_add_symbol_btn(cntxt, ctrl, dyntab_cell(&ctrl->val, i + tbl->line, 0), &objdata, 0,
+		if(qry_obj_idfield(cntxt, &objdata, DYNTAB_TOULRC(&ctrl->val, i + tblline, 0), 0) ||
+			ctrl_add_symbol_btn(cntxt, ctrl, dyntab_cell(&ctrl->val, i + tblline, 0), &objdata, 0,
 								"", openbutton))
 			CLEAR_ERROR;
 		DYNBUF_ADD_STR(html, "</tr>"); 

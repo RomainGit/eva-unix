@@ -18,6 +18,15 @@
 char *sql_control(EVA_context *cntxt, int mode);
 
 /*********************************************************************
+** Function : sql_use_db
+** Description : set given database as default for queries
+*********************************************************************/
+int sql_use_db(						/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	char *dbname					/* in : database name */
+);
+
+/*********************************************************************
 ** Function : sql_open_session
 ** Description : open the SQL database connexion
 *********************************************************************/

@@ -599,6 +599,7 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 	DynBuffer *note = NULL;
 	char *b_export = DYNTAB_FIELD_VAL(tbl->attr, EXPORTLIST);
 	DynTable* lst = &cntxt->cnf_lstproc;
+	unsigned long i;
 	CHECK_HTML_STATUS;
 
 	/* If export available */
@@ -606,7 +607,7 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 
 	/* Output export buttons */
 	DYNBUF_ADD_STR(html, "<td align=right>");
-	for(unsigned long i = 1; i < lst->nbrows; i++)
+	for(i = 1; i < lst->nbrows; i++)
 	{
 		char img[256], img_s[256];
 		if(ctrl_cgi_name(cntxt, ctrl, NULL, 1, &name, 'B', dyntab_val(lst, i, 0), dyntab_sz(lst, i, 0))) STACK_ERROR;
@@ -1013,8 +1014,8 @@ int table_put_page_navigator(			/* return : 0 on success, other on error */
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	ObjTableFormat *tbl = ctrl->objtbl;
 	DynBuffer *name = NULL;
-	unsigned long nbpages = !tbl->totlines ? 1 : ((tbl->totlines - 1) / tbl->lines) + 1;
-	unsigned long page = !tbl->line ? 1 : (tbl->line + tbl->lines - 1) / tbl->lines + 1;
+	unsigned long nbpages = !(tbl->totlines && tbl->lines) ? 1 : ((tbl->totlines - 1) / tbl->lines) + 1;
+	unsigned long page = !(tbl->line && tbl->lines) ? 1 : (tbl->line + tbl->lines - 1) / tbl->lines + 1;
 	char *counttype = "";
 	DynTableCell *lbl = NULL;
 	char *txtpagectrl = CTRL_ATTR_VAL(PAGE_CTRL);
@@ -1643,7 +1644,7 @@ int table_put_rows(						/* return : 0 on success, other on error */
 						if(imgbtn_maxh || imgbtn_maxw)
 						{
 							/* Get image thumbnail */
-							thumb = get_image_thumb(cntxt, imgbtnpath, sz_imgbtnpath, imgbtn_maxw, imgbtn_maxh, &w, &h);
+							thumb = get_image_thumb(imgbtnpath, sz_imgbtnpath, imgbtn_maxw, imgbtn_maxh, &w, &h);
 						}
 					}
 					if(!(thumb || img)) opbtn = "SYMBOL";
@@ -2018,14 +2019,28 @@ int table_export_list(			/* return : 0 on success, other on error */
 		table_read_obj_list(cntxt, i_ctrl, b_selobj) ||
 		table_prepare_rows(cntxt, i_ctrl, atoi(dyntab_val(lst, i, 2)))) STACK_ERROR;
 
+	/* Build destination file name */
+	qry_obj_label(cntxt, NULL, NULL, NULL, &label, NULL, NULL, NULL, NULL, 0, &form->objdata, 0);
+	sz_name = snprintf(add_sz_str(name), "%s", ctrl->LABEL);
+	if (label && strcmp(ctrl->LABEL, label->data)) sz_name += snprintf(name + sz_name, sizeof(name) - sz_name, "  - %s", label->data);
+	btn = dyntab_val(lst, i, 4);
+	for (j = dyntab_sz(lst, i, 4); j > 1 && btn[j] != '.'; j--);
+	if (btn[j] == '.') snprintf(add_sz_str(fname), "%s%s", name, btn + j);
+	sz_fname = file_compatible_name(fname);
+
 	/* Handle built-in procedures for soffice files */
-	if(!strncmp(proc, add_sz_str("EVA_")))
+	if (!strncmp(proc, add_sz_str("EVA_TEXT")))
+	{
+		/* Produce text file */
+		if (file_write_tabrc(cntxt, &tbl->cellval, btn)) STACK_ERROR;
+	}
+	else if (!strncmp(proc, add_sz_str("EVA_")))
 	{
 		/* Copy template in current dir */
 		if (file_copy_template(cntxt, dyntab_val(lst, i, 3))) STACK_ERROR;
 
 		/* Handle table data to produce a soffice file */
-		if (file_write_soffice(cntxt, &tbl->cellval, i)) STACK_ERROR;
+		if (file_write_soffice(cntxt, &tbl->cellval, i, dyntab_val(lst, i, 3))) STACK_ERROR;
 	}
 	else
 	{
@@ -2058,16 +2073,9 @@ int table_export_list(			/* return : 0 on success, other on error */
 	remove(dyntab_val(lst, i, 3));
 
 	/* Check result presence */
-	btn = dyntab_val(lst, i, 4);
-	if(stat(btn, &fs)) RETURN_ERROR("Erreur durant la production du document liste", { ERR_PUT_CELL("\nFichier source : ", lst, i, 3); ERR_PUT_CELL("\nFichier attendu : ", lst, i, 4) });
+	if(stat(btn, &fs)) RETURN_ERROR("Error generating list document", { ERR_PUT_CELL("\nSource file : ", lst, i, 3); ERR_PUT_CELL("\nExpected file : ", lst, i, 4) });
 
-	/* Build destination file name */
-	qry_obj_label(cntxt, NULL, NULL, NULL, &label, NULL, NULL, NULL, NULL, 0, &form->objdata, 0);
-	sz_name = snprintf(add_sz_str(name), "%s", ctrl->LABEL);
-	if(label && strcmp(ctrl->LABEL, label->data)) sz_name += snprintf(name + sz_name, sizeof(name) - sz_name, "  - %s", label->data);
-	for(j = dyntab_sz(lst, i, 4); j > 1 && btn[j] != '.'; j--);
-	if(btn[j] == '.') snprintf(add_sz_str(fname), "%s%s", name, btn + j);
-	sz_fname = file_compatible_name(fname);
+	/* Rename file */
 	remove(fname);
 	if(rename(btn, fname)) RETURN_ERR_DIRECTORY;
 

@@ -59,19 +59,19 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 		"<td align=center><font size=+1><b>Liste des formulaires ouverts</b></font></td>");
 
 	/* Output goback & menu buttons */
-	if(dyntab_cmp(&cntxt->id_form, 0, 0, &cntxt->menubar, 0, 0) && 
+	if(dyntab_cmp(&cntxt->id_form, 0, 0, &cntxt->menubar, 0, 0) &&
 		dyntab_cmp(&cntxt->id_form, 0, 0, &cntxt->homepage, 0, 0))
 	{
 		DYNBUF_ADD_STR(html, "<td align=center>")
 		NAME_BUTTON("VIEW");
-		if(put_html_button(cntxt, name->data, NULL, "_eva_btn_2forms_fr.gif", "_eva_btn_2forms_fr_s.gif", 
+		if(put_html_button(cntxt, name->data, NULL, "_eva_btn_2forms_fr.gif", "_eva_btn_2forms_fr_s.gif",
 			"Afficher les formulaires sélectionnés dans les colonnes Haut et bas\n\n"
-			"Vous pouvez afficher deux formulaires simultanément", 0, 0)) STACK_ERROR; 
+			"Vous pouvez afficher deux formulaires simultanément", 0, 0)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "</td>")
 	}
 	DYNBUF_ADD_STR(html, "<td align=right>")
 	NAME_BUTTON("MENU");
-	if(put_html_button(cntxt, name->data, NULL, "_eva_menu.gif", "_eva_menu_s.gif", 
+	if(put_html_button(cntxt, name->data, NULL, "_eva_menu.gif", "_eva_menu_s.gif",
 		"Retour à la page d'accueil", 0, 0)) STACK_ERROR;
 	DYNBUF_ADD_STR(html,
 		"</td></tr></table>"
@@ -93,7 +93,7 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 		DYNBUF_ADD_STR(html, "<tr>")
 
 		/* Read object data */
-		if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL, 
+		if(cgi_filter_values(cntxt, &cgival, 'D', ~0UL,
 								cgi->IdObj ? ~0UL : cgi->IdForm,
 								cgi->IdObj, NULL, "", 0, 0)) STACK_ERROR;
 		if(cgi->IdObj)
@@ -121,12 +121,12 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 		NAME_VALUE("TOPFRM")
 		DYNBUF_ADD3(html, "<td align=center bgcolor=", bgcolor, 6, NO_CONV, ">")
 		if(put_html_chkbox(cntxt, DYNBUF_VAL_SZ(name),
-				objref, snprintf(add_sz_str(objref), "%lu,%lu", cgi->IdObj, cgi->IdForm), 
+				objref, snprintf(add_sz_str(objref), "%lu,%lu", cgi->IdObj, cgi->IdForm),
 				2 | (cgi->IdForm == idform0 && cgi->IdObj == idobj0), 0)) STACK_ERROR;
 		NAME_VALUE("BOTFRM")
 		DYNBUF_ADD3(html, "</td><td align=center bgcolor=", bgcolor, 6, NO_CONV, ">")
 		if(put_html_chkbox(cntxt, DYNBUF_VAL_SZ(name),
-				objref, snprintf(add_sz_str(objref), "%lu,%lu", cgi->IdObj, cgi->IdForm), 
+				objref, snprintf(add_sz_str(objref), "%lu,%lu", cgi->IdObj, cgi->IdForm),
 				2 | (cgi->IdForm == idform1 && cgi->IdObj == idobj1), 0)) STACK_ERROR;
  		DYNBUF_ADD_STR(html, "</td>")
 
@@ -152,7 +152,7 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 	case 0:
 		DYNBUF_ADD_STR(html, "<tr><td colspan=6 align=center bgcolor=#DDDDDD><b>Aucune fenêtre ouverte</b>");
 		break;
-	case 1: 
+	case 1:
 		/* Output Confirm input */
 		NAME_VALUE("CONFIRM");
 		DYNBUF_ADD3_BUF(html, "<input type=hidden name='", name, NO_CONV, "' value=1>");
@@ -173,7 +173,7 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 
 			/* Output Confirm checkbox */
 			NAME_VALUE("CONFIRM");
-			dynbuf_print2(html, "</td><td align=center colspan=2><input type=checkbox name='%s' %s>Confirmation", 
+			dynbuf_print2(html, "</td><td align=center colspan=2><input type=checkbox name='%s' %s>Confirmation",
 				name->data, b_confirm ? "checked" : "");
 
 			/* Output close unmodified forms button */
@@ -210,7 +210,7 @@ int dlg_openedforms_output(			/* return : 0 on success, other on error */
 #define ERR_CLEANUP	DYNTAB_FREE(cgival); \
 					M_FREE(cginame); \
 					M_FREE(name)
-					
+
 int dlg_openedforms(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
@@ -238,7 +238,7 @@ int dlg_openedforms(				/* return : 0 on success, other on error */
 	{
 		i = strtoul(cgival.cell->txt, &c, 10);
 		if(i) DYNTAB_ADD_INT(&cntxt->id_obj, 0, 0, i);
-		DYNTAB_ADD_INT(&cntxt->id_form, 0, 0, c ? strtoul(c + 1, &c, 10) : 0);
+		DYNTAB_ADD_INT(&cntxt->id_form, 0, 0, c ? atoi(c + 1) : 0);
 	}
 	NAME_VALUE("BOTFRM");
 	if(cgi_get_values(cntxt, &cgival, name->data, 0)) STACK_ERROR;
@@ -246,7 +246,7 @@ int dlg_openedforms(				/* return : 0 on success, other on error */
 	{
 		i = strtoul(cgival.cell->txt, &c, 10);
 		if(i) DYNTAB_ADD_INT(&cntxt->alt_obj, 0, 0, i);
-		DYNTAB_ADD_INT(&cntxt->alt_form, 0, 0, c ? strtoul(c + 1, &c, 10) : 0);
+		DYNTAB_ADD_INT(&cntxt->alt_form, 0, 0, c ? atoi(c + 1) : 0);
 	}
 
 	/* Exit if view button clicked */
@@ -259,7 +259,7 @@ int dlg_openedforms(				/* return : 0 on success, other on error */
 	DYNTAB_FREE(cgival);
 
 	/* Handle close buttons */
-	if(!strncmp(btn, add_sz_str("CLOSEALL"))) 
+	if(!strncmp(btn, add_sz_str("CLOSEALL")))
 	{
 		/* For each form found in CGI data */
 		int b_exit = 1;

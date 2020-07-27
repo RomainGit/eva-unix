@@ -393,7 +393,7 @@ int dyntab_ins_rows(				/* return : 0 on success, other on error */
 #define DYNTAB_ADD_INT(tab, row, col, nb) \
 { \
 	char _tmp[32] = {0}; \
-	snprintf(_tmp, sizeof(_tmp), "%ld", (long int)(nb)); \
+	snprintf(_tmp, sizeof(_tmp), "%ld", (long)(nb)); \
 	DYNTAB_ADD(tab, row, col, _tmp, 0, NO_CONV); \
 }
 

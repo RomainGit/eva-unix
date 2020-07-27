@@ -149,7 +149,7 @@ int html_put_value_fmt(			/* return : 0 on success, other on error */
 			DYNBUF_ADD3_CELLP(html, " target='W", path, HTML_NO_QUOTE, "'>");
 		}
 		name = DYNTAB_FIELD_CELL(&objdata, FILE_CLIENT_PATH);
-		filename = (name && name->len) ? basename(name->txt, name->len) : "???";
+		filename = (name && name->len) ? fbasename(name->txt, name->len) : "???";
 		HANDLE_STRIP({
 			if(put_html_bold_substring(cntxt, html, filename, 0, tbl ? &tbl->srchwords : NULL))
 				STACK_ERROR;

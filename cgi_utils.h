@@ -27,12 +27,6 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 void output_log_end(EVA_context *cntxt);
 
 /*********************************************************************
-** Fonction : basename
-** Description : return the base name of a path
-*********************************************************************/
-char *basename(char *path, size_t path_len);
-
-/*********************************************************************
 ** Fonction : cgi_free
 ** Description : free CGI data
 *********************************************************************/
@@ -46,7 +40,7 @@ int cgi_extract(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	char *val,						/* in : text containing tokens */
 	char sep,						/* in : tokens separator */
-	DynTable *res, ...				/* out : list of DynTable* pointers to receive values in cell 0,0 
+	DynTable *res, ...				/* out : list of DynTable* pointers to receive values in cell 0,0
 											MUST BE NULL TERMINATED if # of tokens may exceed # of tables */
 );
 
@@ -126,7 +120,7 @@ int cgi_build_finalname(			/* return : 0 if Ok, other on error */
 ** Function : cgi_get_values
 ** Description : return	cgi inputs matching the given name
 *********************************************************************/
-int cgi_get_values(					/* return : 0 if Ok, other on error */		
+int cgi_get_values(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	DynTable *ret,					/* out : CGI values table */
 	char *name,						/* in : name to search for in cgi data */
@@ -141,7 +135,7 @@ int cgi_get_values(					/* return : 0 if Ok, other on error */
 ** Function : cgi_filter_values
 ** Description : return	cgi inputs matching the given name
 *********************************************************************/
-int cgi_filter_values(				/* return : 0 if Ok, other on error */		
+int cgi_filter_values(				/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	DynTable *ret,					/* out : matching CGI inputs table */
 	char type,						/* in : 1st letter of name to search for - do not use if 0 */
@@ -195,9 +189,9 @@ void cgi_value_setkeep(
 ** Function : cgi_check_form_change
 ** Description : ouput hidden input for CGI values not marked
 *********************************************************************/
-int cgi_check_form_change(			/* return : 0 = unchanged 
-												1 = modified 
-												2 = menubar or  home page */		
+int cgi_check_form_change(			/* return : 0 = unchanged
+												1 = modified
+												2 = menubar or  home page */
 	EVA_context *cntxt,				/* in : execution context data */
 	unsigned long idform,			/* in : form id to search for */
 	unsigned long idobj			/* in : object id to search for */
@@ -218,7 +212,7 @@ void cgi_clear_form_inputs(
 ** Function : cgi_put_hiddenold
 ** Description : ouput hidden old input for a control
 *********************************************************************/
-int cgi_put_hiddenold(					/* return : 0 if Ok, other on error */		
+int cgi_put_hiddenold(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	DynBuffer *name,				/* in : CGI name for data input */
 	char *txt, size_t len			/* in original value */
@@ -228,7 +222,7 @@ int cgi_put_hiddenold(					/* return : 0 if Ok, other on error */
 ** Function : cgi_put_hidden
 ** Description : ouput hidden input for CGI values not marked
 *********************************************************************/
-int cgi_put_hidden(					/* return : 0 if Ok, other on error */		
+int cgi_put_hidden(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt				/* in/out : execution context data */
 );
 
@@ -291,7 +285,7 @@ void cgi_free_files(EVA_context *cntxt);
 ** Function : cgi_save_files
 ** Description : write uploaded files to disk & create objects in DB
 *********************************************************************/
-int cgi_save_files(					/* return : 0 if Ok, other on error */		
+int cgi_save_files(					/* return : 0 if Ok, other on error */
 	EVA_context *cntxt				/* in/out : execution context data */
 );
 
@@ -307,9 +301,9 @@ void cgi_trace_input(EVA_context *cntxt);
 ** Description : read CGI data in www-form-urlencoded format
 *********************************************************************/
 int cgi_read_urlencoded(	/* return : 0 on success, other on error */
-	EVA_context *cntxt		/* in : 
+	EVA_context *cntxt		/* in :
 								cntxt->input : CGI input to process
-							   out : 
+							   out :
 								cntxt->cgi : table of read & parsed CGI inputs */
 );
 
@@ -319,7 +313,7 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 *********************************************************************/
 int cgi_read_data(			/* return : 0 on success, other on error */
 	EVA_context *cntxt		/* in : context data
-							   out : 
+							   out :
 								cntxt->cgi : table of read & parsed CGI inputs
 									col 0 : name
 									col 1 : value

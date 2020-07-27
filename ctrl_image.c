@@ -87,7 +87,7 @@ int put_html_image_dir(					/* return : 0 on success, other on error */
 	if(b_thumb)
 	{
 		/* Create thumbnail in cache */
-		thumb = get_image_thumb(cntxt, path, strlen(path), dw, dh, &w, &h);
+		thumb = get_image_thumb(path, strlen(path), dw, dh, &w, &h);
 		if(thumb)
 		{
 			/* Use thumbnail for image tag if created */

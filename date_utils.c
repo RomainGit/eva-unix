@@ -958,7 +958,7 @@ int ms_since(struct timeval *t0)
 *********************************************************************/
 int gettimeofday(struct timeval* p, void* tz) {
 	static time_t t0 = 0;
-	if(!t0) t0 = time(NULL);
+	if(!t0) t0 = time(tz ? NULL : tz);
 	p->tv_usec = clock() * 1000L;
 	p->tv_sec = (long)t0;
 	return 0;

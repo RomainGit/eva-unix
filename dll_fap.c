@@ -246,7 +246,7 @@ int FicheRemise(							/* return : 0 on success, other on error */
 ** Description : ajoute une proposition de prix a la fiche panier
 *********************************************************************/
 #define ERR_FUNCTION "AjoutPrix"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int AjoutPrix(								/* return : 0 on success, other on error */
 	CxPanier *cx,							/* in/out : execution context data */
 	Panier *p,								/* in/out : fiche panier */
@@ -384,7 +384,7 @@ int TabPrix(								/* return : 0 on success, other on error */
 ** Description : retourne le taux de remise correspondant à un montant ou une quantite
 *********************************************************************/
 #define ERR_FUNCTION "CalcRemise"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int CalcRemise(								/* return : 0 on success, other on error */
 	CxPanier *cx,							/* in/out : execution context data */
 	Panier *p,								/* in/out : fiche panier */
@@ -488,12 +488,12 @@ int FicheCategorie(							/* return : 0 on success, other on error */
 		if(cx->b_usrpro)
 		{
 			c->idrem = strtoul(dyntab_field_val(&data, "CATEG_REMPRO", ~0UL, 0), NULL, 0);
-			if(!c->idrem) 
+			if(!c->idrem)
 				c->idrem = strtoul(dyntab_field_val(&data, "PRODUIT_REMPRO", ~0UL, 0), NULL, 0);
 		}
-		if(!c->idrem) 
+		if(!c->idrem)
 			c->idrem = strtoul(dyntab_field_val(&data, "CATEG_REMISE", ~0UL, 0), NULL, 0);
-		if(!c->idrem) 
+		if(!c->idrem)
 			c->idrem = strtoul(dyntab_field_val(&data, "PRODUIT_REMISE", ~0UL, 0), NULL, 0);
 	}
 	*res = c;
@@ -543,8 +543,10 @@ int FichePanier(							/* return : 0 on success, other on error */
 	p->id = id;
 	if(qry_obj_field(cntxt, &data, p->id, "QUANTITE,ARTICLE_PANIER,PRIX_FACT_HT,PRIX_PUB_HT,PRIX_ACHAT_HT,METH_REMISE")) STACK_ERROR;
 	p->qte = strtoul(dyntab_field_val(&data, "QUANTITE", ~0UL, 0), NULL, 0);
-	p->pxpub = atof(dyntab_field_val(&data, "PRIX_PUB_HT", ~0UL, 0)) / p->qte;
-	p->pa = atof(dyntab_field_val(&data, "PRIX_ACHAT_HT", ~0UL, 0)) / p->qte;
+	if(p->qte) {
+        p->pxpub = atof(dyntab_field_val(&data, "PRIX_PUB_HT", ~0UL, 0)) / p->qte;
+        p->pa = atof(dyntab_field_val(&data, "PRIX_ACHAT_HT", ~0UL, 0)) / p->qte;
+	}
 	p->pv = atof(dyntab_field_val(&data, "PRIX_FACT_HT", ~0UL, 0));
 	if(id) p->idart = strtoul(dyntab_field_val(&data, "ARTICLE_PANIER", ~0UL, 0), NULL, 0);
 	p->meth = dyntab_field_val(&data, "METH_REMISE", ~0UL, 0);
@@ -634,7 +636,7 @@ int FichePanier(							/* return : 0 on success, other on error */
 ** Description : calcule les remises pour un article
 *********************************************************************/
 #define ERR_FUNCTION "CalcRemArt"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int CalcRemArt(								/* return : 0 on success, other on error */
 	CxPanier *cx,							/* in : contexte panier courant */
 	Panier *p								/* in : article panier a calculer */
@@ -686,7 +688,7 @@ int CalcRemArt(								/* return : 0 on success, other on error */
 				if(p->b_rem) p->idcatrem = cat->id;
 			}
 		}
-		
+
 		/* Remise par catalogue - compte client */
 		for(i= 0; i < cx->typremcat.nbrows; i++)
 		{
@@ -714,10 +716,10 @@ int CalcRemArt(								/* return : 0 on success, other on error */
 				}
 			}
 		}
-		
+
 		/* Remise client */
 		if(cx->u_pcrem) AjoutPrix(cx, p, 0, 1, 0, cx->u_pcrem, "Client", 3);
-		
+
 		/* Remise code promo */
 		if(cx->pc_promo && p->b_promo) AjoutPrix(cx, p, 0, 1, 0, cx->pc_promo, "Promo", 2);
 	}
@@ -752,7 +754,7 @@ int CalcRemArt(								/* return : 0 on success, other on error */
 ** Description : calcule le prix de vente d'un article
 *********************************************************************/
 #define ERR_FUNCTION "CalcPvArt"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int CalcPvArt(								/* return : 0 on success, other on error */
 	CxPanier *cx,							/* in : contexte panier courant */
 	Panier *p								/* in : article panier a calculer */
@@ -801,7 +803,7 @@ int LirePanier(								/* return : 0 on success, other on error */
 	DynTable data = {0};
 	static CxPanier *tcx;
 	static unsigned long nbcx;
-	static Panier tmp;
+	static Panier tmp = {0};
 	CxPanier *cx =NULL;
 	Panier *p = NULL;
 	unsigned long i;
@@ -877,7 +879,7 @@ int LirePanier(								/* return : 0 on success, other on error */
 			else if(!*exo) tx = dyntab_field_val(&cntxt->cnf_data, "TVA_VT_NORM", 0, 0);
 			cx->txTVA = atof(tx);
 		}
-		
+
 		/* Remise globale */
 		if(cx->b_usrpro)
 			cx->idrem = strtoul(dyntab_field_val(&cntxt->cnf_data, "REMPRO_GLOBALE", ~0UL, 0), NULL, 0);
@@ -909,7 +911,7 @@ int LirePanier(								/* return : 0 on success, other on error */
 		if(form_eval_fieldexpr(cntxt, &data, 0, cx->idsess, add_sz_str("<-PANIER_SESSION"), NULL, 0)) STACK_ERROR;
 		M_ALLOC(cx->panier, (data.nbrows + 1) * sizeof(cx->panier[0]));
 		cx->nbpanier = data.nbrows;
-		
+
 		/* Lecture des articles du panier */
 		for(i = 0; i < cx->nbpanier; i++)
 		{
@@ -919,13 +921,13 @@ int LirePanier(								/* return : 0 on success, other on error */
 			cx->totHrem += 0.01 * (int)(100. * p->pxpub * p->qte + 0.499);
 			cx->totQTE += p->qte;
 		}
-		
+
 		/* Calcul du prix de vente pour les articles du panier */
 		for(i = 0; i < cx->nbpanier; i++)
 			if(CalcPvArt(cx, cx->panier + i)) STACK_ERROR;
 	}
 	*ocx = cx;
-	
+
 	/* Recherche article courant */
 	for(i = 0; i < cx->nbpanier; i++)
 	{
@@ -1031,7 +1033,7 @@ int TarifFAP(								/* return : 0 on success, other on error */
 		else if(!strcmp(func, "IdRemArt"))
 		{
 			/* IdObj remise sur un article du panier */
-			if(art->idrem) 
+			if(art->idrem)
 			{
 				DYNTAB_ADD_INT(res, 0, 0, art->idrem);
 				RETURN_OK;
@@ -1040,7 +1042,7 @@ int TarifFAP(								/* return : 0 on success, other on error */
 		else if(!strcmp(func, "IdCatRemArt"))
 		{
 			/* IdObj remise sur un article du panier */
-			if(art->idcatrem) 
+			if(art->idcatrem)
 			{
 				DYNTAB_ADD_INT(res, 0, 0, art->idcatrem);
 				RETURN_OK;
@@ -1054,7 +1056,7 @@ int TarifFAP(								/* return : 0 on success, other on error */
 		else if(!strcmp(func, "ImgRem"))
 		{
 			/* Image remise d'un article du panier */
-			if(art->idrem) 
+			if(art->idrem)
 			{
 				if(qry_obj_field(cntxt, res, art->idrem, "IMAGE")) STACK_ERROR;
 				RETURN_OK;

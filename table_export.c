@@ -458,7 +458,7 @@ int table_read_obj_list(				/* return : 0 on success, other on error */
 int table_prepare_rows(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl,				/* in : control index in cntxt->form->ctrl */
-	char options						/* in : options for result in ctrl->objtbl->cellval
+	unsigned int options				/* in : options for result in ctrl->objtbl->cellval
 											bit 0 : output object label if set
 											bit 1 : use EAV format if set, table format else */
 ){
@@ -476,8 +476,8 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 	{
 		/* EAV format: use EAV column names */
 		DYNTAB_SET(&tbl->cellval, 0, 1, "Attribute");
-		DYNTAB_SET(&tbl->cellval, 0, 1, "Value");
-		DYNTAB_SET(&tbl->cellval, 0, 1, "Index");
+		DYNTAB_SET(&tbl->cellval, 0, 2, "Value");
+		DYNTAB_SET(&tbl->cellval, 0, 3, "Index");
 	}
 	else
 		/* Table format : use fields labels*/
@@ -578,14 +578,9 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 					if(idrelobj && (!strncmp(fmt, add_sz_str("_EVA_RELATION")) || cell->b_relation && !*fmt))
 					{
 						/* Relation formats */
+						M_FREE(outval)
 						if(qry_obj_idfield(cntxt, &data, idrelobj, 0) ||
-							qry_obj_label(cntxt, NULL, NULL, NULL, &val, NULL, NULL, NULL, NULL, 0, &data, 0)) STACK_ERROR;
-
-						// Store related object label in
-						if(options & 2) 
-							DYNTAB_ADD_BUF(&tbl->cellval, v, 3, val)
-						else
-							DYNBUF_ADD_BUF(&outval, val, NO_CONV);
+							qry_obj_label(cntxt, NULL, NULL, NULL, &outval, NULL, NULL, NULL, NULL, 0, &data, 0)) STACK_ERROR;
 					}
 
 					/* Add formated value */

@@ -12,6 +12,7 @@
 *********************************************************************/
 
 #include "eva.h"
+#include "cgi_utils.h"
 
 int FactureAEMO(EVA_context *cntxt, unsigned long i_ctrl);
 int EcheancierAEMO(EVA_context *cntxt, unsigned long i_ctrl);
@@ -404,7 +405,7 @@ int result_file(				/* return : 0 on success, other on error */
 	{
 		/* Build unique file name based on original file name*/
 		DynTableCell *fileproc = DYNTAB_FIELD_CELL(&cntxt->cnf_data, FORM_FILEPROC);
-		char *bname = basename(DYNTAB_VAL_SZ(res, 1, 2));
+		char *bname = fbasename(DYNTAB_VAL_SZ(res, 1, 2));
 		char *ext = strrchr(bname, '.');
 		sz = strlen(bname) - (ext ? strlen(ext) : 0);
 		snprintf(add_sz_str(filename), "%.*s-%lX%s", (int)sz, bname, (long)ms_since(&cntxt->tm0) * rand(), ext ? ext : "");
@@ -686,7 +687,7 @@ int action_launchproc(				/* return : 0 on success, other on error */
 	/* Clean temp directory */
 	if(cntxt->user_ip && strcmp(cntxt->user_ip, "127.0.0.1") && !(chdir(cntxt->path) || chdir("proc") || chdir(procid)))
 	{
-#ifdef WIN32
+#if defined _WIN32  || defined _WIN64
 		system("del /q *.*");
 #else
 		if(system("rm -r *.*"));

@@ -172,7 +172,7 @@ int Init_liste_mes(
 	cf->val_AttenteAffectationTS = get_id_value(cntxt, add_sz_str("Attente affectation TS"));
 
 	/* Creation de la liste des mesures a traiter */
-	if(sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdMes (IdObj INT) TYPE=HEAP")) STACK_ERROR;
+	if(sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdMes (IdObj INT) ENGINE=MEMORY")) STACK_ERROR;
 
 	/* Lecture des mesures de la facture */
 	if(cf->idfacture)

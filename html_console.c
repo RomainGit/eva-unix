@@ -1,4 +1,10 @@
 /*********************************************************************
+** ---------------------- Copyright notice ---------------------------
+** This source code is part of the EVASoft project
+** It is property of Alain Boute Ingenierie - www.abing.fr and is
+** distributed under the GNU Public Licence version 2
+** Commercial use is submited to licencing - contact eva@abing.fr
+** -------------------------------------------------------------------
 **        File : html_console.c
 ** Description : bascic server administration console (backup, restart, status)
 **      Author : Alain BOUTE
@@ -337,8 +343,7 @@ void backup_server(			/* Return 0 on success, other in error */
 	shutdown_sql(csl);
 
 	/* Prepare ZIP operation */
-	chdir(cntxt->path);
-	chdir("..");
+	chdir(cntxt->rootdir);
 	putenv("TZ=MET-1MEST");
 	mkdir("backup");
 
@@ -1055,7 +1060,7 @@ int output_graph_logs(
 
 	DYNTAB_SET(graphdata, MINWIDTH_ROW, MINWIDTH_COL, "3")
 
-	DYNTAB_ADD(graphdata, TITLE_ROW, TITLE_COL, CONSOLE_GRAPH_TITLE, 0, NO_CONV)//
+	DYNTAB_ADD(graphdata, TITLE_ROW, TITLE_COL, CONSOLE_GRAPH_TITLE, 0, NO_CONV)
 
 	DYNTAB_SET(graphdata, SUBTITLE_ROW, SUBTITLE_COL, "Horaires")
 

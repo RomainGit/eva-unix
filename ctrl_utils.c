@@ -18,7 +18,7 @@
 ** Description : add a control to form list
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_add_new"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int ctrl_add_new(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long idctrl,			/* in : IdObj of control to add */
@@ -44,7 +44,7 @@ int ctrl_add_new(					/* return : 0 on success, other on error */
 	if(ctrl_set_common_attr(cntxt, ctrl)) STACK_ERROR;
 
 	/* Look for control handlers */
-	while(	ctrl_handlers[ctrl->i_handler].control && 
+	while(	ctrl_handlers[ctrl->i_handler].control &&
 			(	strcmp(ctrl_handlers[ctrl->i_handler].control, ctrl->CONTROL) ||
 				ctrl_handlers[ctrl->i_handler].type &&
 				strcmp(ctrl_handlers[ctrl->i_handler].type, ctrl->TYPE)))
@@ -70,7 +70,7 @@ int ctrl_from_cginame(				/* return : control index in cntxt->form->ctrl or 0 if
 	for(j = 0; j < form->nb_ctrl; j++)
 	{
 		DynBuffer *name = form->ctrl[j].cginame;
-		if(name && name->cnt <= sz && !strncmp(cginame+1, name->data + 1, name->cnt - 1)) 
+		if(name && name->cnt <= sz && !strncmp(cginame+1, name->data + 1, name->cnt - 1))
 			return j;
 	}
 
@@ -172,7 +172,7 @@ int ctrl_add_child(					/* return : 0 on success, other on error */
 		if(!childlist || !childlist->nbrows) RETURN_OK;
 
 		/* Initialize i_prevctrl with last child */
-		for(i_prevctrl = ctrl->i_child; form->ctrl[i_prevctrl].i_brother; i_prevctrl = form->ctrl[i_prevctrl].i_brother); 
+		for(i_prevctrl = ctrl->i_child; form->ctrl[i_prevctrl].i_brother; i_prevctrl = form->ctrl[i_prevctrl].i_brother);
 
 		/* Remove controls in childlist already in parents - prevent infinite loops on CTRLTREE */
 		for(i = i_ctrl; i != form->ctrl[i].i_parent; i = form->ctrl[i].i_parent)
@@ -198,10 +198,10 @@ int ctrl_add_child(					/* return : 0 on success, other on error */
 			/* Set control clicked condition */
 			clickcgibtn = cntxt->cgi ? cntxt->cgi + cntxt->cgibtn : NULL;
 			if(cgi_build_basename(cntxt, &newctrl->cginame, i_newctrl, 'C')) STACK_ERROR;
-			if(clickcgibtn && newctrl->cginame->cnt <= clickcgibtn->name_sz && 
-				!strncmp(clickcgibtn->name + 1, newctrl->cginame->data + 1, newctrl->cginame->cnt - 1)) 
+			if(clickcgibtn && newctrl->cginame->cnt <= clickcgibtn->name_sz &&
+				!strncmp(clickcgibtn->name + 1, newctrl->cginame->data + 1, newctrl->cginame->cnt - 1))
 				cntxt->form->i_ctrl_clic = i_newctrl;
-		
+
 			/* Call control handler */
 			CTRL_PRI_HDLR(i_newctrl);
 			newctrl = form->ctrl + i_newctrl;
@@ -264,7 +264,7 @@ int ctrl_set_attr(					/* return : 0 on success, other on error */
 		for(i = 0; i < data->nbrows; i++)
 			if(dyntab_copy(&ctrl->attr, ctrl->attr.nbrows, 0, dyntab_cell(data, i, 0), 1))
 				RETURN_ERR_MEMORY;
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -282,15 +282,15 @@ int ctrl_set_attr_txt(				/* return : 0 on success, other on error */
 	char *attr,						/* in : control field to search for */
 	char *txt, size_t len			/* in : text to store */
 ){
-	DynTable tval = { 0 }; 
+	DynTable tval = { 0 };
 	DynTableCell *cell;
 
-	if(dyntab_add(&tval, 0, 0, txt, len, NO_CONV)) RETURN_ERR_MEMORY;	
+	if(dyntab_add(&tval, 0, 0, txt, len, NO_CONV)) RETURN_ERR_MEMORY;
 	cell = dyntab_cell(&tval, 0, 0);
 	cell->field = attr;
 	cell->b_dontfreefield = 1;
 	cell->IdObj = DYNTAB_TOUL(&ctrl->id);
-	if(ctrl_set_attr(cntxt, ctrl, attr, &tval)) STACK_ERROR; 
+	if(ctrl_set_attr(cntxt, ctrl, attr, &tval)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -322,7 +322,7 @@ int ctrl_check_error_status(		/* return : 0 on success, other on error */
 	int b_editable;
 
 	/* Return if no check needed */
-	if(!ctrl->storage) RETURN_OK;
+	if(!ctrl || !ctrl->storage) RETURN_OK;
 
 	/* Check if editable in parents - return if not */
 	b_editable = ctrl->access & AccessEdit && form->ctrl->access & (form->b_newobj ? AccessCreate : AccessEdit);
@@ -391,7 +391,7 @@ int ctrl_check_error_status(		/* return : 0 on success, other on error */
 
 			/* Condition matched : handle status & message */
 			if(!*stat && !strcmp(val, "1")) RETURN_OK;
-			if(!*msg && strcmp(val, "1")) msg =  val; 
+			if(!*msg && strcmp(val, "1")) msg =  val;
 			ctrl->error = !strcmp(stat, "Yes") ? 0 : strcmp(stat, "No") ? 1 : 2;
 			if(!*msg && ctrl->error) msg = ctrl->error & 2 ? "Saisie obligatoire" : "Saisie recommandée";
 			if(ctrl->errmsg) DYNBUF_ADD_STR(&ctrl->errmsg, "\n");
@@ -406,7 +406,7 @@ int ctrl_check_error_status(		/* return : 0 on success, other on error */
 	if(ctrl->error)
 	{
 		if(ctrl->errmsg) DYNBUF_ADD_STR(&ctrl->errmsg, "\n");
-		DYNBUF_ADD(&ctrl->errmsg, ctrl->error & 2 ? "Saisie obligatoire" : "Saisie recommandée", 0, NO_CONV); 
+		DYNBUF_ADD(&ctrl->errmsg, ctrl->error & 2 ? "Saisie obligatoire" : "Saisie recommandée", 0, NO_CONV);
 	}
 
 	RETURN_OK_CLEANUP;
@@ -485,7 +485,7 @@ int ctrl_add_opt_btn(
 			DYNBUF_ADD_BUF(&cginame, form->ctrl->cginame, NO_CONV);
 		*cginame->data = 'I';
 
-		if(put_html_button(cntxt, cginame->data, "Infos", 
+		if(put_html_button(cntxt, cginame->data, "Infos",
 						image->data, imgsel->data, tooltip->data, 0, 4))
 			STACK_ERROR;
 	}
@@ -505,7 +505,7 @@ int ctrl_add_opt_btn(
 ** Description : output HTML code for the label of a control
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_put_label"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int ctrl_put_label(
 	EVA_context *cntxt,			/* in/out : execution context data */
 	EVA_ctrl *ctrl,	 			/* in : input control to process */
@@ -514,7 +514,7 @@ int ctrl_put_label(
 	int b_opt = STRCMPNUL(ctrl->OPTIONBUTTON, "_EVA_NONE") != 0 && cntxt->opt_btn_mode != OptBtn_None;
 	int b_nobr = *CTRL_ATTR_VAL(LABEL_NOBR) == '1';
 	char *br_style = CTRL_ATTR_VAL(BORDER_STYLE);
-	
+
 	/* Label color depends on error status if no option button */
 	char *labelcolor = (b_opt || ctrl->error < 1) ? ctrl->LABELFONTCOLOR :
 						ctrl->error < 2 ? "DD8800" : "DD0000";
@@ -582,7 +582,7 @@ int ctrl_put_label(
 ** Description : output control position & format
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_format_cell"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int ctrl_format_cell(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	EVA_ctrl *ctrl,	 				/* in : control to process */
@@ -595,7 +595,7 @@ int ctrl_format_cell(				/* return : 0 on success, other on error */
 							ctrl->ALIGN, ctrl->VALIGN, ctrl->WIDTH, ctrl->HEIGHT,
 							ctrl->BGCOLOR, ctrl->BACKGROUND, ctrl->COLSPAN, ctrl->ROWSPAN,
 							ctrl->FONTFACE, ctrl->FONTSIZE, ctrl->FONTCOLOR, ctrl->CELL_STYLE,
-							ctrl->BOLD[0] == '1', ctrl->ITALIC[0] == '1', ctrl->UNDERLINE[0] == '1', 0, b_head)) 
+							ctrl->BOLD[0] == '1', ctrl->ITALIC[0] == '1', ctrl->UNDERLINE[0] == '1', 0, b_head))
 			STACK_ERROR;
 	}
 	else
@@ -612,7 +612,7 @@ int ctrl_format_cell(				/* return : 0 on success, other on error */
 							ctrl->ALIGN, ctrl->VALIGN, ctrl->WIDTH, ctrl->HEIGHT,
 							ctrl->BGCOLOR, ctrl->BACKGROUND, ctrl->COLSPAN, ctrl->ROWSPAN,
 							ctrl->FONTFACE, ctrl->FONTSIZE, ctrl->FONTCOLOR, ctrl->CELL_STYLE,
-							ctrl->BOLD[0] == '1', ctrl->ITALIC[0] == '1', ctrl->UNDERLINE[0] == '1', 0, b_head)) 
+							ctrl->BOLD[0] == '1', ctrl->ITALIC[0] == '1', ctrl->UNDERLINE[0] == '1', 0, b_head))
 			STACK_ERROR;
 	}
 
@@ -626,7 +626,7 @@ int ctrl_format_cell(				/* return : 0 on success, other on error */
 ** Description : output control position & format with label & notes if needed
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_format_pos"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int ctrl_format_pos(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	EVA_ctrl *ctrl,	 				/* in : control to process */
@@ -811,7 +811,7 @@ int ctrl_put_table_header(				/* return : 0 on success, other on error */
 	}
 
 	/* Output HTML container table header */
-	if(put_html_table_header(cntxt, 
+	if(put_html_table_header(cntxt,
 			CTRL_ATTR_VAL(TABLEALIGN),
 			ctrl->TABLEWIDTH,
 			ctrl->TABLEHEIGHT,
@@ -834,7 +834,7 @@ int ctrl_put_table_header(				/* return : 0 on success, other on error */
 ** Description : output HTML footer for a new table
 *********************************************************************/
 #define ERR_FUNCTION "ctrl_put_table_footer"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP
 int ctrl_put_table_footer(
 	EVA_context *cntxt,					/* in/out : execution context data */
 	EVA_ctrl *ctrl						/* in : control to process */
@@ -891,12 +891,12 @@ int ctrl_primary_handler(			/* return : 0 on success, other on error */
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	int step = form->step;
 	form->i_ctrl = i_ctrl;
-	
+
 	/* Return if no primary handler for the control */
 	if(!ctrl_handlers[ctrl->i_handler].h0) RETURN_OK;
 
 	/* Check control access - return if none */
-	if(ctrl_check_access(cntxt, ctrl)) STACK_ERROR; 
+	if(ctrl_check_access(cntxt, ctrl)) STACK_ERROR;
 	if(!(ctrl->access & (AccessView | AccessEdit))) RETURN_OK;
 
 	/* Limit access if applicable */
@@ -905,7 +905,7 @@ int ctrl_primary_handler(			/* return : 0 on success, other on error */
 	/* Call control primary handler & restore step */
 	if(ctrl_handlers[ctrl->i_handler].h0(cntxt, i_ctrl)) STACK_ERROR;
 	form->step = step;
-	
+
 	RETURN_OK_CLEANUP;
  }
 #undef ERR_FUNCTION
@@ -916,7 +916,7 @@ int ctrl_primary_handler(			/* return : 0 on success, other on error */
 ** Description : output html code for javascript call to ShowHelp
 *********************************************************************/
 #define ERR_FUNCTION "put_showhelp"
-#define ERR_CLEANUP	
+#define ERR_CLEANUP
 int put_showhelp(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in : execution context data */
 	DynBuffer **html				/* in/out : HTML output buffer */
@@ -936,7 +936,7 @@ int put_showhelp(					/* return : 0 on success, other on error */
 	DYNBUF_ADD3_CELL(html, " ctrlclic='I", &(form->ctrl[form->i_ctrl].id), 0, 0, NO_CONV, "/");
 	DYNBUF_ADD_CELL(html, &form->id_form, 0, 0, NO_CONV);
 	DYNBUF_ADD3_CELL(html, "$", &form->id_obj, 0, 0, NO_CONV, "#'");
-	
+
 	RETURN_OK_CLEANUP;
  }
 #undef ERR_FUNCTION
@@ -962,7 +962,7 @@ size_t build_open_btn_name(				/* return : length of opname */
 	*opname = 0;
 	if(!id_form && !id_obj)
 		return sprintf(opname, "I%s$%s", srcform, srcobj);
-	else 
+	else
 		return sprintf(opname, "B%s$%s#.OPENOBJ=%lu,%lu,%d,%d", srcform, srcobj, id_obj, id_form, loc, mode);
 }
 
@@ -1005,10 +1005,10 @@ int html_put_open_btn(					/* return : 0 on success, other on error */
 	if(notes && !b_disabled) DYNBUF_ADD3_BUF(&tooltip, "\n\n", notes, NO_CONV, "\n");
 	if(action && !b_disabled) DYNBUF_ADD3(&tooltip, "\n", action, 0, NO_CONV, "");
 	if(b_disabled) DYNBUF_ADD_STR(&tooltip, "\n")
-		
+
 	/* Output button */
 	if(put_html_button(cntxt, opname, NULL,
-				img ? img->data : "_eva_open_small.gif", 
+				img ? img->data : "_eva_open_small.gif",
 				(img && imgsel) ? imgsel->data : "_eva_open_small_s.gif",
 				tooltip ? tooltip->data : NULL, 0, b_disabled | 4))
 			STACK_ERROR;
@@ -1156,9 +1156,9 @@ int ctrl_add_symbol_btn(				/* return : 0 on success, other on error */
 		/* Output button */
 		if(b_button)
 		{
-			if(html_put_open_btn(cntxt, opname, formname, 
+			if(html_put_open_btn(cntxt, opname, formname,
 							b_label ? NULL : objtitle, !b_tooltip ? NULL : b_label ? fnotes : notes,
-							img, imgsel, 
+							img, imgsel,
 							id_form, objdata ? objdata->IdObj : 0, loc,
 							access == AccessNone, atoi(CTRL_ATTR_VAL(OPEN_MODE))))
 				STACK_ERROR;
@@ -1185,7 +1185,7 @@ int ctrl_add_symbol_btn(				/* return : 0 on success, other on error */
 			DYNBUF_ADD_BUF(&htmlabel, txtlabel, NO_CONV);
 		if(formaccess == AccessNone)
 			DYNBUF_ADD_BUF(html, htmlabel, NO_CONV)
-		else 
+		else
 			if(put_html_button(cntxt, opname, htmlabel->data, NULL, NULL, txtnotes ? txtnotes->data : NULL, 0, 32))
 			STACK_ERROR;
 		if(bg_color && *bg_color != '*') DYNBUF_ADD_STR(html, "</td>");
@@ -1216,7 +1216,7 @@ int ctrl_filter_idobj(				/* return : 0 on success, other on error */
 	if(*CTRL_ATTR_VAL(DEBUG_SQL_FILTER) == '1') cntxt->sql_trace = DEBUG_SQL_RES;
 
 	/* Create temporary table IdList for results if no output table */
-	if(!res && sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdList (IdObj INT NOT NULL) TYPE=HEAP \n"))
+	if(!res && sql_exec_query(cntxt, "CREATE TEMPORARY TABLE IdList (IdObj INT NOT NULL) ENGINE=MEMORY \n"))
 		STACK_ERROR;
 
 	/* Build IdObj query for filter */
@@ -1227,11 +1227,11 @@ int ctrl_filter_idobj(				/* return : 0 on success, other on error */
 		STACK_ERROR;
 
 	/* Exec Query & read result */
-	if(qry_exec_filter(cntxt, &flt, sql->data)) STACK_ERROR;	
+	if(qry_exec_filter(cntxt, &flt, sql->data)) STACK_ERROR;
 	if(ctrl->objtbl) ctrl->objtbl->totlines = cntxt->sql_nbrows;
 	if(cntxt->debug & DEBUG_SQL_SLOW && cntxt->sql_restime > DEBUG_SQL_SLOW_TH) err_print_filter(&cntxt->debug_msg, &flt);
 	if(res ?
-		sql_get_table(cntxt, res, 0) : 
+		sql_get_table(cntxt, res, 0) :
 		sql_exec_query(cntxt, "ALTER TABLE IdList ADD INDEX (IdObj)"))
 			STACK_ERROR;
 

@@ -22,8 +22,8 @@
 					DYNTAB_FREE(ctrltree)
 int form_load(
 	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *id_form,				/* in : form to load (IdObj) */		
-	DynTable *id_obj,				/* in : object to load in form (IdObj) */		
+	DynTable *id_form,				/* in : form to load (IdObj) */
+	DynTable *id_obj,				/* in : object to load in form (IdObj) */
 	int mode						/* in : display mode
 											0 : automatic
 											1 : edit
@@ -80,7 +80,7 @@ int form_load(
 		if(ctrl_check_access(cntxt, form->ctrl)) STACK_ERROR;
 		form->nextstep = mode == 1 ? HtmlEdit : (mode == 2 || mode == 4) ? HtmlView : mode == 3 ? HtmlPrint :
 					form->prevstep > HtmlSaveDlg ? form->prevstep :
-					(DYNTAB_FIELD_CELL(&cntxt->user_data, OPEN_MODE_EDIT) || !idobj) ? 
+					(DYNTAB_FIELD_CELL(&cntxt->user_data, OPEN_MODE_EDIT) || !idobj) ?
 						HtmlEdit : HtmlView;
 		if(idobj || !CTRL_ATTR_CELL(DISPLAYFIELDS))
 		{
@@ -108,7 +108,7 @@ int form_load(
 		if(b_opttab)
 		{
 			CGIData *cgi = cntxt->cgi + cntxt->cgibtn;
-			if(cgi->IdForm == idform && cgi->IdObj == idobj && cgi->name[0] == 'T')
+			if(cgi && cgi->IdForm == idform && cgi->IdObj == idobj && cgi->name[0] == 'T')
 				form->opttabid = cgi->IdCtrl;
 			if(!form->opttabid)
 			{
@@ -142,7 +142,7 @@ int form_load(
 		form->html = &form->html_top;
 		if(cntxt->b_identified)
 		{
-			DYNBUF_ADD_STR(form->html, 
+			DYNBUF_ADD_STR(form->html,
 				"<td align=center>"
 				"<font size=+1><b><br><br>Accès non autorisé<br><br></b></font>");
 			if(idobj)
@@ -151,7 +151,7 @@ int form_load(
  				DYNBUF_ADD_STR(form->html, "L'ajout de fiches")
 			else
  				DYNBUF_ADD_STR(form->html, "L'accès au formulaire");
-			DYNBUF_ADD3(form->html, " [", ctrl->LABEL, 0, TO_HTML, 
+			DYNBUF_ADD3(form->html, " [", ctrl->LABEL, 0, TO_HTML,
 				"] vous est refusé<br><br>"
 				"Contactez votre administateur si vous avez besoin de cet accès<br><br>");
 			if(put_html_button(cntxt, "B$#.CLOSE", "Revenir", "_eva_btn_gobackobj_fr.gif", "_eva_btn_gobackobj_fr_s.gif",
@@ -162,7 +162,7 @@ int form_load(
 		else
 		{
 			int b_showid = strtoul(DYNTAB_FIELD_VAL(&cntxt->cnf_data, ALLOW_CLEAR_LOGIN), NULL, 10);
-			DYNBUF_ADD3(form->html, 
+			DYNBUF_ADD3(form->html,
 				"<td align=center>"
 				"<table noborder width=100% bgcolor=#FFFFFF><tr><td align=center>"
 				"<b>Vous devez vous identifier pour accéder à cette fiche</b>"
@@ -200,8 +200,8 @@ int form_load(
 
 int form_load_from_ctrl(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
-	DynTable *id_form,				/* in : form to load */		
-	DynTable *id_obj,				/* in : object to load */		
+	DynTable *id_form,				/* in : form to load */
+	DynTable *id_obj,				/* in : object to load */
 	int loc,						/* in : where to place new form
 											0 : same as caller
 											1 : top
@@ -228,8 +228,8 @@ int form_load_from_ctrl(			/* return : 0 on success, other on error */
 	if(!dyntab_sz(id_form, 0, 0) && !dyntab_sz(id_obj, 0, 0)) RETURN_OK;
 
 	/* Set placement if same as caller */
-	if(!loc) loc = (!form || !dyntab_sz(&cntxt->alt_form, 0, 0) || 
-		dyntab_cmp(&form->id_obj, 0, 0, &cntxt->alt_obj, 0, 0) || 
+	if(!loc) loc = (!form || !dyntab_sz(&cntxt->alt_form, 0, 0) ||
+		dyntab_cmp(&form->id_obj, 0, 0, &cntxt->alt_obj, 0, 0) ||
 		dyntab_cmp(&form->id_form, 0, 0, &cntxt->alt_form, 0, 0)) ? 1 : 2;
 
 	/* If no form given */
@@ -293,7 +293,7 @@ int form_load_from_ctrl(			/* return : 0 on success, other on error */
 	if(form_load(cntxt, &idform, id_obj, mode)) STACK_ERROR;
 	if(call_data && !cntxt->form->call_data.nbrows)
 		DYNTAB_ADD_BUF(&cntxt->form->call_data, 0, 0, call_data);
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -411,9 +411,9 @@ int form_close_nosave(				/* return : 0 on success, other on error */
 			DYNTAB_ADD_INT(&cntxt->id_form, 0, 0, cntxt->cgi[i].IdForm);
 			DYNTAB_FREE(cntxt->id_obj);
 			if(cntxt->cgi[i].IdObj) DYNTAB_ADD_INT(&cntxt->id_obj, 0, 0, cntxt->cgi[i].IdObj);
-		}				   
+		}
 	}
-	
+
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -430,7 +430,7 @@ int form_output(					/* return : 0 on success, other on error */
 ){
 	EVA_form *form = cntxt->form;
 	DynTable ctrltree = { 0 };
-	int b_alt = form && 
+	int b_alt = form &&
 				!dyntab_cmp(&cntxt->alt_form, 0, 0, &form->id_form, 0, 0) &&
 				!dyntab_cmp(&cntxt->alt_obj, 0, 0, &form->id_obj, 0, 0);
 	DynTable *id_form = b_alt ? &cntxt->alt_form : &cntxt->id_form;
@@ -443,7 +443,7 @@ int form_output(					/* return : 0 on success, other on error */
 	{
 		/* Get dialog control index */
 		unsigned long i = ctrl_from_cginame(cntxt, DYNTAB_VAL_SZ(&form->dlg_ctrl, 0, 0));
-		if(i) 
+		if(i)
 		{
 			/* Control index found : use control handler */
 			if(!strcmp(form->ctrl[i].CONTROL, "_EVA_BUTTON"))
@@ -496,7 +496,7 @@ int form_output(					/* return : 0 on success, other on error */
 			/* Check input if edit mode */
 			form->step = InputCheck;
 			if(ctrl_add_child(cntxt, 0, &ctrltree)) STACK_ERROR;
-			
+
 		default:
 			form->step = form->nextstep;
 			form->html = &form->html_top;
@@ -532,9 +532,9 @@ int form_output(					/* return : 0 on success, other on error */
 
 int form_get_html(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
-	DynBuffer **res,				/* in/out : buffer to output form HTML */		
-	unsigned long id_form,			/* in : form to load */		
-	unsigned long id_obj			/* in : object to load */		
+	DynBuffer **res,				/* in/out : buffer to output form HTML */
+	unsigned long id_form,			/* in : form to load */
+	unsigned long id_obj			/* in : object to load */
 ){
 	DynTable idform = { 0 };
 	DynTable idobj = { 0 };

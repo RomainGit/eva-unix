@@ -172,23 +172,6 @@ void output_log_end(EVA_context *cntxt)
 }
 
 /*********************************************************************
-** Fonction : basename
-** Description : return the base name of a path
-*********************************************************************/
-char *basename(char *path, size_t path_len)
-{
-#define DIR_DELIM "\\/:"
-	char *name;
-	if(!path || !*path) return "";
-	if(!path_len) path_len = strlen(path);
-	name = path + path_len - 1;
-	while(!strchr(DIR_DELIM, *name) && name > path) name--;
-	if(strchr(DIR_DELIM, *name)) name++;
-	return name;
-}
-#undef DIR_DELIM
-
-/*********************************************************************
 ** Fonction : cgi_free
 ** Description : free CGI data
 *********************************************************************/
@@ -1182,7 +1165,7 @@ int cgi_save_files(					/* return : 0 if Ok, other on error */
 	{
 		EVA_cgi_file *cgi_file = cntxt->cgi_file + i;
 		CGIData *cgi = cntxt->cgi ? cntxt->cgi + cgi_file->i_cgi : NULL;
-		char *bname = basename(DYNTAB_VAL_SZ(&cgi_file->descr, 0, 1));
+		char *bname = fbasename(DYNTAB_VAL_SZ(&cgi_file->descr, 0, 1));
 		char *ext = strrchr(bname, '.');
 		size_t sz_ext = ext ? strlen(ext) : 0;
 		size_t sz0 = strlen(bname) - sz_ext;
@@ -1454,7 +1437,7 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 	size_t len = length ? atoi(length) : 0;
 
 	/* Read from stdin if available */
-	if(length)
+	if(len)
 	{
 		size_t r = 0;
 		int t0 = ms_since(&cntxt->tm0);
@@ -1475,7 +1458,7 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 		cntxt->input->cnt = r;
 
 		/* Trace CGI data if applicable */
-#ifdef PROD_VERSION
+#ifndef _DEBUG
 		if(cntxt->debug & DEBUG_CGI_RAW)
 #endif
             cgi_trace_input(cntxt);

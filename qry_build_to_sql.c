@@ -31,35 +31,27 @@ int qry_filter_rel_to_sql(		/* return : 0 on success, other on error */
 	DynTable fltobj = { 0 };
 	DynTable resdata = { 0 };
 	char *reltype = DYNTAB_FIELD_VAL(flt_data, FILTER_RELTYPE);
-	char *fltop = DYNTAB_FIELD_VAL(flt_data, FILTER_REL_OP);
-	char *fltrel = DYNTAB_FIELD_VAL(flt_data, FILTER_RELWITH);
+	char *fltop = DYNTAB_FIELD_VAL(flt_data, FILTER_RELWITH);
+	int b_not = DYNTAB_FIELD_VAL(flt_data, FILTER_NOT)[0] != 0;
 	DYNTAB_FIELD(&fltobj, flt_data, LISTOBJ);
 	DYNTAB_FIELD(&fltval, flt_data, FILTER_LINKFIELD);
 
 	/* Add relation type, field, & NOT operator if applicable */
-	DYNBUF_ADD_STR(sqlexpr, "[FIRST(");
-	if(!strcmp("_EVA_RELREVERSE", reltype)) DYNBUF_ADD_STR(sqlexpr, "<-");
+	DYNBUF_ADD(sqlexpr, !strcmp("_EVA_RELREVERSE", reltype) ? "[<-" : "[", 0, NO_CONV);
 	if(!fltfield->nbrows)
 	{
-		if(strcmp("_EVA_RELREVERSE", reltype)) DYNBUF_ADD_STR(sqlexpr, "->");
+		DYNBUF_ADD_STR(sqlexpr, "->");
 	}
 	else
 		if(dyntab_to_dynbuf(fltfield, sqlexpr, ",", 1, ",", 1, NO_CONV)) RETURN_ERR_MEMORY;
-	DYNBUF_ADD_STR(sqlexpr, ")]");
+	DYNBUF_ADD_STR(sqlexpr, "]");
 
-	if(!strcmp(fltop, "_EVA_ISEMPTY") || !strcmp(fltop, "_EVA_ISNOTEMPTY"))
-	{
-		/* Empty / not empty relation */
-		if(!strcmp(fltop, "_EVA_ISEMPTY")) DYNBUF_ADD_STR(sqlexpr, "=''")
-		else DYNBUF_ADD_STR(sqlexpr, "<>''");
-	}
-	else if(*fltrel)
+	if(*fltop)
 	{
 		/* Relation to field/expression of given object : evaluate field expression */
 		if(form_eval_valtype(cntxt, &resdata, fltop, &fltobj, &fltval)) STACK_ERROR;
-		if(*fltop) DYNBUF_ADD_STR(sqlexpr, " NOT");
-		DYNBUF_ADD_STR(sqlexpr, " IN(");
-		if(!resdata.nbrows) DYNBUF_ADD_STR(sqlexpr, "'',");
+		if(b_not) DYNBUF_ADD_STR(sqlexpr, " NOT");
+		DYNBUF_ADD_STR(sqlexpr, " IN (");
 		if(qry_values_list(cntxt, &resdata, 0, sqlexpr)) STACK_ERROR;
 		DYNBUF_ADD_STR(sqlexpr, ")");
 	}
