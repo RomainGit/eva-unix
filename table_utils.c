@@ -2040,7 +2040,7 @@ int table_export_list(			/* return : 0 on success, other on error */
 		if (file_copy_template(cntxt, dyntab_val(lst, i, 3))) STACK_ERROR;
 
 		/* Handle table data to produce a soffice file */
-		if (file_write_soffice(cntxt, &tbl->cellval, i, dyntab_val(lst, i, 3))) STACK_ERROR;
+		if (file_write_soffice(cntxt, tbl, i, name)) STACK_ERROR;
 	}
 	else
 	{
@@ -2052,17 +2052,17 @@ int table_export_list(			/* return : 0 on success, other on error */
 		DYNTAB_SET(&tbl->cellval, 0, 0, "Fields");
 		DYNTAB_SET(&tbl->cellval, 1, 0, "Formats");
 		DYNTAB_SET(&tbl->cellval, 2, 0, "Fixed");
-		for(i = 0; i < tbl->field.nbrows; i++)
+		for(j = 0; j < tbl->field.nbrows; j++)
 		{
-			if(!strcmp("_EVA_RELATION_BTN0", dyntab_val(&tbl->format, i, 0))) continue;
-			DYNTAB_SET_CELL(&tbl->cellval, 0, i + 1, &tbl->field, i, 0);
-			DYNTAB_SET_CELL(&tbl->cellval, 1, i + 1, &tbl->format, i, 0);
-			if(!strcmp("0", dyntab_val(&tbl->strip, i, 0))) DYNTAB_SET(&tbl->cellval, 2, i + 1, "X");
+			if(!strcmp("_EVA_RELATION_BTN0", dyntab_val(&tbl->format, j, 0))) continue;
+			DYNTAB_SET_CELL(&tbl->cellval, 0, j + 1, &tbl->field, j, 0);
+			DYNTAB_SET_CELL(&tbl->cellval, 1, j + 1, &tbl->format, j, 0);
+			if(!strcmp("0", dyntab_val(&tbl->strip, j, 0))) DYNTAB_SET(&tbl->cellval, 2, j + 1, "X");
 		}
 		if(file_write_tabrc(cntxt, &tbl->cellval, "dumpfmt.txt")) STACK_ERROR;
 
 		/* Produce office document */
-		if(!proc && office_launchproc(cntxt, dyntab_val(lst, i, 1), dyntab_val(lst, i, 3))) CLEAR_ERROR;
+		if(office_launchproc(cntxt, dyntab_val(lst, i, 1), dyntab_val(lst, i, 3))) CLEAR_ERROR;
 	}
 
 	/* Clear temp files */

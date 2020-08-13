@@ -469,6 +469,10 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 	DynBuffer *outval = NULL;
 	DynBuffer *val = NULL;
 	unsigned long i, j, k, v;
+	unsigned long nbrows = tbl ? tbl->data.nbrows : 0;
+	DynTableCell* ctbl = tbl ? tbl->data.cell : NULL;
+	unsigned long objmin = ctbl ? ctbl->IdObj : 0;
+	unsigned long objmax = ctbl ? ctbl[nbrows - 1].IdObj : 0;
 
 	/* Prepare title line */
 	DYNTAB_SET(&tbl->cellval, 0, 0, "IdObj");
@@ -503,11 +507,25 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 		}
 		else
 		{
-			/* Find object in objects data */
-			unsigned long rowstart;
-			for(rowstart = 0; rowstart < tbl->data.nbrows && dyntab_cell(&tbl->data, rowstart, 0)->IdObj != idobj; rowstart++);
+			/* Find first object value in objects data - butterfly optimized */
+			unsigned long p0 = objmax ? (unsigned long)((double)(idobj - objmin) / (objmax - objmin) * nbrows) : nbrows / 2;
+			unsigned long rowstart = 0, last = nbrows - 1;
+			unsigned long curobj = ctbl[p0].IdObj;
+			while (curobj != idobj) {
+				if (curobj > idobj) last = p0; else rowstart = p0;
+				p0 = (last + rowstart) / 2;
+				curobj = ctbl[p0].IdObj;
+				if (rowstart >= last) {
+					/* Handle idobj not found : set to end of table */
+					p0 = nbrows ? nbrows - 1 : 0;
+					break;
+				}
+			}
+			while (p0 && ctbl[p0 - 1].IdObj == idobj) p0--;
+			rowstart = p0;
 
 			/* Output idobj + object label if required */
+			M_FREE(outval);
 			if(options & 1 && qry_obj_label(cntxt, NULL, NULL, NULL, &outval, NULL, NULL, NULL, NULL, 0, &tbl->data, rowstart)) STACK_ERROR;
 			if((options & 3) == 3)
 			{

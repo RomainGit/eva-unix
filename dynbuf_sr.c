@@ -35,7 +35,7 @@
 #define HTML_CR_SR_TABLE	{ add_sz_str("\r\n"), add_sz_str("<br>") },  \
 							{ add_sz_str("\r"), add_sz_str("<br>") },  \
 							{ add_sz_str("\n"), add_sz_str("<br>") },  \
-							{ add_sz_str("\t"), add_sz_str("&nbsp;&nbsp;&nbsp;&nbsp;") }
+							{ add_sz_str("\t"), add_sz_str("&#09;") }
 
 /*********************************************************************
 ** Macro : FRMA_SR_TABLE
@@ -137,8 +137,9 @@ ReplaceTable sql_no_like_ops[] = { SQL_NO_QUOTE_SR_TABLE, SQL_NO_LIKE_OPS_SR_TAB
 ** Constant : export_tabrc
 ** Description : conversion table for TAB/RC files
 *********************************************************************/
-ReplaceTable export_tabrc[] = { { add_sz_str("\n"), add_sz_str("<RC>") },  
-								{ add_sz_str("\r"), add_sz_str("<RC>") },  
+ReplaceTable export_tabrc[] = { { add_sz_str("\r\n"), add_sz_str("<RC>") },
+								{ add_sz_str("\n"), add_sz_str("<RC>") },
+								{ add_sz_str("\r"), add_sz_str("<RC>") },
 								{ add_sz_str("\t"), add_sz_str("<TAB>") },
 								{ NULL } };
 
@@ -147,4 +148,13 @@ ReplaceTable export_tabrc[] = { { add_sz_str("\n"), add_sz_str("<RC>") },
 ** Description : conversion table for CR <-> CR/LF
 *********************************************************************/
 ReplaceTable crlf_to_lf[] = { { add_sz_str("\r\n"), add_sz_str("\n") },
+								{ NULL } };
+
+/*********************************************************************
+** Constant : export_xml
+** Description : conversion table for XML/TAB/RC files
+*********************************************************************/
+ReplaceTable export_xml[] = {	XML_SR_TABLE,
+								{ add_sz_str("'"), add_sz_str("&apos;") },
+								{ add_sz_str("\n"), add_sz_str("</text:p><text:p>") },
 								{ NULL } };

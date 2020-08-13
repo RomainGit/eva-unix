@@ -397,7 +397,23 @@ int file_copy_template(				/* return : 0 on success, other on error */
 #undef ERR_FUNCTION
 #undef ERR_CLEANUP
 
-#define MY_STRSTR(a, b) (((a) && (b)) ? strstr(a, b) : NULL)
+/*********************************************************************
+** Fonction : next_str
+** Description : find next occurence of a string
+*********************************************************************/
+char* next_str(
+	char* str,		/* in : string to search for (from previous result end) */
+	char* find		/* in : string to find */
+){
+	static char* res = NULL;
+	static char* end = NULL;
+	if (!find || !str) return NULL;
+	if (res == str) str = end;
+	res = strstr(str, find);
+	if (res) end = res + strlen(find);
+	return res;
+}
+
 #define SOFF_END_PARA "</text:p>"
 #define SOFF_END_CELL "</table:table-cell>"
 #define SOFF_END_ROW "</table:table-row>"
@@ -414,7 +430,7 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 											bit 1 : first cell - output row header if set (p0 is start of row)
 											bit 2 : last cell - output row footer if set */
 ) {
-	char* p1 = MY_STRSTR(p0, SOFF_END_CELL), * p, * ps, * pe, * pr;
+	char* p1 = next_str(p0, SOFF_END_CELL), * p, * ps, * pe, * pr;
 	size_t sz = 0;
 	DynBuffer* buf = NULL;
 	if (!p0 || !p1) return 0;
@@ -423,16 +439,16 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 	/* Handle first cell : output row start */
 	if (options & 2)
 	{
-		p = MY_STRSTR(p0, "<table:table-cell ");
+		p = next_str(p0, "<table:table-cell");
 		if (!p || p - p0 < 10) return 0;
 		sz += fwrite(p0, p - p0, 1, f);
 		p0 = p;
 	}
 
 	/* Find paragraph in template */
-	p = MY_STRSTR(p0, "<text:p ");
-	ps = MY_STRSTR(p, ">");
-	pe = MY_STRSTR(ps, SOFF_END_PARA);
+	p = next_str(p0, "<text:p");
+	ps = next_str(p, ">");
+	pe = next_str(ps, SOFF_END_PARA);
 	if (!pe) return 0;
 	ps++;
 
@@ -460,7 +476,7 @@ size_t file_write_tblcell(		/* return : 0 on success, other on error */
 
 	/* Output template up to cell or row end */
 	pe += sizeof(SOFF_END_PARA) - 1;
-	p = MY_STRSTR(pe, (options & 4) ? SOFF_END_ROW : SOFF_END_CELL);
+	p = next_str(pe, (options & 4) ? SOFF_END_ROW : SOFF_END_CELL);
 	if (!p) return sz;
 	sz += fwrite(pe, p - pe + ((options & 4) ? sizeof(SOFF_END_ROW) : sizeof(SOFF_END_CELL)) - 1, 1, f);
 
@@ -479,7 +495,7 @@ int file_write_soffice_doc(			/* return : 0 on success, other on error */
 	DynTable* data,					/* in : table data to export */
 	char* srcfile,					/* in : template file name */
 	DynBuffer* src,					/* in : template file contents */
-	FILE* f							/* in : output stream */
+	FILE* f							/* in : output stream for file contents */
 ) {
 	DynBuffer* dst = NULL;
 	DynBuffer* tmp = NULL;
@@ -490,14 +506,14 @@ int file_write_soffice_doc(			/* return : 0 on success, other on error */
 	if (!data || !src) RETURN_OK;
 
 	/* Mark documents limits for table & rows duplication */
-	p_utf = MY_STRSTR(src->data, "UTF-8");
-	p_tbl = MY_STRSTR(p_utf, "<table:table ");
-	p_row1 = MY_STRSTR(p_tbl, "<table:table-row ");
-	p_row2 = MY_STRSTR(p_row1 + 1, "<table:table-row ");
-	p_lbl = MY_STRSTR(p_row2, "<table:table-cell ");
-	p_val = MY_STRSTR(p_lbl + 1, "<table:table-cell ");
-	p_row3 = MY_STRSTR(p_val, "<table:table-row ");
-	p_endt = MY_STRSTR(p_row3, "</table:table>");
+	p_utf = next_str(src->data, "UTF-8");
+	p_tbl = next_str(p_utf, "<table:table ");
+	p_row1 = next_str(p_tbl, "<table:table-row");
+	p_row2 = next_str(p_row1, "<table:table-row");
+	p_lbl = next_str(p_row2, "<table:table-cell");
+	p_val = next_str(p_lbl, "<table:table-cell");
+	p_row3 = next_str(p_val, "<table:table-row");
+	p_endt = next_str(p_row3, "</table:table>");
 	if (!p_endt) RETURN_ERROR("Invalid format for template file - expecting table 3 rows x 2 columns", ERR_PUT_TXT("File name : ", srcfile, 0));
 
 	/* Output header up to first table - replace UTF-8 with latin1 */
@@ -541,6 +557,68 @@ int file_write_soffice_doc(			/* return : 0 on success, other on error */
 		{
 			sz += file_write_tblcell(f, p_row3, val, 7);
 		}
+	}
+
+	/* Output template trailer & close file */
+	sz += fprintf(f, "%s", p_endt);
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Fonction : file_write_soffice_sht
+** Description : write a StarOffice compatible calc (sheet) file
+*********************************************************************/
+#define ERR_FUNCTION "file_write_soffice_sht"
+#define ERR_CLEANUP M_FREE(dst); \
+				M_FREE(tmp)
+int file_write_soffice_sht(			/* return : 0 on success, other on error */
+	EVA_context* cntxt,				/* in : execution context data */
+	ObjTableFormat* tbl,			/* in : table data to export */
+	char* srcfile,					/* in : template file name */
+	DynBuffer* src,					/* in : template file contents */
+	FILE* f							/* in : output stream for file contents */
+) {
+	DynBuffer* dst = NULL;
+	DynBuffer* tmp = NULL;
+	DynTable* data = tbl ? &tbl->cellval : NULL;
+	char* p_utf, * p_tbl, * p_endt;
+	unsigned long i, j;
+	size_t sz = 0;
+
+	if (!data || !src) RETURN_OK;
+
+	/* Mark documents limits for table & rows duplication */
+	p_utf = next_str(src->data, "UTF-8");
+	p_tbl = next_str(p_utf, "<table:table-row ");
+	p_endt = next_str(p_tbl, "</table:table>");
+	if (!p_endt) RETURN_ERROR("Invalid format for template file - expecting table", ERR_PUT_TXT("File name : ", srcfile, 0));
+
+	/* Output header up to first table - replace UTF-8 with latin1 */
+	sz += fwrite(src->data, p_utf - src->data, 1, f);
+	sz += fprintf(f, "latin1");
+	sz += fwrite(p_utf + 5, p_tbl - p_utf - 5, 1, f);
+
+	/* Loop on data rows */
+	for (i = 0; i < data->nbrows; i++)
+	{
+		sz += fprintf(f, "<table:table-row table:style-name=\"ro1\">");
+		for (j = 0; j < data->nbcols; j++)
+		{
+			DynTableCell* c = dyntab_cell(data, i, j);
+			char* fmt = dyntab_val(&tbl->format, j, 0);
+			char* ctyp = strstr(fmt, "NUMBER") ? "float" : strstr(fmt, "MONEY") ? "currency" :
+				(strstr(fmt, "DATE") || strstr(fmt, "Day")) ? "date" : "string";
+			if (tmp) { tmp->cnt = 0; tmp->data[0] = 0; }
+			if (c && dynbuf_add(&tmp, c->txt, c->len, export_xml, 1)) RETURN_ERR_MEMORY;
+			sz += fprintf(f, "<table:table-cell table:style-name=\"ce%u\"", i ? 2 : 1);
+			sz += (tmp && tmp->cnt) ?
+				fprintf(f, " office-value-type=\"%s\"><text:p>%s</text:p></table:table-cell>", ctyp, tmp ? tmp->data : "") :
+				fprintf(f, "/>");
+		}
+		sz += fprintf(f, "</table:table-row>");
 	}
 
 	/* Output template trailer & close file */
@@ -620,14 +698,15 @@ int file_zip(						/* return : 0 on success, other on error */
 				M_FREE(tmp)
 int file_write_soffice(				/* return : 0 on success, other on error */
 	EVA_context* cntxt,				/* in : execution context data */
-	DynTable* data,					/* in : table data to export */
+	ObjTableFormat* tbl,			/* in : table data to export */
 	unsigned long idx,				/* in : export procedure index in cntxt->cnf_lstproc */
-	char *fname						/* in : final destination file name for header title */
+	char *title						/* in : header title */
 ) {
 	DynBuffer* src = NULL;
 	DynBuffer* dst = NULL;
 	DynBuffer* tmp = NULL;
 	FILE* f = NULL;
+	DynTable* data = tbl ? &tbl->cellval : NULL;
 	DynTable* lst = &cntxt->cnf_lstproc;
 	char* proc = dyntab_val(lst, idx, 1);
 	char* srcfile = dyntab_val(lst, idx, 3);
@@ -639,7 +718,8 @@ int file_write_soffice(				/* return : 0 on success, other on error */
 	if (file_zip(cntxt, 0, srcfile, "content.xml", &src, &f)) STACK_ERROR;
 
 	/* Call handler for procedure */
-	if (!strcmp(proc, "EVA_DOC") && file_write_soffice_doc(cntxt, data, srcfile, src, f)) STACK_ERROR;
+	if (!strcmp(proc, "EVA_DOC") && file_write_soffice_doc(cntxt, data, srcfile, src, f) ||
+		!strcmp(proc, "EVA_SHT") && file_write_soffice_sht(cntxt, tbl, srcfile, src, f)) STACK_ERROR;
 
 	/* Zip back content.xml to template document */
 	if (file_zip(cntxt, 1, srcfile, "content.xml", &src, &f)) STACK_ERROR;
@@ -656,10 +736,10 @@ int file_write_soffice(				/* return : 0 on success, other on error */
 			{ add_sz_str("$FileName"), NULL, 0 }, {NULL} };
 
 		datetxt_to_format(cntxt, datetime, cntxt->timestamp, "_EVA_DATETIME");
-		sr[0].replace = datetime;
-		sr[0].sz_replace = strlen(datetime);
-		sr[1].replace = fname;
-		sr[1].sz_replace = strlen(fname);
+		sr[1].replace = datetime;
+		sr[1].sz_replace = strlen(datetime);
+		sr[2].replace = title;
+		sr[2].sz_replace = strlen(title);
 		if(dynbuf_add(&tmp, src->data, src->sz, sr, 1)) RETURN_ERR_MEMORY;
 	}
 	fprintf(f,"%s", tmp->data);
@@ -675,7 +755,6 @@ int file_write_soffice(				/* return : 0 on success, other on error */
 }
 #undef ERR_FUNCTION
 #undef ERR_CLEANUP
-#undef MY_STRSTR
 #undef SOFF_END_PARA
 #undef SOFF_END_CELL
 #undef SOFF_END_ROW

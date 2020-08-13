@@ -373,6 +373,7 @@ void debug_put_cgi(EVA_context *cntxt)
 	char buf[1024];
 
 	/* Output CGI data if applicable */
+	if (!cntxt || !cntxt->cgi) return;
 	if(cntxt->debug & DEBUG_CGI)
 	{
 		dynbuf_add(&cntxt->debug_msg, add_sz_str("\n*** CGI input :"), NO_CONV);

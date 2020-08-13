@@ -176,6 +176,7 @@ int put_html_format_pos(
 		if(italic) DYNBUF_ADD_STR(html, "</i>");
 		if(bold) DYNBUF_ADD_STR(html, "</b>");
 		if(b_font) DYNBUF_ADD_STR(html, "</font>");
+		if (nobreak) DYNBUF_ADD_STR(html, "</nobr>");
 
 		/* Terminate cell / paragraph */
 		if(tag)

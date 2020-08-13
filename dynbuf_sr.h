@@ -135,6 +135,12 @@ extern ReplaceTable export_tabrc[];
 #define IMPORT_TABRC export_tabrc, -1
 
 /*********************************************************************
+** Constant : export_xml
+** Description : conversion table for XML/TAB/RC files
+*********************************************************************/
+extern ReplaceTable export_xml[];
+
+/*********************************************************************
 ** Constant : crlf_to_lf
 ** Description : conversion table for CR <-> CR/LF
 *********************************************************************/

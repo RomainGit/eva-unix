@@ -32,7 +32,8 @@ int qry_filter_rel_to_sql(		/* return : 0 on success, other on error */
 	DynTable resdata = { 0 };
 	char *reltype = DYNTAB_FIELD_VAL(flt_data, FILTER_RELTYPE);
 	char *fltop = DYNTAB_FIELD_VAL(flt_data, FILTER_RELWITH);
-	int b_not = DYNTAB_FIELD_VAL(flt_data, FILTER_NOT)[0] != 0;
+	char* relop = DYNTAB_FIELD_VAL(flt_data, FILTER_REL_OP);
+	int b_not = !strcmp(relop, "_EVA_ISNOTEMPTY") || !strcmp(relop, "_EVA_DIFFERENT");
 	DYNTAB_FIELD(&fltobj, flt_data, LISTOBJ);
 	DYNTAB_FIELD(&fltval, flt_data, FILTER_LINKFIELD);
 

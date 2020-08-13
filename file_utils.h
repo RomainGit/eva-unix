@@ -74,8 +74,8 @@ int file_copy_template(				/* return : 0 on success, other on error */
 ** Description : write a StarOffice compatible file
 *********************************************************************/
 int file_write_soffice(				/* return : 0 on success, other on error */
-	EVA_context * cntxt,				/* in : execution context data */
-	DynTable * data,					/* in : table to write */
+	EVA_context * cntxt,			/* in : execution context data */
+	ObjTableFormat* tbl,			/* in : table data to export */
 	unsigned long idx,				/* in : export procedure index in cntxt->cnf_lstproc */
 	char* fname						/* in : final destination file name for header title */
 );
