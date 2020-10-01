@@ -44,7 +44,7 @@ int sql_open_session(				/* return : 0 on success, other on error */
 	}
 
 	/* Connect to MySql server - return on error */
-	if(!mysql_real_connect(cntxt->sql_session, cntxt->dbhost, cntxt->dbuser, cntxt->dbpwd, cntxt->dbname, MYSQL_PORT, NULL, 0))
+	if(!mysql_real_connect(cntxt->sql_session, cntxt->dbhost, cntxt->dbuser, cntxt->dbpwd, cntxt->dbname, cntxt->dbport, NULL, 0))
 	{
 		sql_control(cntxt, 0);
 		RETURN_ERROR("Pas de connexion au serveur SQL", NULL);

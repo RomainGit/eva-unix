@@ -64,9 +64,27 @@ void set_session_statistics(
 );
 
 /*********************************************************************
+** Function : set_user_identification
+** Description : store user identification in context
+*********************************************************************/
+int set_user_identification(	/* return : 0 on success, other on error */
+	EVA_context *cntxt			/* in : execution context - cgi data, argc, argv, ...
+								  out : user identification - id_user, b_identified */
+);
+
+/*********************************************************************
 ** Function : check_login
 ** Description : check login & passwd and alloc session number
 *********************************************************************/
 int check_login(				/* return : 0 on success, other on error */
 	EVA_context *cntxt
+);
+
+/*********************************************************************
+** Function : ckeck_session_validity
+** Description : check if current session is valid
+*********************************************************************/
+int ckeck_session_validity(						/* return : 1 on success, other on error */
+	EVA_context * cntxt,							/* in/out : execution context data */
+	char** errmsg								/* out : error message if any */
 );

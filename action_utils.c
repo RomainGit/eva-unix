@@ -331,8 +331,8 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 		idobj = DYNTAB_TOUL(&cntxt->form->id_obj);
 	}
 	if(!field || !*field || !field_sz || (!idform && !idobj)) RETURN_OK;
-
-	/* Handle raw SELECT statement */
+	
+		/* Handle raw SELECT statement */
 	if(!strncmp(field, add_sz_str("SELECT ")))
 	{
 		if(qry_eval_sqlexpr_var(cntxt, &expr, field, NULL, NULL) ||
@@ -483,10 +483,30 @@ int form_eval_fieldexpr(						/* return : 0 on success, other on error */
 				}
 			}
 		}
+		/* No values (or only variables) - simply evaluate SQL expression */
 		else
 		{
-			DYNBUF_ADD3(&expr, "SELECT ", fieldgrp, fieldgrp_sz, NO_CONV, "");
-			if(sql_exec_query(cntxt, expr->data) || sql_get_table(cntxt, res, 6)) STACK_ERROR;
+			/* Handle FILE_DATE() function */
+#define FD_QRY "FILE_DATE("
+			if(!strncmp(fieldgrp, add_sz_str(FD_QRY))) {
+				char *p = fieldgrp + sizeof(FD_QRY);
+#undef FD_QRY
+				char *e = p ? strchr(p, ')') : NULL;
+				time_t t = 0;
+				if(e) {
+					*(--e) = 0;
+					t = file_date(p);
+					dyntab_free(res);
+					if(t) {
+						char v[16];
+						if(!time_to_datetxt(t, v)) DYNTAB_ADD(res, 0, 0, v, 0, NO_CONV);
+					}
+				}
+			}
+			else {
+				DYNBUF_ADD3(&expr, "SELECT ", fieldgrp, fieldgrp_sz, NO_CONV, "");
+				if(sql_exec_query(cntxt, expr->data) || sql_get_table(cntxt, res, 6)) STACK_ERROR;
+			}
 		}
 	}
 	/* Handle trivial case : simple field */

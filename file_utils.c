@@ -37,6 +37,20 @@ size_t strip_rc(                /* return : new length of v */
 }
 
 /*********************************************************************
+** Fonction : file_date
+** Description : return modification date for a file - 0 on error
+*********************************************************************/
+time_t file_date(                /* return : modification date */
+	char *fpath					/* in : file path to read */
+) {
+	struct stat fs;
+	time_t t = 0;
+	if(!stat(fpath, &fs))
+		t = fs.st_mtime;
+	return t;
+}
+
+/*********************************************************************
 ** Fonction : dyntab_add_strip
 ** Description : store text data in a dyntable
 *********************************************************************/
@@ -113,14 +127,17 @@ int file_to_dynbuf(					/* return : 0 on success, other on error */
 
 	/* Read file status & alloc memory for file data */
 	if(!res || !file || !*file) RETURN_OK;
-	if(stat(file, &sts)) RETURN_ERROR("Fichier non trouvé", NULL);
+	if(stat(file, &sts)) RETURN_ERROR("File not found", ERR_PUT_TXT("file = ", file, 0));
 	*res = dynbuf_init(sts.st_size+16);
 
 	/* Open file & read data */
 	f = fopen(file, "rb");
-	if(!f)  RETURN_ERROR("Impossible d'ouvrir le fichier", NULL);
+	if(!f)  RETURN_ERROR("No read acces to file" , ERR_PUT_TXT("file = ", file, 0));
 	(*res)->cnt = fread((*res)->data, 1, sts.st_size+2, f);
 	fclose(f);
+
+	/* Remove \r\n from windows files */
+	(*res)->cnt = strip_rc((*res)->data, (*res)->cnt);
 
 	RETURN_OK_CLEANUP;
 }
@@ -138,11 +155,8 @@ int file_read_tabrc(				/* return : 0 on success, other on error */
 	DynTable *res,					/* out : result table */
 	char *file						/* in : input file name or uploaded file IdObj */
 ){
-	struct stat sts;			/* for stat() */
-	FILE *f = 0;				/* stdio file pointer */
-	size_t sz;					/* char counter */
 	char fpath[2048];			/* file path if uploaded */
-	char *fdata = NULL;			/* alloc-ed file data */
+	DynBuffer *fdata = NULL;	/* file data */
 	unsigned long id;			/* uploaded file IdObj */
 	char *end = NULL;			/* for strtoul */
 	DynTable fname = {0};		/* uploaded file name */
@@ -157,20 +171,9 @@ int file_read_tabrc(				/* return : 0 on success, other on error */
 		file = fpath;
 	}
 
-	/* Read file status & alloc memory for file data */
-	if(!file || stat(file, &sts)) RETURN_ERROR("Fichier non trouvé", NULL);
-	M_ALLOC(fdata, sts.st_size+16);
-
-	/* Open file & read data */
-	f = fopen(file, "r");
-	if(!f)  RETURN_ERROR("Impossible d'ouvrir le fichier", NULL);
-	sz = fread(fdata, 1, sts.st_size+2, f);
-	fclose(f);
-	fdata[sz] = 0;
-	sz = strip_rc(fdata, sz + 1);
-
 	/* Read records in DynTable */
-	if(file_tabrc_to_dyntab(cntxt, res, fdata, sz)) STACK_ERROR;
+	if(file_to_dynbuf(cntxt, &fdata, file) ||
+		file_tabrc_to_dyntab(cntxt, res, fdata->data, fdata->sz)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }
@@ -205,6 +208,9 @@ int file_read_config(				/* return : 0 on success, other on error */
 			if(*c && strcmp(cntxt->dbname, c)) continue;
 			cntxt->dbuser = dyntab_val(usr, i, 1);
 			cntxt->dbpwd = dyntab_val(usr, i, 2);
+			cntxt->dbhost = dyntab_val(usr, i, 3);
+			cntxt->dbport = atoi(dyntab_val(usr, i, 4));
+			if (cntxt->dbhost && !cntxt->dbhost[0]) cntxt->dbhost = NULL;
 			break;
 		}
 	}
@@ -533,11 +539,8 @@ int file_write_soffice_doc(			/* return : 0 on success, other on error */
 		{
 			if (i > 1) sz += fprintf(f, "</table:table><text:p></text:p>");
 			sz += fwrite(p_tbl, p_row1 - p_tbl, 1, f);
-		}
 
-		/* Title cell (empty value) */
-		if (!*val)
-		{
+			/* Title cell */
 			DYNBUF_ADD3_CELL(&tmp, "Fiche n° ", data, i, 0, NO_CONV, " : ");
 			DYNBUF_ADD_CELL(&tmp, data, i, 1, NO_CONV);
 			sz += file_write_tblcell(f, p_row1, tmp->data, 6);

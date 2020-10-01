@@ -208,16 +208,22 @@ void put_html_page_header(
 								2 = <body> header
 								3 = <form> header */
 ){
+	DynTable extmod = { 0 };
+	unsigned long i;
+	char fname[256], *bname;
+
+	/* Return if no header needed (scheduled tasks) */
 	if(!cntxt || cntxt->b_task) return;
 
-	/* Output HTML header if applicable */
+	/* Output HTML header if not done yet */
 	if(!cntxt->b_header)
 	{
 		char tit[64] = {0};
-		snprintf(add_sz_str(tit), "EVA - %s", cntxt->dbname);
+
+		/* If client output (no file) */
 		if(!f)
 		{
-			/* Read existing workstation Id in cookies */
+			/* Read existing workstation Id coockie WKS in cookies */
 			char *cook = getenv("HTTP_COOKIE");
 			if (cook && strncmp(cook, add_sz_str("WKS=")))
 			{
@@ -243,31 +249,43 @@ void put_html_page_header(
 			cntxt->txsize += printf("Content-Type:text/html;charset=iso-8859-1\r\n\n");
 		}
 
-		/* Put page title - disable cache */
+		/* Put HTML header & page title */
+		snprintf(add_sz_str(tit), "EVA - %s", cntxt->dbname);
 		if(!title) title = dyntab_val(&cntxt->pagetitle, 0, 0);
 		if(!*title) title = tit;
-		cntxt->txsize += fprintf(f ? f : stdout,
-			"<html><head><title>%s</title>", title);
+		cntxt->txsize += fprintf(f ? f : stdout, "\n<html><head><title>%s</title>", title);
+
 		/* Disable cache for non administrator
 		if(!cntxt->b_admin || f)
 			cntxt->txsize += fprintf(f ? f : stdout,
-				"<META HTTP-EQUIV='PRAGMA' CONTENT='NO-CACHE'>\n<META HTTP-EQUIV='CACHE-CONTROL' CONTENT='NO-CACHE'>");
-*/
+				"<META HTTP-EQUIV='PRAGMA' CONTENT='NO-CACHE'>\n<META HTTP-EQUIV='CACHE-CONTROL' CONTENT='NO-CACHE'>"); */
 
 		/* Output link to eva javascript && CSS files */
 		cntxt->txsize += fprintf(f ? f : stdout,
-				"<script type=text/javascript src=../js/eva.js></script>"
-				"<link href=../css/eva.css rel=stylesheet type=text/css>");
+				"\n<script type=text/javascript src=../js/eva.js></script>"
+				"\n<link href=../css/eva.css rel=stylesheet type=text/css>");
 
 		/* Output link to site CSS file if present */
 		{
-			char cssname[256], *cssfile = DYNTAB_FIELD_VAL(&cntxt->cnf_data, IMGPATH);
-			struct stat fs;
-			if(!*cssfile) cssfile = cntxt->dbname;
-			snprintf(add_sz_str(cssname), "../css/%s.css", cssfile);
-			if(!stat(cssname, &fs))
-				cntxt->txsize += fprintf(f ? f : stdout, "<link href=../css/%s.css rel=stylesheet type=text/css>", cssfile);
+			bname = DYNTAB_FIELD_VAL(&cntxt->cnf_data, IMGPATH);
+			if(!*bname) bname = cntxt->dbname;
+			snprintf(add_sz_str(fname), "../css/%s.css", bname);
+			if(file_date(fname))
+				cntxt->txsize += fprintf(f ? f : stdout, "\n<link href='%s' rel=stylesheet type=text/css>", fname);
 		}
+
+		/* Output links to modules JS & CSS files */
+		dyntab_filter_field(&extmod, 0, &cntxt->cnf_data, "_EVA_EXT_MODULES", ~0UL, NULL);
+		for(i = 0; i < extmod.nbrows; i++) {
+			bname = dyntab_val(&extmod, i, 0);
+			snprintf(add_sz_str(fname), "../modules/%s.css", bname);
+			if(file_date(fname))
+				cntxt->txsize += fprintf(f ? f : stdout, "\n<link href='%s' rel=stylesheet type=text/css>", fname);
+			snprintf(add_sz_str(fname), "../modules/%s.js", bname);
+			if(file_date(fname))
+				cntxt->txsize += fprintf(f ? f : stdout, "\n<script src='%s' type=text/javascript></script>", fname);
+		}
+		dyntab_free(&extmod);
 
 		cntxt->txsize += fprintf(f ? f : stdout, "</head>");
 		cntxt->b_header = 1;
@@ -284,12 +302,14 @@ void put_html_page_header(
 		background = get_image_file(cntxt, background, 0, 0);
 
 		/* Put body header */
-		cntxt->txsize += fprintf(f ? f : stdout, "%s", "<body leftmargin=0 topmargin=0 rightmargin=0 bottommargin=0");
+		cntxt->txsize += fprintf(f ? f : stdout, "%s", "\n<body leftmargin=0 topmargin=0 rightmargin=0 bottommargin=0");
 		if(background) cntxt->txsize += fprintf(f ? f : stdout, " background='%s'", background);
 		if(*bgcolor) cntxt->txsize += fprintf(f ? f : stdout, " bgcolor=#%s", bgcolor);
 		cntxt->txsize += fprintf(f ? f : stdout, ">");
+
+		/* Put wait image */
 		if(cntxt->imgwait && !f) cntxt->txsize += fprintf(f ? f : stdout,	"%s",
-			"<script>document.write(\"<img src='../img/_eva_imgwait.gif'>\");</script>");
+			"\n<script>document.write(\"<img src=../img/_eva_imgwait.gif id=EVA_imgWaitInit>\");</script>\n");
 		cntxt->b_bodyheader = 1;
 		M_FREE(background);
 	}
@@ -305,8 +325,8 @@ void put_html_page_header(
 		{
 			/* Insert TinyMCE code & configuration */
 			cntxt->txsize += fprintf(f ? f : stdout, "%s%s%s%s%s%s",
-					"<script type=text/javascript src=../js/tiny_mce/tiny_mce.js></script>"
-					"<script type=text/javascript>"
+					"\n<script type=text/javascript src=../js/tiny_mce/tiny_mce.js></script>"
+					"\n<script type=text/javascript>"
 					"tinyMCE.init({"
 						"mode : 'specific_textareas',"
 						"language : 'fr',"
@@ -339,7 +359,7 @@ void put_html_page_header(
 		{
 			/* Insert SCW calendar input code  */
 			cntxt->txsize += fprintf(f ? f : stdout,
-					"<script type=text/javascript src=../js/scw.js></script>");
+					"\n<script type=text/javascript src=../js/scw.js></script>");
 		}
 
 
@@ -355,11 +375,13 @@ void put_html_page_header(
 			}
 			cntxt->txsize += fprintf(f ? f : stdout, ">");
 		}
+
+		/* Put JSINPUT hiddent input & remove wait image */
 		if(!f) cntxt->txsize += fprintf(stdout,
-			"<script>%s"
-			"document.write(\"<input type=hidden name=JSINPUT>\");"
+			"\n<script>"
+			"document.write(\"<input type=hidden name=JSINPUT>\");%s"
 			"</script>",
-			cntxt->imgwait ? "document.getElementsByTagName('body')[0].removeChild(document.images[0]);" : "");
+			cntxt->imgwait ? "document.getElementById('EVA_imgWaitInit').style.display='none';" : "");
 		cntxt->b_formheader = 1;
 	}
 	fflush(stdout);
@@ -393,7 +415,7 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 
 		if(cntxt->b_terminate & 16)
 		{
-			fprintf(f ? f : stdout, "<br>Durée : %1.2lf s", (double)t/1000);
+			fprintf(f ? f : stdout, "<br>Time : %1.2lf s", (double)t/1000);
 		}
 		else if(!strcmp(trailfmt, "_EVA_HTML"))
 		{
@@ -409,11 +431,6 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 		}
 		else if(strcmp(trailfmt, "_EVA_NONE") && !cntxt->b_pda)
 		{
-#ifdef _DEBUG
-#define EVA_VERSION "4.1.1 debug"
-#else
-#define EVA_VERSION "4.1.1"
-#endif
 #define TIME_CELL(txt, bg) "<td align=center bgcolor=#" bg "><nowrap><font size=-2>&nbsp;" txt "&nbsp;</font></td>"
 
 			/* Output page end block with webmaster email & process statistics */
@@ -424,16 +441,16 @@ void put_html_page_trailer(EVA_context *cntxt, FILE *f)
 					dyntab_sz(&cntxt->mail_admin, 0, 0) ? dyntab_val(&cntxt->mail_admin, 0, 0) : "eva@abing.fr",
 					"'><img src='/img/letter_small.gif' border=0 align=absmiddle>Ecrire au webmaster</a></i></font>"
 					"</td><td align=", b_stats ? "center" : "right", "><nobr><i>"
-					"<font size=-2> EVA " EVA_VERSION "<br>&copy;<a href='http://abing.fr' target=_blank>ABI</a>"
+					"<font size=-2> EVA " EVA_VERSION "<br>&copy;<a href='https://abing.fr' target=_blank>ABI</a>"
 					" " __DATE__ "</font></td>",
 					!b_stats ? "" :
 					"<td align=right>"
 					"<table border=0 cellspacing=1 cellpadding=0><tr>"
-					TIME_CELL("Durée", "BBBBBB")
+					TIME_CELL("Time", "BBBBBB")
 					TIME_CELL("CPU", "BBBBBB")
 					TIME_CELL("SQL", "BBBBBB")
-					TIME_CELL("Emission", "BBBBBB")
-					TIME_CELL("Réception", "BBBBBB")
+					TIME_CELL("Send", "BBBBBB")
+					TIME_CELL("Recv", "BBBBBB")
 					"</tr><tr>");
 			if(b_stats)
 			{

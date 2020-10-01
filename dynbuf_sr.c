@@ -64,6 +64,8 @@ ReplaceTable plain_to_html[] = { XML_SR_TABLE, HTML_CR_SR_TABLE, FRMA_SR_TABLE, 
 ** Description : replace TAB/CR with spaces
 *********************************************************************/
 ReplaceTable no_tab_cr[] = { NOTABCR_SR_TABLE, {NULL} };
+ReplaceTable no_tab[] = { { add_sz_str("\t"), add_sz_str(" ") },
+							{NULL} };
 
 /*********************************************************************
 ** Constant : plain_to_xml
@@ -93,8 +95,8 @@ ReplaceTable javascript_string[] = {
 							{ add_sz_str("\n"), add_sz_str("\\n") },  
 							{ add_sz_str("\t"), add_sz_str("\\t") },
 							{ add_sz_str("\""), add_sz_str("\\\'\\\'") },
-							{ add_sz_str("'"), add_sz_str("\\'") },
-							FRMA_SR_TABLE, {NULL} };
+//							{ add_sz_str("'"), add_sz_str("\\'") },
+							{NULL} };
 
 /*********************************************************************
 ** Constant : syscmd_string
@@ -158,3 +160,14 @@ ReplaceTable export_xml[] = {	XML_SR_TABLE,
 								{ add_sz_str("'"), add_sz_str("&apos;") },
 								{ add_sz_str("\n"), add_sz_str("</text:p><text:p>") },
 								{ NULL } };
+/*********************************************************************
+** Constant : json_quote
+** Description : conversion table for JSON strings
+*********************************************************************/
+ReplaceTable json_quote[] = { 
+	{ add_sz_str("\\"), add_sz_str("\\\\") },
+	{ add_sz_str("\r"), add_sz_str("") },
+	{ add_sz_str("\n"), add_sz_str("\\n") },
+	{ add_sz_str("\t"), add_sz_str("\\t") },
+	{ add_sz_str("\""), add_sz_str("\\\"") },
+	{NULL} };

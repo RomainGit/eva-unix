@@ -214,16 +214,22 @@ int ctrl_relation_put_values(		/* return : 0 on success, other on error */
 		return 0;
 	}
 
+	/* Output table header - handle default open button */
 	if(!*openbutton) openbutton = "SYMBOL+LABEL+OBJNOTES";
 	DYNBUF_ADD_STR(html, "<table border=0 cellpadding=1 cellspacing=0 rules=none>");
-	for (i = 0; i < tbllines && i + tblline < ctrl->val.nbrows; i++)
+
+	/* Ouput navigator if more than 1 page */
+	if(ctrl->val.nbrows > tbllines)
 	{
 		DYNBUF_ADD_STR(html, "<tr bgcolor=#EEEEEE>");
-		tbl->totlines = ctrl->val.nbrows;
+		if(tbl) tbl->totlines = ctrl->val.nbrows;
 		if(table_put_page_navigator(cntxt, i_ctrl, 0)) STACK_ERROR;
 		DYNBUF_ADD_STR(html, "</tr>");
 	}
-	for(i = 0; i < tbllines; i++) 
+	else tbllines = ctrl->val.nbrows;
+
+	/* Output each value */
+	for(i = 0; i < tbllines; i++)
 	{
 		DYNBUF_ADD_STR(html, "<tr>"); 
 		if(qry_obj_idfield(cntxt, &objdata, DYNTAB_TOULRC(&ctrl->val, i + tblline, 0), 0) ||
@@ -232,6 +238,8 @@ int ctrl_relation_put_values(		/* return : 0 on success, other on error */
 			CLEAR_ERROR;
 		DYNBUF_ADD_STR(html, "</tr>"); 
 	}
+
+	/* Output table footer & status */
 	DYNBUF_ADD_STR(html, "</table>");
 	if(table_put_status(cntxt, i_ctrl)) STACK_ERROR;
 
@@ -315,7 +323,7 @@ int handle_auto_selection(			/* return : 0 on success, other on error */
 int ctrl_add_relation_auto(			/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
-){
+) {
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	ObjTableFormat *tbl = ctrl->objtbl;
@@ -330,30 +338,29 @@ int ctrl_add_relation_auto(			/* return : 0 on success, other on error */
 	{
 	case CtrlRead:
 		/* Read control status */
-		tbl = ctrl->objtbl;
 		if(tbl->b_first)
 		{
 			tbl->status &= ~(TblCtrl_opensearch | TblCtrl_opensel);
 			if(!DYNTAB_FIELD_CELL(tbl->attr, SEARCHCOL))
 				for(i = 0; i < tbl->field.nbrows; i++) tbl->srchcol |= 1 << i;
 		}
-		if(table_process_controls(cntxt, i_ctrl)) STACK_ERROR;
 
 		/* Handle select function */
+		if(table_process_controls(cntxt, i_ctrl)) STACK_ERROR;
 		if(handle_searchlist_selection(cntxt, i_ctrl)) STACK_ERROR;
 		if(handle_auto_selection(cntxt, i_ctrl)) STACK_ERROR;
 		break;
 
 	case HtmlEdit:
-		/* Enclose control in table */
-		DYNBUF_ADD3_INT(html, "<table border=", tbl->status & TblCtrl_opensearch && !tbl->b_no_status ? 1 : 0, " cellpadding=0 cellspacing=0><tr>");
-
 		/* Find search input */
 		tbl->input = NULL;
 		for(i = 0; i < tbl->cgiinput.nbrows && !tbl->input; i++)
 			if(dyntab_cell(&tbl->cgiinput, i, 0)->Line == form->Line)
 				tbl->input = dyntab_val(&tbl->cgiinput, i, 0);
 		if(!tbl->input) tbl->input = "";
+
+		/* Enclose control in table */
+		DYNBUF_ADD3_INT(html, "<table border=", tbl->status & TblCtrl_opensearch && !tbl->b_no_status ? 1 : 0, " cellpadding=0 cellspacing=0><tr>");
 
 		/* If search mode on selected line */
 		if(tbl->status & TblCtrl_opensearch && !tbl->b_no_status)
@@ -499,6 +506,116 @@ int ctrl_relation_put_table(		/* return : 0 on success, other on error */
 #undef ERR_CLEANUP
 
 /*********************************************************************
+** Function : ctrl_put_objlist_ws
+** Description : output html for a web service handled relation control
+*********************************************************************/
+#define ERR_FUNCTION "ctrl_put_objlist_ws"
+#define ERR_CLEANUP M_FREE(name); \
+					M_FREE(label); \
+					M_FREE(title); \
+					M_FREE(flabel); \
+					M_FREE(icosel); \
+					M_FREE(ico); \
+					DYNTAB_FREE(rlabel); \
+					DYNTAB_FREE(ctrlattr)
+int ctrl_put_objlist_ws(			/* return : 0 on success, other on error */
+	EVA_context *cntxt,				/* in/out : execution context data */
+	unsigned long i_ctrl			/* in : control index in cntxt->form->ctrl */
+) {
+	EVA_ctrl *ctrl = cntxt->form->ctrl + i_ctrl;
+	ObjTableFormat *tbl = ctrl->objtbl;
+	DynBuffer *name = NULL;
+	DynBuffer *label = NULL;
+	DynBuffer *title = NULL;
+	DynBuffer *flabel = NULL;
+	DynBuffer *ico = NULL;
+	DynBuffer *icosel = NULL;
+	DynTable rlabel = { 0 };
+	DynTable ctrlattr = { 0 };
+	unsigned long i;
+	DynBuffer **html = cntxt->form->html;
+	int b_input = !strcmp(ctrl->CONTROL, "_EVA_INPUT");
+
+	/* Output div with reserved class & control CGI name */
+	DYNBUF_ADD3_BUF(html, "\n<div class=EVA_js_Control id=\"", ctrl->cginame, NO_CONV, "\">");
+
+	/* Output script with control attributes values if first call */
+	if(!ctrl->attr_tab) {
+		DYNBUF_ADD3_CELL(html, "\n<script>const EVA_ctl", &ctrl->id, 0, 0, NO_CONV, "=\"");
+		for(i = 0; i < ctrl->attr.nbrows; i++) {
+			DynTableCell *c = dyntab_cell(&ctrl->attr, i, 0);
+			DYNBUF_ADD(&ctrl->attr_tab, c->field, 0, NO_TAB);
+			if(c->b_relation) {
+				if(qry_cache_idobj_field(cntxt, &rlabel, strtoul(c->txt, NULL, 10), "_EVA_LABEL", 2)) STACK_ERROR;
+				if(!rlabel.nbrows) if(qry_cache_idobj_field(cntxt, &rlabel, strtoul(c->txt, NULL, 10), "_EVA_USERNAME", 2)) STACK_ERROR;
+				DYNBUF_ADD3_CELLP(&ctrl->attr_tab, "\t", c, NO_CONV, "#");
+				if(rlabel.nbrows) {
+					DYNBUF_ADD_CELL(&ctrl->attr_tab, &rlabel, 0, 0, NO_TAB);
+					DYNBUF_ADD_STR(&ctrl->attr_tab, "\t");
+				}
+				else DYNBUF_ADD3_CELLP(&ctrl->attr_tab, "Fiche n° ", c, NO_CONV, "\t");
+			}
+			else DYNBUF_ADD3_CELLP(&ctrl->attr_tab, "\t", c, NO_TAB, "\t");
+			DYNBUF_ADD_INT(&ctrl->attr_tab, c->Num);
+			DYNBUF_ADD3_INT(&ctrl->attr_tab, "\t", c->Line, "\t");
+			DYNBUF_ADD_INT(&ctrl->attr_tab, c->b_relation);
+			DYNBUF_ADD_STR(&ctrl->attr_tab, "\t");
+		}
+		if(ctrl->attr_tab) ctrl->attr_tab->cnt--;
+		DYNBUF_ADD_BUF(html, ctrl->attr_tab, TO_JS_STRING);
+		DYNBUF_ADD_STR(html, "\";\n</script>");
+	}
+	DYNBUF_ADD_STR(html, "</div>");
+
+	/* Output search input */
+	CTRL_CGINAMESUBFIELD(&name, NULL, "INPUT");
+	if(put_html_text_input(cntxt, DYNBUF_VAL_SZ(name), tbl->input, strlen(tbl->input), 0, 0, 1, tbl->inputwidth, 0, NULL)) STACK_ERROR;
+
+	/* Output div with input values & infos */
+	if(b_input) {
+		char *img;
+		DYNBUF_ADD_STR(html, "<div class=EVA_RelDisplay>");
+		for(i = 0; i < ctrl->val.nbrows; i++) {
+			DYNBUF_ADD_STR(html, "<div>");
+
+			/* Output selection checkbox input */
+			CTRL_CGINAMEVAL(&name, i);
+			if(put_html_chkbox(cntxt, DYNBUF_VAL_SZ(name), DYNTAB_VAL_SZ(&ctrl->val, i, 0), 1, 0)) STACK_ERROR;
+
+			/* Get object label */
+			M_FREE(label); M_FREE(title); M_FREE(flabel); M_FREE(icosel); M_FREE(ico)
+			if(qry_obj_label(cntxt, &flabel, NULL, &label, NULL, &title, &ico, &icosel, NULL, 0, NULL, DYNTAB_TOULRC(&ctrl->val, i, 0))) STACK_ERROR;
+			/* Output span with label */
+			DYNBUF_ADD3_BUF(html, "<span>", label, NO_CONV, "</span>");
+
+			/* Output hidden span with TAB separated form label & icons */
+			DYNBUF_ADD3_BUF(html, "<span hidden>", flabel, TO_HTML, "\t");
+			img = get_image_file(cntxt, ico->data, NULL, NULL);
+			DYNBUF_ADD(html, img, 0, TO_HTML);
+			M_FREE(img);
+			DYNBUF_ADD_STR(html, "\t");
+			img = get_image_file(cntxt, icosel->data, NULL, NULL);
+			DYNBUF_ADD(html, img, 0, TO_HTML);
+			M_FREE(img);
+			DYNBUF_ADD3_BUF(html, "\t", title, TO_HTML, "</span></div>");
+		}
+		DYNBUF_ADD_STR(html, "</div>");
+
+		/* Put hidden empty input */
+		CTRL_CGINAMEVAL(&name, 0);
+		DYNBUF_ADD3_BUF(html, "<input type=hidden name='", name, NO_CONV, "' value=''>");
+	}
+
+	/* Output table status input */
+	if(table_put_status(cntxt, i_ctrl)) STACK_ERROR;
+	CGI_VALUES_DONTKEEP(&tbl->cgiinput);
+	
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
 ** Function : ctrl_add_relation
 ** Description : handles RELATION controls
 *********************************************************************/
@@ -516,6 +633,7 @@ int ctrl_add_relation(				/* return : 0 on success, other on error */
 	char *inputmode = (cinputmode && cinputmode->len) ? cinputmode->txt : "";
 	size_t szinputmode = cinputmode ? cinputmode->len : 0;
 	unsigned long i;
+	int b_ws = strstr(ctrl->CELL_STYLE, "DynSearch") != NULL;
 
 	switch(form->step)
 	{
@@ -528,8 +646,12 @@ int ctrl_add_relation(				/* return : 0 on success, other on error */
 		tbl = ctrl->objtbl;
 		tbl->input = dyntab_val(&tbl->cgiinput, 0, 0);
 
+		/* Handle display thru web service */
+		if(b_ws) {
+			if(table_process_controls(cntxt, i_ctrl)) STACK_ERROR;
+		}
 		/* Handle display mode */
-		if(!strcmp("_EVA_TABLE", inputmode))
+		else if(!strcmp("_EVA_TABLE", inputmode))
 		{
 			if(table_process_controls(cntxt, i_ctrl)) STACK_ERROR;
 		}
@@ -544,7 +666,7 @@ int ctrl_add_relation(				/* return : 0 on success, other on error */
 
 		/* Set relation bit on values & drop temp tables */
 		for(i = 0; i < ctrl->val.nbrows; i++) dyntab_cell(&ctrl->val, i, 0)->b_relation = 1;
-		sql_exec_query(cntxt, "DROP TABLE IF EXISTS IdList,IdListMatch,ValList");
+		sql_drop_table(cntxt, "IdList,IdListMatch,ValList");
 		break;
 
 	case HtmlEdit:
@@ -556,10 +678,26 @@ int ctrl_add_relation(				/* return : 0 on success, other on error */
 
 		/* Output control position & format */
 		if(ctrl_format_pos(cntxt, ctrl, 1)) STACK_ERROR;
-		
-		/* Handle display mode */
 		tbl->attr = &ctrl->attr;
-		if(!strcmp("_EVA_TABLE", inputmode))
+		
+		/* Handle list select input */
+		if(!strncmp(inputmode, add_sz_str("_EVA_LIST")))
+		{
+			/* Build options list - add warning if stripped */
+			if(ctrl_relation_searchlist(cntxt, i_ctrl)) CLEAR_ERROR;
+			if(ctrl_relation_optionslist(cntxt, i_ctrl, &optlist)) STACK_ERROR;
+
+			/* Output HTML input list */
+			if(ctrl_put_html_input_list(cntxt, i_ctrl, &optlist, 0)) STACK_ERROR;
+		}
+		/* Handle search mode thru web service */
+		else if(b_ws)
+		{
+			/* Output selected objects if applicable */
+			if(ctrl_relation_put_table(cntxt, i_ctrl, ctrl_put_objlist_ws)) STACK_ERROR;
+		}
+		/* Handle table display mode */
+		else if(!strcmp("_EVA_TABLE", inputmode))
 		{
 			/* Handle search mode when min search len specified within table */
 			if(tbl->minsearchlen && form->Line && (!ctrl->MULTIPLE || !*ctrl->MULTIPLE || !strcmp("No", ctrl->MULTIPLE)))
@@ -585,16 +723,7 @@ int ctrl_add_relation(				/* return : 0 on success, other on error */
 
 			if(ctrl_relation_put_table(cntxt, i_ctrl, table_put_html_obj_list)) STACK_ERROR;
 		}
-		else if(!strncmp(inputmode, add_sz_str("_EVA_LIST")))
-		{
-			/* Build options list - add warning if stripped */
-			if(ctrl_relation_searchlist(cntxt, i_ctrl)) CLEAR_ERROR;
-			if(ctrl_relation_optionslist(cntxt, i_ctrl, &optlist)) STACK_ERROR;
-
-			/* Output HTML input list */
-			if(ctrl_put_html_input_list(cntxt, i_ctrl, &optlist, 0)) STACK_ERROR;
-		}
-		else 
+		else  
 		{
 			if(ctrl_relation_put_table(cntxt, i_ctrl, ctrl_add_relation_auto)) STACK_ERROR;
 		}
@@ -628,11 +757,11 @@ int ctrl_add_relation(				/* return : 0 on success, other on error */
 			if(ctrl_relation_put_values(cntxt, i_ctrl)) STACK_ERROR;
 		}
 
-		/* Terminate control position & format */
-		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
-
 		/* Output status */
 		if(table_put_status(cntxt, i_ctrl)) STACK_ERROR;
+
+		/* Terminate control position & format */
+		if(ctrl_format_pos(cntxt, ctrl, 0)) STACK_ERROR;
 		sql_drop_table(cntxt, "IdList,IdListMatch,ValList");
 		if(cntxt->debug & DEBUG_HTML) DYNBUF_ADD3(form->html, "\n<!--- End   Relation ", ctrl->LABEL, 0, NO_CONV, " -->\n");
 		break;

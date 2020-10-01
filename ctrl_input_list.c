@@ -597,7 +597,7 @@ int ctrl_add_input_list(			/* return : 0 on success, other on error */
 			if(put_html_text_input(cntxt, 
 								DYNBUF_VAL_SZ(name),
 								NULL, 0, 0, 0, 1, ctrl->COLUMNS * 2 / 3,
-								atoi(CTRL_ATTR_VAL(MAXLENGTH)))) STACK_ERROR;
+								atoi(CTRL_ATTR_VAL(MAXLENGTH)), NULL)) STACK_ERROR;
 
 		}
 

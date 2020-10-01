@@ -448,7 +448,7 @@ int table_add_searchsort_btn(			/* return : 0 on success, other on error */
 
 /*********************************************************************
 ** Function : table_add_updown_btns
-** Description : output an open button for an object
+** Description : output up/down buttons for objects order selection
 *********************************************************************/
 #define ERR_FUNCTION "table_add_updown_btns"
 #define ERR_CLEANUP M_FREE(tooltip); \
@@ -610,6 +610,7 @@ int table_put_export_btn(				/* return : 0 on success, other on error */
 	for(i = 1; i < lst->nbrows; i++)
 	{
 		char img[256], img_s[256];
+		if(!dyntab_sz(lst, i, 5)) continue;
 		if(ctrl_cgi_name(cntxt, ctrl, NULL, 1, &name, 'B', dyntab_val(lst, i, 0), dyntab_sz(lst, i, 0))) STACK_ERROR;
 		snprintf(add_sz_str(img) - 1, "%s.gif", dyntab_val(lst, i, 5));
 		snprintf(add_sz_str(img_s) - 1, "%s_s.gif", dyntab_val(lst, i, 5));
@@ -897,7 +898,7 @@ int table_put_search_input(				/* return : 0 on success, other on error */
 	if(b_label) *b_label = 1;
 	if(blabel) DYNBUF_ADD3_BUF(html, "<td align=right valign=middle>&nbsp;", label, TO_XML, "</td><td valign=middle><nobr>");
 	CTRL_CGINAMESUBFIELD(&name, NULL, "INPUT");
-	if(put_html_text_input(cntxt, DYNBUF_VAL_SZ(name), tbl->input, strlen(tbl->input), 0, 0, 1, tbl->inputwidth, 0)) STACK_ERROR;
+	if(put_html_text_input(cntxt, DYNBUF_VAL_SZ(name), tbl->input, strlen(tbl->input), 0, 0, 1, tbl->inputwidth, 0, NULL)) STACK_ERROR;
 	if(ctrl_cgi_name(cntxt, ctrl, NULL, 0, &name, 'B', DYNBUF_VAL_SZ(subfield))) RETURN_ERR_MEMORY;
 	if(put_html_button(cntxt, name->data, "Ok", NULL, NULL, tooltip->data, 0, 0)) STACK_ERROR;
 	for(i = 0; i < tbl->cgiinput.nbrows; i++) cgi_value_setkeep(cntxt, &tbl->cgiinput, i, 1);
@@ -1457,7 +1458,8 @@ char *table_row_bgcolor(				/* return : RGB color code - empty string for transp
 ** Description : output the body of a table of objects
 *********************************************************************/
 #define ERR_FUNCTION "table_put_rows"
-#define ERR_CLEANUP	M_FREE(buf); \
+#define FREE_BUFFERS M_FREE(objlabel); M_FREE(formlabel); M_FREE(icon); M_FREE(iconsel)
+#define ERR_CLEANUP	FREE_BUFFERS; M_FREE(buf); \
 					M_FREE(buf1); \
 					DYNTAB_FREE(data); \
 					DYNTAB_FREE(objdata); \
@@ -1472,6 +1474,10 @@ int table_put_rows(						/* return : 0 on success, other on error */
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
 	DynBuffer *buf = NULL;
 	DynBuffer *buf1 = NULL;
+	DynBuffer *objlabel = NULL;
+	DynBuffer *formlabel = NULL;
+	DynBuffer *icon = NULL;
+	DynBuffer *iconsel = NULL;
 	DynTable data = {0};
 	DynTable objdata = {0};
 	DynTable ctrldata = {0};
@@ -1497,6 +1503,7 @@ int table_put_rows(						/* return : 0 on success, other on error */
 	unsigned long rowstart;
 	unsigned long nbwords = tbl->srchwords.nbrows;
 	int b_arrows = form->step == HtmlEdit && !tbl->b_sortsel && !(tbl->status & TblCtrl_opensel) && (tbl->status & TblCtrl_sel) && ctrl->val.nbrows > 1;
+	DynBuffer **json = ctrl->json ? &ctrl->json : NULL;
 	CHECK_HTML_STATUS;
 
 	/* Return if no rows */
@@ -1583,10 +1590,30 @@ int table_put_rows(						/* return : 0 on success, other on error */
 		else
 		{
 			int b_firstcolbrk = 1;
+			size_t cellstart;
+			unsigned long i_fc;
 
 			/* Find object in objects data */
 			for(j = 0; j < tbl->data.nbrows && dyntab_cell(&tbl->data, j, 0)->IdObj != idobj; j++);
 			rowstart = j;
+
+			/* Output JSON row header */
+			if(json) {
+				char *img;
+				if(i) DYNBUF_ADD_STR(json, ",");
+				DYNBUF_ADD3_CELL(json, "{\"idobj\":", &tbl->idobj, i, 0, NO_CONV, "");
+				FREE_BUFFERS;
+				if(qry_obj_label(cntxt, &formlabel, NULL, &objlabel, NULL, NULL, &icon, &iconsel, &i_fc, 0, &tbl->data, rowstart)) STACK_ERROR;
+				DYNBUF_ADD3_BUF(json, ",\"label\":\"", objlabel, TO_JSON, "\"");
+				img = get_image_file(cntxt, icon->data, NULL, NULL);
+				if(img) DYNBUF_ADD3(json, ",\"icon\":\"", img, 0, TO_JSON, "\"");
+				M_FREE(img);
+				img = get_image_file(cntxt, icon->data, NULL, NULL);
+				if(img) DYNBUF_ADD3(json, ",\"iconSel\":\"", img, 0, TO_JSON, "\"");
+				M_FREE(img);
+				if(formlabel) DYNBUF_ADD3_BUF(json, ",\"formLabel\":\"", formlabel, TO_JSON, "\"");
+				if(i_fc) DYNBUF_ADD3_INT(json, ",\"formId\":", i_fc, "");
+			}
 
 			/* Output open button where applicable */
 			if(tbl->status & TblCtrl_openbtn && strcmp(openbtn, "_EVA_NONE"))
@@ -1656,7 +1683,6 @@ int table_put_rows(						/* return : 0 on success, other on error */
 					/* Build open button name */
 					char name[64];
 					DynTable *d = &tbl->data;
-					unsigned long i_fc;
 					M_FREE(buf);
 					M_FREE(buf1);
 					if(qry_obj_label(cntxt, NULL, NULL, &buf, NULL, &buf1, NULL, NULL, &i_fc, 0, d, rowstart)) CLEAR_ERROR;
@@ -1682,6 +1708,9 @@ int table_put_rows(						/* return : 0 on success, other on error */
 				if(thumb) free(thumb);
 			}
 
+			/* Output JSON columns values header */
+			if(json) DYNBUF_ADD_STR(json, ",\"colVal\": [");
+
 			/* Output line data in tbl->field order */
 			for(j = 0; j < tbl->field.nbrows; j++)
 			{
@@ -1699,7 +1728,7 @@ int table_put_rows(						/* return : 0 on success, other on error */
 				int b_distinct = dyntab_sz(&tbl->distinctval, j, 0);
 				char *pos =	(!tbl->colbrk || j + 1 < tbl->colbrk) ? "_EVA_NewColumn" : "_EVA_SameCell";
 				DynTableCell *cell = dyntab_cell(&tbl->data, rowstart, 0);
-				int b_colbrk = tbl->colbrk && j + 1 >= tbl->colbrk;
+				int b_colbrk = !json && tbl->colbrk && j + 1 >= tbl->colbrk;
 				int b_colbrknoval = b_colbrk && !(cell && cell->col == j);
 				int b_sel = tbl->srchcol & (1 << j);
 
@@ -1735,6 +1764,13 @@ int table_put_rows(						/* return : 0 on success, other on error */
 					!strip && *s_strip,
 					1)) STACK_ERROR;
 
+				/* Output JSON value header */
+				cellstart = (*html)->cnt;
+				if(json) {
+					if(j) DYNBUF_ADD_STR(json, ",");
+					DYNBUF_ADD_STR(json, "{\"val\":[");
+				}
+
 				/* Handle column break mode */
 				if(b_colbrk && !b_colbrknoval)
 				{
@@ -1762,6 +1798,17 @@ int table_put_rows(						/* return : 0 on success, other on error */
 					{
 						if(!k && !b_colbrk) DYNBUF_ADD_STR(html, "&nbsp;");
 						break;
+					}
+
+					/* Output JSON value detail */
+					if(json) {
+						if(k) DYNBUF_ADD_STR(json, ",");
+						DYNBUF_ADD3_CELLP(json, "{\"text\":\"", cell, TO_JSON, "\"");
+						if(cell->Num) DYNBUF_ADD3_INT(json, ",\"num\":", cell->Num, "");
+						if(cell->Line) DYNBUF_ADD3_INT(json, ",\"line\":", cell->Line, "");
+						if(cell->IdObj) DYNBUF_ADD3_INT(json, ",\"idobj\":", cell->IdObj, "");
+						if(cell->IdValObj) DYNBUF_ADD3_INT(json, ",\"valObj\":", cell->IdValObj, "");
+						DYNBUF_ADD_STR(json, "}");
 					}
 
 					/* Ignore values after stripping */
@@ -1805,6 +1852,12 @@ int table_put_rows(						/* return : 0 on success, other on error */
 					}
 				}
 
+				/* Output JSON value footer */
+				if(json) {
+					DynBuffer *h =  *html;
+					DYNBUF_ADD3(json, "],\"valHtml\":\"", h->data + cellstart, h->cnt - cellstart, TO_JSON, "\"}");
+				}
+
 				/* Output cell footer */
 				if(put_html_format_pos(cntxt, pos,
 					align, valign, NULL, NULL, NULL, NULL, 1, 1, NULL,
@@ -1824,6 +1877,9 @@ int table_put_rows(						/* return : 0 on success, other on error */
 					table_add_updown_btns(cntxt, ctrl, i + tbl->line, DYNTAB_VAL_SZ(&tbl->data, i_label, 0), bg_color))
 					STACK_ERROR;
 			}
+
+			/* Output JSON row footer */
+			if(json) DYNBUF_ADD_STR(json, "]}");
 		}
 
 		/* Output line end */
@@ -1836,6 +1892,7 @@ int table_put_rows(						/* return : 0 on success, other on error */
 }
 #undef ERR_FUNCTION
 #undef ERR_CLEANUP
+#undef FREE_BUFFERS
 
 /*********************************************************************
 ** Function : table_put_status
@@ -2218,6 +2275,7 @@ int table_sort_obj_list(				/* return : 0 on success, other on error */
 	}
 
 	/* Ordered & clipped list of objects */
+	if(tbl->line >= tbl->totlines) tbl->line = tbl->totlines - 1;
 	if(dynbuf_print3(&sql,
 		"GROUP BY IdList.IdObj ORDER BY OrdVal %s, IdList.IdObj DESC LIMIT %lu,%lu",
 		tbl->b_sortdesc ? "DESC" : "",
@@ -2292,9 +2350,9 @@ int table_put_html_obj_list(			/* return : 0 on success, other on error */
 	char *pagectrl = CTRL_ATTR_VAL(PAGE_CTRL);
 	CHECK_HTML_STATUS;
 	if(!tbl) RETURN_OK;
+	if(tbl->b_ctrl) tbl->attr = &ctrl->attr;
 
 	/* Handle edit mode if no title */
-	if(tbl->b_ctrl) tbl->attr = &ctrl->attr;
 	tablesearch = DYNTAB_FIELD_VAL(tbl->attr, TABLESEARCH);
 	titlemode = atoi(DYNTAB_FIELD_VAL(tbl->attr, TABLE_NOTITLESHRINK));
 	if(titlemode == 2 && !*tablesearch && !strcmp(ctrl->CONTROL, "_EVA_INPUT") && form->step == HtmlEdit && (ctrl->access & AccessEdit))

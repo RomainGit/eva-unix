@@ -531,14 +531,14 @@ int qry_get_obj_data(				/* return : 0 on success, other on error */
 	/* Build SQL Query */
 	DYNBUF_ADD_STR(&sql,
 		"-- qry_get_obj_data : read data\n"
-		"SELECT DISTINCT TLink.IdObj,TField.TxtValue,\n" \
-			"IF(TVal.TxtValue IS NULL,TLink.IdRelObj,TVal.TxtValue),\n" \
-			"TLink.IdRelObj,TLink.Num,TLink.Line,TLink.Lang,TLink.IdField,TLink.IdValue,TLink.Pkey \n" 
-		"FROM TLink \n"
-		"INNER JOIN TVal as TField ON TLink.IdField=TField.IdValue \n"
-		"LEFT JOIN TVal ON TLink.IdValue=TVal.IdValue \n");
+		"SELECT DISTINCT IdObj,F.TxtValue,\n" \
+			"IF(V.TxtValue IS NULL,IdRelObj,V.TxtValue),\n" \
+			"IdRelObj,Num,Line,Lang,IdField,L.IdValue,Pkey,DateCr,IdWhoCr \n" 
+		"FROM TLink AS L \n"
+		"INNER JOIN TVal AS F ON IdField=F.IdValue \n"
+		"LEFT JOIN TVal AS V ON L.IdValue=V.IdValue \n");
 	if(where) DYNBUF_ADD3(&sql, "WHERE ", where, 0, NO_CONV, " ");
-	DYNBUF_ADD_STR(&sql, "ORDER BY TLink.IdObj,TField.TxtValue,TLink.Num,TLink.Line,TLink.Lang,TLink.Pkey \n");
+	DYNBUF_ADD_STR(&sql, "ORDER BY IdObj,F.TxtValue,Num,Line,Lang,Pkey \n");
 
 	/* Exec Query */
 	cntxt->sql_trace = 0;
@@ -561,6 +561,8 @@ int qry_get_obj_data(				/* return : 0 on success, other on error */
 		if(row.sz[7]) cell.IdField = strtoul(row.value[7], NULL, 10);
 		if(row.sz[8]) cell.IdValue = strtoul(row.value[8], NULL, 10);
 		if(row.sz[9]) cell.Pkey = strtoul(row.value[9], NULL, 10);
+		if(row.sz[10]) memcpy(cell.DateCr, row.value[10], 14);
+		if(row.sz[11]) cell.IdWhoCr = strtoul(row.value[11], NULL, 10);
 		if(dyntab_set(res, irow, 0, &cell)) RETURN_ERR_MEMORY;
 		irow++;
 		if(sql_result_next_row(cntxt, &row)) STACK_ERROR;
@@ -658,7 +660,7 @@ int qry_obj_data(					/* return : 0 on success, other on error */
 	if(!id_obj || !id_obj->nbrows || !res) RETURN_OK;
 
 	/* Build SQL WHERE clause for fields if applicable */
-	DYNBUF_ADD_STR(&sql, "TLink.DateDel IS NULL");
+	DYNBUF_ADD_STR(&sql, "DateDel IS NULL");
 	if(fields && fields->nbrows)
 	{
 		DYNBUF_ADD_STR(&sql, " AND IdField IN (");

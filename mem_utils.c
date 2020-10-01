@@ -86,7 +86,7 @@ void mem_free(
 	void *src					/* in : old pointer */
 ){
 	MEM_TRACE("free", src);
-	free(src);
+	if(src) free(src);
 }
 
 /*********************************************************************

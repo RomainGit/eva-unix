@@ -33,7 +33,8 @@ int put_html_text_input(				/* return : 0 on success, other on error */
 	int b_passwd,						/* in : treat as password */
 	int b_onblur,						/* in : use JavaScript OnBlur if 1 */
 	int lines, int columns,				/* in : size of the control (in chars) */
-	int maxlength		   				/* in : maximum input length (in chars) */
+	int maxlength,		   				/* in : maximum input length (in chars) */
+	char *extra							/* in : extra tag added in <input> element */
 );
 
 /*********************************************************************

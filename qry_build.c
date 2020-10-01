@@ -591,6 +591,7 @@ int qry_eval_sqlexpr_var(				/* return : 0 on success, other on error */
 			PARSE_SYM_OBJ("SRVCNF", DYNTAB_TOUL(&cntxt->id_cnf)) else
 			PARSE_SYM_VAL("SRVNAME", cntxt->dbname) else
 			PARSE_SYM_VAL("SRVADR", cntxt->srvname) else
+			PARSE_SYM_VAL("SRVDIR", cntxt->rootdir1) else
 			PARSE_SYM_VAL("QRYSTR", cntxt->qrystr) else
 			PARSE_SYM_INT("NUM", cntxt->form ? cntxt->form->Num : 0) else
 			PARSE_SYM_INT("LINE", cntxt->form ? cntxt->form->Line : 0) else

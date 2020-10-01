@@ -43,6 +43,7 @@ int put_html_button_sz(					/* return : 0 on success, other on error */
 ){
 	char *img = NULL;
 	char *img1 = NULL;
+	static int num = 0;
 	CHECK_HTML_STATUS;
 	if(im1 && *im1 && (!im || !*im)) { im = im1; im1 = NULL; }
 	img = (mode & 32) ? NULL : get_image_file(cntxt, im, &width, &height);
@@ -57,29 +58,76 @@ int put_html_button_sz(					/* return : 0 on success, other on error */
 		EVA_form *form = cntxt->form;
 		DynBuffer *htm = *html;
 
-		/* Optimize if previous command is javascript */
-		if(htm && htm->cnt > 9 && !strcmp(htm->data + htm->cnt - 9, "</script>"))
-			htm->cnt -= 9;
-		else
-			DYNBUF_ADD_STR(html, "<script>");
-		
-		/* Use javascript ob function */
-		DYNBUF_ADD3(html, "ob(\"", name, 0, NO_CONV, "\"");
-		DYNBUF_ADD3(html, ",\"", img, 0, NO_CONV, "\"");
-		DYNBUF_ADD3(html, ",\"", img1, 0, NO_CONV, "\"");
-		DYNBUF_ADD3(html, ",\"", label, 0, TO_JS_STRING, "\"");
-		DYNBUF_ADD3(html, ",\"", title, 0, TO_JS_STRING, "\"");
-		DYNBUF_ADD3_INT(html, ",", border, "");
-		DYNBUF_ADD3_INT(html, ",", mode, "");
-		DYNBUF_ADD3_INT(html, ",", width, "");
-		DYNBUF_ADD3_INT(html, ",", height, ",'");
-		if(form->nb_ctrl && cntxt->opt_btn_mode > OptBtn_Help)
-		{
-			DYNBUF_ADD3_CELL(html, "I", &(form->ctrl[form->i_ctrl].id), 0, 0, NO_CONV, "/");
-			DYNBUF_ADD_CELL(html, &form->id_form, 0, 0, NO_CONV);
-			DYNBUF_ADD3_CELL(html, "$", &form->id_obj, 0, 0, NO_CONV, "#");
+		/* Handle web service call : no javascript */
+		if(cntxt->ws_query) {
+			/* Output anchor tag with href depending on options */
+			DYNBUF_ADD_STR(html, "<a href=\"");
+			if(mode & 128) {
+				DYNBUF_ADD3(html, "javascript:ChkBoxClick('", name, 0, NO_CONV, "',");
+				DYNBUF_ADD_INT(html, ((mode & 256) != 0) ? 1 : 0);
+				DYNBUF_ADD_STR(html, ")");
+			}
+			else if(!(mode & 64)) DYNBUF_ADD3(html, "javascript:cb('", name, 0, NO_CONV, "')")
+			else DYNBUF_ADD(html, name, 0, NO_CONV);
+			if(((mode & 64) && !(mode & 128))) DYNBUF_ADD_STR(html, " target=_blank");
+
+			/* Output tooltip display on mouseover */
+			DYNBUF_ADD3(html, "\" onMouseOver=ShowHelp(this) title=\"", title, 0, TO_JS_STRING, "\" tabindex=10000 num=");
+			DYNBUF_ADD_INT(html, ++num);
+
+			/* Handle control to open when tooltip clicked */
+			if(form->nb_ctrl && cntxt->opt_btn_mode > OptBtn_Help)
+			{
+				DYNBUF_ADD_STR(html, " ctrlclic=\"");
+					DYNBUF_ADD3_CELL(html, "I", &(form->ctrl[form->i_ctrl].id), 0, 0, NO_CONV, "/");
+					DYNBUF_ADD_CELL(html, &form->id_form, 0, 0, NO_CONV);
+				DYNBUF_ADD3_CELL(html, "$", &form->id_obj, 0, 0, NO_CONV, "#\"");
+			}
+
+			/* Close anchor opening tag */
+			DYNBUF_ADD_STR(html, ">");
+
+			/* Output image if applicable */
+			if(img)
+			{
+				DYNBUF_ADD3_INT(html, "<img name=I", num, " border=");
+				DYNBUF_ADD_INT(html, border);
+				DYNBUF_ADD3(html, " src=\"", img, 0, NO_CONV, "\" img=\"");
+				DYNBUF_ADD(html, img, 0, NO_CONV);
+				DYNBUF_ADD3(html, " img1=\"", img1, 0, NO_CONV, "\"");
+				if(mode & 4) DYNBUF_ADD_STR(html, "align=absmiddle");
+				if(width) DYNBUF_ADD3_INT(html, " width=", width, "");
+				if(height) DYNBUF_ADD3_INT(html, " height=", height, "");
+				DYNBUF_ADD_STR(html, ">");
+			}
+			if(!img || mode & 8) DYNBUF_ADD(html, label, 0, NO_CONV);
+			DYNBUF_ADD_STR(html, "</a>");
 		}
-		DYNBUF_ADD_STR(html, ".');</script>");
+		else {
+			/* Javascript button : optimize if previous command is javascript */
+			if(htm && htm->cnt > 9 && !strcmp(htm->data + htm->cnt - 9, "</script>"))
+				htm->cnt -= 9;
+			else
+				DYNBUF_ADD_STR(html, "<script>");
+
+			/* Use javascript ob function */
+			DYNBUF_ADD3(html, "ob(\"", name, 0, NO_CONV, "\"");
+			DYNBUF_ADD3(html, ",\"", img, 0, NO_CONV, "\"");
+			DYNBUF_ADD3(html, ",\"", img1, 0, NO_CONV, "\"");
+			DYNBUF_ADD3(html, ",\"", label, 0, TO_JS_STRING, "\"");
+			DYNBUF_ADD3(html, ",\"", title, 0, TO_JS_STRING, "\"");
+			DYNBUF_ADD3_INT(html, ",", border, "");
+			DYNBUF_ADD3_INT(html, ",", mode, "");
+			DYNBUF_ADD3_INT(html, ",", width, "");
+			DYNBUF_ADD3_INT(html, ",", height, ",'");
+			if(form->nb_ctrl && cntxt->opt_btn_mode > OptBtn_Help)
+			{
+				DYNBUF_ADD3_CELL(html, "I", &(form->ctrl[form->i_ctrl].id), 0, 0, NO_CONV, "/");
+				DYNBUF_ADD_CELL(html, &form->id_form, 0, 0, NO_CONV);
+				DYNBUF_ADD3_CELL(html, "$", &form->id_obj, 0, 0, NO_CONV, "#");
+			}
+			DYNBUF_ADD_STR(html, ".');</script>");
+		}
 	}
 	else if(mode & 64)
 	{

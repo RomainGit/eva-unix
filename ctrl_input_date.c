@@ -260,7 +260,7 @@ int ctrl_editview_date(			/* return : 0 on success, other on error */
 						date, strlen(date),
 						0, *CTRL_ATTR_VAL(JSCALENDAR) ? 4 : 0, 1,
 						ctrl->COLUMNS,
-						atoi(CTRL_ATTR_VAL(MAXLENGTH))) ||
+						atoi(CTRL_ATTR_VAL(MAXLENGTH)), NULL) ||
 					ctrl_put_hidden_old(cntxt, ctrl, i, name, date, strlen(date)))
 				STACK_ERROR;
 			}

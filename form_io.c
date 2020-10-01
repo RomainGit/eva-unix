@@ -151,7 +151,7 @@ int form_load(
  				DYNBUF_ADD_STR(form->html, "L'ajout de fiches")
 			else
  				DYNBUF_ADD_STR(form->html, "L'accès au formulaire");
-			DYNBUF_ADD3(form->html, " [", ctrl->LABEL, 0, TO_HTML,
+			DYNBUF_ADD3(form->html, " [", ctrl ? ctrl->LABEL : "(none)", 0, TO_HTML,
 				"] vous est refusé<br><br>"
 				"Contactez votre administateur si vous avez besoin de cet accès<br><br>");
 			if(put_html_button(cntxt, "B$#.CLOSE", "Revenir", "_eva_btn_gobackobj_fr.gif", "_eva_btn_gobackobj_fr_s.gif",
@@ -291,7 +291,7 @@ int form_load_from_ctrl(			/* return : 0 on success, other on error */
 
 	/* Load new form & set caller data */
 	if(form_load(cntxt, &idform, id_obj, mode)) STACK_ERROR;
-	if(call_data && !cntxt->form->call_data.nbrows)
+	if(call_data && cntxt && cntxt->form && !cntxt->form->call_data.nbrows)
 		DYNTAB_ADD_BUF(&cntxt->form->call_data, 0, 0, call_data);
 
 	RETURN_OK_CLEANUP;

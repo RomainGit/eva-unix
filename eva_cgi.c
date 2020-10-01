@@ -12,6 +12,7 @@
 *********************************************************************/
 
 #include "eva.h"
+#include "json_result.h"
 
 EVA_context *Cntxt;
 
@@ -23,9 +24,7 @@ int main(int argc, char **argv, char **envp)
 {
 	EVA_context c = {0}, *cntxt = &c;
 	int t0;
-
-	/* Initialize SQL library */
-	sql_control(NULL, 5);
+	size_t i;
 
 	/* Set process time counters */
 	if(gettimeofday(&cntxt->tm0, NULL))
@@ -45,6 +44,8 @@ int main(int argc, char **argv, char **envp)
 	cntxt->path[cntxt->dbname - cntxt->argv[0]] = 0;
 	cntxt->rootdir = mem_strdup(cntxt->path);
 	cntxt->rootdir[cntxt->dbname - cntxt->argv[0] - 4] = 0;
+	cntxt->rootdir1 = mem_strdup(cntxt->rootdir);
+	for(i = 0; cntxt->rootdir[i]; i++) if(cntxt->rootdir[i] == '\\') cntxt->rootdir1[i] = '/';
 	cntxt->dbname = mem_strdup(cntxt->dbname);
 	cntxt->dbname[strlen(cntxt->dbname)-4] = 0;
 
@@ -57,6 +58,12 @@ int main(int argc, char **argv, char **envp)
 
 	/* Initialize random generator */
 	srand((unsigned int)(getpid() ^ time(NULL)));
+
+	/* Initialize SQL library */
+	sql_control(NULL, 5);
+
+	/* Initialize memory trace file */
+	MEM_TRACE(NULL, NULL);
 
 	/* Handle GET calls with query string */
 	if(cntxt->qrystr && *cntxt->qrystr)
@@ -87,6 +94,20 @@ int main(int argc, char **argv, char **envp)
 	if(argc == 2 && (!strcmp(argv[1], "DayTask") || !strcmp(argv[1], "HourTask")))
 	{
 		taskplan_sequence(cntxt, argv[1]);
+		sql_control(NULL, 6);
+		return 0;
+	}
+
+	/* Read	CGI input data */
+	if (cgi_read_data(cntxt)) cntxt->b_terminate |= 32;
+
+	/* Handle web service call thru JSON or CGI data */
+	if (cntxt->ws_query || cntxt->cgi && cntxt->nb_cgi > 1 && !strcmp(cntxt->cgi[1].name, "WS_QUERY"))
+	{
+		/* Process query && return json data */
+		if(!cntxt->ws_query) cntxt->ws_query = cntxt->cgi[1].value;
+		json_result(cntxt);
+		output_log_end(cntxt);
 		sql_control(NULL, 6);
 		return 0;
 	}
@@ -150,40 +171,6 @@ int main(int argc, char **argv, char **envp)
 	put_html_page_trailer(cntxt, NULL);
 	cntxt->txtime = ms_since(&cntxt->tm0) - t0;
 	output_log_end(cntxt);
-
-	/* Update session statistics if session exist */
-	if(cntxt->sess_data.nbrows)
-	{
-		/* Read session trace params */
-		DynTable data = {0};
-		int b_obj = 0, b_form = 0;
-		unsigned long i;
-		dyntab_filter_field(&data, 0, &cntxt->user_data, "_EVA_SESSION_TRACE", ~0UL, NULL);
-		for(i = 0; i < data.nbrows; i++)
-		{
-			char *tr = dyntab_val(&data, i, 0);
-			if(!strcmp(tr, "_EVA_OBJ")) b_obj = 1;
-			else if(!strcmp(tr, "_EVA_FORM")) b_form = 1;
-		}
-		dyntab_free(&data);
-
-		/* Add selected infos */
-		set_session_statistics(cntxt, &cntxt->sess_data, ~0UL, IDVAL("_EVA_USER_IP"));
-		if(b_obj)
-		{
-			unsigned long val_SESSION_OBJ;
-			sql_add_value(cntxt, add_sz_str("_EVA_SESSION_OBJ"), &val_SESSION_OBJ);
-			set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->id_obj), val_SESSION_OBJ);
-			if(cntxt->alt_form.nbrows) set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->alt_obj), val_SESSION_OBJ);
-		}
-		if(b_form)
-		{
-			unsigned long val_SESSION_FORM;
-			sql_add_value(cntxt, add_sz_str("_EVA_SESSION_FORM"), &val_SESSION_FORM);
-			set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->id_form), val_SESSION_FORM);
-			if(cntxt->alt_form.nbrows) set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->alt_form), val_SESSION_FORM);
-		}
-	}
 
 	/* Output HTML trace if applicable */
 	if(cntxt->debug & DEBUG_HTML_RAW)

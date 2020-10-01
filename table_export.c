@@ -417,13 +417,16 @@ int table_read_obj_list(				/* return : 0 on success, other on error */
 	ObjTableFormat *tbl = ctrl->objtbl;
 	unsigned long i;
 
-	if(!tbl->idobj.nbrows && tbl->totlines)
+	/* Read list of objects if needed */
+	if(!tbl->idobj.nbrows && (tbl->totlines || ctrl->val.nbrows && b_selobj))
 	{
 		if(b_selobj)
 		{
 			/* Copy selected objects in display list */
+			if(tbl->line >= ctrl->val.nbrows) tbl->line = 0;
 			for(i = 0; i < tbl->lines && i + tbl->line < ctrl->val.nbrows; i++)
 				DYNTAB_SET_CELL(&tbl->idobj, i, 0, &ctrl->val, i + tbl->line, 0);
+			tbl->totlines = ctrl->val.nbrows;
 		}
 		else
 		{
@@ -459,8 +462,9 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 	EVA_context *cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl,				/* in : control index in cntxt->form->ctrl */
 	unsigned int options				/* in : options for result in ctrl->objtbl->cellval
-											bit 0 : output object label if set
-											bit 1 : use EAV format if set, table format else */
+											bit 0 : output idobj : label if set
+											bit 1 : use EAV format if set, table format else
+											bit 2 : output only label if set */
 ){
 	EVA_form *form = cntxt->form;
 	EVA_ctrl *ctrl = form->ctrl + i_ctrl;
@@ -473,6 +477,9 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 	DynTableCell* ctbl = tbl ? tbl->data.cell : NULL;
 	unsigned long objmin = ctbl ? ctbl->IdObj : 0;
 	unsigned long objmax = ctbl ? ctbl[nbrows - 1].IdObj : 0;
+	if(!tbl) RETURN_ERR_PARAM({});
+	if(!nbrows) RETURN_OK;
+	if(!ctbl) RETURN_ERR_PARAM({});
 
 	/* Prepare title line */
 	DYNTAB_SET(&tbl->cellval, 0, 0, "IdObj");
@@ -508,7 +515,7 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 		else
 		{
 			/* Find first object value in objects data - butterfly optimized */
-			unsigned long p0 = objmax ? (unsigned long)((double)(idobj - objmin) / (objmax - objmin) * nbrows) : nbrows / 2;
+			unsigned long p0 = (objmax == objmin) ? 0 : (unsigned long)((double)(idobj - objmin) / (objmax - objmin) * nbrows);
 			unsigned long rowstart = 0, last = nbrows - 1;
 			unsigned long curobj = ctbl[p0].IdObj;
 			while (curobj != idobj) {
@@ -534,15 +541,22 @@ int table_prepare_rows(					/* return : 0 on success, other on error */
 				DYNTAB_ADD_BUF(&tbl->cellval, v, 1, outval);
 				v++;
 			}
+			else if(options & 4)
+			{
+				/* Table format with label : 1st column contains object label */
+				DYNTAB_ADD_BUF(&tbl->cellval, v, 0, outval);
+				dyntab_cell(&tbl->cellval, v, 0)->IdObj = DYNTAB_TOULRC(&tbl->idobj, i, 0);
+			}
 			else if(options & 1)
 			{
-				/* Table format with label : 1st column contains string "'idobj : object label" (quote is here to prevent numeric evaluation in Excel) */
-				DYNBUF_ADD3_CELL(&val, "'", &tbl->idobj, i, 0, NO_CONV, " : ");
-				if(qry_obj_label(cntxt, NULL, NULL, NULL, &outval, NULL, NULL, NULL, NULL, 0, &tbl->data, rowstart)) STACK_ERROR;
+				/* Table format with idobj/label : 1st column contains string "idobj: object label" */
+				M_FREE(val);
+				DYNBUF_ADD_CELL(&val, &tbl->idobj, i, 0, NO_CONV);
+				DYNBUF_ADD_STR(&val, ": ");
 				DYNBUF_ADD_BUF(&val, outval, NO_CONV);
 				DYNTAB_ADD_BUF(&tbl->cellval, v, 0, val);
 			}
-			else if(!options)
+			else
 				/* Table format without label : 1st column contains idobj */
 				DYNTAB_ADD_CELL(&tbl->cellval, v, 0, &tbl->idobj, i, 0);
 

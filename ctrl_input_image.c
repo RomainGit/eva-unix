@@ -182,7 +182,7 @@ int ctrl_add_input_image(			/* return : 0 on success, other on error */
 
 				/* Output text input */
 				CTRL_CGINAMEVAL(&name, i);
-				if(put_html_text_input(cntxt, DYNBUF_VAL_SZ(name), DYNTAB_VAL_SZ(&ctrl->val, i,0), 0, 0, 1, ctrl->COLUMNS, 0) ||
+				if(put_html_text_input(cntxt, DYNBUF_VAL_SZ(name), DYNTAB_VAL_SZ(&ctrl->val, i,0), 0, 0, 1, ctrl->COLUMNS, 0, NULL) ||
 					ctrl_put_hidden_old(cntxt, ctrl, i, name, NULL, 0))
 				STACK_ERROR;
 			}

@@ -19,16 +19,16 @@
 *********************************************************************/
 #define TblCtrl_sort		0x1			/* Sort arrows */
 #define TblCtrl_title		0x2			/* Title row (1st row) */
-#define TblCtrl_search		0x10
-#define TblCtrl_opensearch	0x20
-#define TblCtrl_addnew		0x40
-#define TblCtrl_openaddnew	0x80
-#define TblCtrl_sel			0x100
-#define TblCtrl_opensel		0x200
-#define TblCtrl_ctrlsel		0x400
-#define TblCtrl_openbtn		0x800
-#define TblCtrl_printmode	0x1000
-#define TblCtrl_extsearch	0x2000
+#define TblCtrl_search		0x10		/* Open search button */
+#define TblCtrl_opensearch	0x20		/* Search input + Ok button (display searched list) */
+#define TblCtrl_addnew		0x40		/* New object button */
+#define TblCtrl_openaddnew	0x80		/* Search input used as new object label */
+#define TblCtrl_sel			0x100		/* Selection buttons */
+#define TblCtrl_opensel		0x200		/* Open selection button */
+#define TblCtrl_ctrlsel		0x400		/* Row selection checkbox */
+#define TblCtrl_openbtn		0x800		/* Row open icon */
+#define TblCtrl_printmode	0x1000		/* Display without buttons*/
+#define TblCtrl_extsearch	0x2000		/* Search input is external field _EVA_INPUT */
 
 /*********************************************************************
 ** Function : table_free
@@ -59,8 +59,26 @@ int table_process_controls(				/* return : 0 on success, other on error */
 ** Function : table_export_list
 ** Description : export a table of objects
 *********************************************************************/
-int table_export_list(			/* return : 0 on success, other on error */
-	EVA_context *cntxt,					/* in : execution context data */
+int table_export_list(					/* return : 0 on success, other on error */
+	EVA_context* cntxt,					/* in : execution context data */
+	unsigned long i_ctrl				/* in : control index in cntxt->form->ctrl */
+);
+
+/*********************************************************************
+** Function : table_prepare_obj_list
+** Description : prepare objects list for a table of objects
+*********************************************************************/
+int table_prepare_obj_list(				/* return : 0 on success, other on error */
+	EVA_context* cntxt,					/* in : execution context data */
+	unsigned long i_ctrl				/* in : control index in cntxt->form->ctrl */
+);
+
+/*********************************************************************
+** Function : table_put_rows
+** Description : output the body of a table of objects
+*********************************************************************/
+int table_put_rows(						/* return : 0 on success, other on error */
+	EVA_context* cntxt,					/* in/out : execution context data */
 	unsigned long i_ctrl				/* in : control index in cntxt->form->ctrl */
 );
 

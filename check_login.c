@@ -522,7 +522,7 @@ int check_user_identification(					/* return : 1 on success, other on error */
 			if(id_ip)
 			{
 				snprintf(add_sz_str(qry),
-					"-- check_login : Retrieve last session for workstation\n"
+					"-- check_login : Retrieve last session for IP\n"
 					"SELECT MAX(IdObj) FROM TLink WHERE	IdValue=%lu AND IdField=%lu",
 					id_ip, IDVAL("_EVA_USER_IP"));
 				if(sql_exec_query(cntxt, qry) ||
@@ -615,6 +615,27 @@ int check_user_identification(					/* return : 1 on success, other on error */
 #undef ERR_CLEANUP
 
 /*********************************************************************
+** Function : set_user_identification
+** Description : store user identification in context
+*********************************************************************/
+#define ERR_FUNCTION "set_user_identification"
+#define ERR_CLEANUP 
+int set_user_identification(	/* return : 0 on success, other on error */
+	EVA_context *cntxt			/* in : execution context - cgi data, argc, argv, ...
+								  out : user identification - id_user, b_identified */
+) {
+	/* Set user identification status - use public user account if not identified */
+	if(!dyntab_sz(&cntxt->id_user, 0, 0) && cntxt->id_public)
+		DYNTAB_ADD_INT(&cntxt->id_user, 0, 0, cntxt->id_public);
+	if(qry_obj_data(cntxt, &cntxt->user_data, &cntxt->id_user, NULL)) STACK_ERROR;
+	cntxt->b_identified = cntxt->id_user.nbrows && DYNTAB_TOUL(&cntxt->id_user) != cntxt->id_public;
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
 ** Function : check_login
 ** Description : check login & passwd and session
 *********************************************************************/
@@ -626,7 +647,7 @@ int check_user_identification(					/* return : 1 on success, other on error */
 int check_login(				/* return : 0 on success, other on error */
 	EVA_context *cntxt			/* in : execution context - cgi data, argc, argv, ...
 								  out : user identification - id_user, b_user_ok */
-){
+) {
 	DynTable sqlres = { 0 };
 	DynTable debug = { 0 };
 	DynTable id_form = { 0 };
@@ -638,13 +659,7 @@ int check_login(				/* return : 0 on success, other on error */
 	char *errmsg = NULL;
 
 	/* Handle user identification */
-	if(check_user_identification(cntxt, &errmsg)) STACK_ERROR;
-
-	/* Set user identification status - use public user account if not identified */
-	if(!dyntab_sz(&cntxt->id_user, 0, 0) && cntxt->id_public)
-		DYNTAB_ADD_INT(&cntxt->id_user, 0, 0, cntxt->id_public);
-	if(qry_obj_data(cntxt, &cntxt->user_data, &cntxt->id_user, NULL)) STACK_ERROR;
-	cntxt->b_identified = cntxt->id_user.nbrows && DYNTAB_TOUL(&cntxt->id_user) != cntxt->id_public;
+	if(check_user_identification(cntxt, &errmsg) || set_user_identification(cntxt)) STACK_ERROR;
 
 	/* Output security agent dialog & return if applicable */
 	if(errmsg)

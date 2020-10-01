@@ -64,7 +64,8 @@ int put_html_text_input(				/* return : 0 on success, other on error */
 											bit 0-1 : use JavaScript HTML editor (1=simple - 2=advanced)
 											bit 2 : use calendar date input */
 	int lines, int columns,				/* in : size of the control (in chars) */
-	int maxlength		   				/* in : maximum input length (in chars) */
+	int maxlength,		   				/* in : maximum input length (in chars) */
+	char *extra							/* in : extra tag added in <input> element */
 ){
 	CHECK_HTML_STATUS;
 	
@@ -80,7 +81,9 @@ int put_html_text_input(				/* return : 0 on success, other on error */
 			DYNBUF_ADD_STR(html, " onClick=scwShow(this,this)");
 		}
 		if(val && *val) DYNBUF_ADD3(html, " value='", val, sz_val, HTML_NO_QUOTE, "'");
-		if(columns > 0)DYNBUF_ADD3_INT(html, " size=", columns, "");
+		if(columns > 0) DYNBUF_ADD3_INT(html, " size=", columns, "")
+		else if(!extra) DYNBUF_ADD_STR(html, " style='width:100%'");
+		if(extra) DYNBUF_ADD3(html, " ", extra, 0, NO_CONV, "");
 		if(maxlength > 0) DYNBUF_ADD3_INT(html, " maxlength=", maxlength, "");
 		DYNBUF_ADD_STR(html, ">");
 	}
@@ -93,7 +96,9 @@ int put_html_text_input(				/* return : 0 on success, other on error */
 			DYNBUF_ADD_STR(html, " mce_editable=true");
 		}
 		if(lines > 0) DYNBUF_ADD3_INT(html, " rows=", lines, "");
-		if(columns > 0) DYNBUF_ADD3_INT(html, " cols=", columns, "");
+		if(columns > 0) DYNBUF_ADD3_INT(html, " cols=", columns, "")
+		else if(!extra) DYNBUF_ADD_STR(html, " style='width:100%'");
+		if(extra) DYNBUF_ADD3(html, " ", extra, 0, NO_CONV, "");
 		DYNBUF_ADD_STR(html, ">");
 		if(val && *val) DYNBUF_ADD(html, val, sz_val, TO_XML);
 		DYNBUF_ADD_STR(html, "</textarea>");
@@ -143,7 +148,7 @@ int ctrl_add_text_value(			/* return : 0 on success, other on error */
 				!*editmode ? 0 : !strcmp(editmode, "_EVA_SIMPLE") ? 1 : !strcmp(editmode, "_EVA_NORMAL") ? 2 : 3,
 				ctrl->LINES,
 				ctrl->COLUMNS,
-				atoi(CTRL_ATTR_VAL(MAXLENGTH))) ||
+				atoi(CTRL_ATTR_VAL(MAXLENGTH)), NULL) ||
 			ctrl_put_hidden_old(cntxt, ctrl, i_val, name, txt, len))
 		STACK_ERROR;
 	}

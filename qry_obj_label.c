@@ -234,7 +234,7 @@ int qry_obj_label(						/* return : 0 on success, other on error */
 	unsigned long *i_formcache,			/* out : index of form in cntxt->fc */
 	unsigned long id_form,				/* in : form id */
 	DynTable *data,						/* in : object data */
-	unsigned long beg					/* in : first line to process in data */
+	unsigned long beg					/* in : first line to process in data or object Id to read if data is NULL */
 ){
 	DynTable fields = {0};
 	DynTable format = {0};

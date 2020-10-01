@@ -71,6 +71,13 @@ int gettimeofday(struct timeval* tv, void* tz);
 #define DD "/"
 #endif
 
+/* Version marquer */
+#ifdef _DEBUG
+#define EVA_VERSION "4.2.0 debug"
+#else
+#define EVA_VERSION "4.2.0"
+#endif
+
 /* EVA libraries definitions */
 #include "dyntab.h"
 
@@ -349,6 +356,7 @@ typedef struct _ObjTableFormat {
 	DynTable condfilter;		/* selection condition for extra filters */
 	DynTable groupfilter;		/* user group for extra filters */
 	DynTable selfilter;			/* extra filters for user selection (col0=id, col1=label) */
+	unsigned long colbrk;		/* index of first column to output inline */
 
 	/* Columns format */
 	DynTable label;				/* columns labels */
@@ -366,7 +374,6 @@ typedef struct _ObjTableFormat {
 	DynTable debug;				/* debug status */
 	DynTable notable;			/* optimise column evaluation if set */
 	DynTable lblunit;			/* label to display after value (typically for number units) */
-	unsigned long colbrk;		/* index of first column to output inline */
 }
 	ObjTableFormat;
 
@@ -384,6 +391,7 @@ typedef struct _EVA_ctrl
 	int storage;				/* DB storage mode : 0=>none, 1=>IdValue, 3=>IdRelObj */
 	DynBuffer *cginame;			/* CGI input base name */
 	DynTable attr;				/* control attributes */
+	DynBuffer *attr_tab;		/* control attributes in TAB format */
 	DynTable val;				/* control current values */
 	DynTable dbval;				/* control values read from database */
 	DynTable cgival;			/* control values from CGI data */
@@ -399,6 +407,7 @@ typedef struct _EVA_ctrl
 	int b_use_val;				/* for list input : use values instead of labels if not 0 */
 	int error;					/* for input : bit1=warning, bit2=error */
 	DynBuffer *errmsg;			/* error message */
+	DynBuffer *json;			/* JSON data for web service */
 	int status;					/* to handle multiple status controls such as lists, date, ... */
 	unsigned long lines;		/* table container - # of lines in table */
 	unsigned long i_empty;		/* list input - index of empty option in form->ctrl */
@@ -778,13 +787,15 @@ typedef struct _EVA_context
 	char **envp;				/* environment values */
 	char timestamp[16];			/* timestamp for db changes */
 	time_t tcur;				/* timestamp in unix format */
-	char *rootdir;				/* server root directory */
+	char *rootdir;				/* server root directory - with \ under windows */
+	char *rootdir1;				/* server root directory - with / under windows  */
 	char *path;					/* executable path (from argv[0]) */
 	char *user_ip;				/* user remote IP adress */
 	char *qrystr;				/* QUERY_STRING env var */
 	char *requri;				/* REQUEST_URI env var */
 	char *srvname;				/* SERVER_NAME env var */
 	char *user_agent;			/* user navigator identification */
+	char *ws_query;				/* query name for web service calls thru CGI data */
 	int b_pda;					/* terminal has small screen */
 	int b_task;					/* daily / hourly task processing */
 
@@ -799,7 +810,7 @@ typedef struct _EVA_context
 									bit 2 : no main form
 									bit 3 : no alt form
 									bit 4 : no page trailer
-									bit 5 : unused
+									bit 5 : CGI data not read
 									bit 6 : no hidden inputs
 								*/
 	DynBuffer *title;			/* page title */
@@ -810,7 +821,8 @@ typedef struct _EVA_context
 	DynBuffer *endjs;			/* JavaScript code output at end of page */
 
 	/* SQL session handling */
-	char *dbhost;           	/* SQL host to use */
+	char *dbhost;           	/* SQL host to connect to */
+	unsigned int dbport;		/* SQL port to connect to */
 	char *dbname;				/* SQL database to use */
 	char* dbuser;				/* SQL database user */
 	char* dbpwd;				/* SQL database password */
@@ -838,7 +850,6 @@ typedef struct _EVA_context
 	size_t rxsize;				/* CGI input data size */
 	size_t txsize;				/* HTML output data size */
 	struct timeval tm0;			/* process start time */
-	int urlencoded;				/* input CGI data */
 	unsigned long log_clkbtn;	/* Clicked button */
 	unsigned long log_clkform;	/* Clicked button form */
 	DynBuffer *log_srchtxt;		/* Searched text in tables */

@@ -45,11 +45,6 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 	DynTable pgconfig = { 0 };
 	unsigned long i = 0;
 
-	if(cntxt->user_ip && !strcmp(cntxt->user_ip, "127.0.0.1")) cntxt->debug |= DEBUG_CGI_RAW;
-
-	/* Initialize memory trace file */
-	MEM_TRACE(NULL, NULL);
-
 	/* Output log start */
 	if(!chdir(cntxt->rootdir) && (!chdir("logs") || !MKDIR("logs") && !chdir("logs")))
 	{
@@ -75,9 +70,6 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 		}
 	}
 
-	/* Read	CGI input data */
-	if(cgi_read_data(cntxt)) STACK_ERROR;
-
 	/* Read server config file */
 	if(file_read_config(cntxt)) STACK_ERROR;
 
@@ -102,6 +94,9 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 
 	/* Read public user account */
 	cntxt->id_public = strtoul(DYNTAB_FIELD_VAL(&cntxt->cnf_data, UNKNOWNUSER), NULL, 10);
+
+	/* Disable / enable javascript if applicable */
+	cntxt->jsenabled = 1;
 
 	/* Handle URL dependent settings : menubar, homepage, page title */
 	DYNTAB_FIELD_TAB(&urlswitch, &cntxt->cnf_data, URL_SWITCH);
@@ -136,9 +131,6 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 		DYNTAB_FIELD(&cntxt->pagebtctrl, &cntxt->cnf_data, PAGE_FOOTER);
 	}
 
-	/* Disable / enable javascript if applicable */
-	cntxt->jsenabled = 1;
-
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -151,6 +143,40 @@ int cgi_init_call(				/* return : 0 on success, other on error */
 void output_log_end(EVA_context *cntxt)
 {
 	FILE *f;
+
+	/* Update session statistics if session exist */
+	if (cntxt->sess_data.nbrows)
+	{
+		/* Read session trace params */
+		DynTable data = { 0 };
+		int b_obj = 0, b_form = 0;
+		unsigned long i;
+		dyntab_filter_field(&data, 0, &cntxt->user_data, "_EVA_SESSION_TRACE", ~0UL, NULL);
+		for (i = 0; i < data.nbrows; i++)
+		{
+			char* tr = dyntab_val(&data, i, 0);
+			if (!strcmp(tr, "_EVA_OBJ")) b_obj = 1;
+			else if (!strcmp(tr, "_EVA_FORM")) b_form = 1;
+		}
+		dyntab_free(&data);
+
+		/* Add selected infos */
+		set_session_statistics(cntxt, &cntxt->sess_data, ~0UL, IDVAL("_EVA_USER_IP"));
+		if (b_obj)
+		{
+			unsigned long val_SESSION_OBJ;
+			sql_add_value(cntxt, add_sz_str("_EVA_SESSION_OBJ"), &val_SESSION_OBJ);
+			set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->id_obj), val_SESSION_OBJ);
+			if (cntxt->alt_form.nbrows) set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->alt_obj), val_SESSION_OBJ);
+		}
+		if (b_form)
+		{
+			unsigned long val_SESSION_FORM;
+			sql_add_value(cntxt, add_sz_str("_EVA_SESSION_FORM"), &val_SESSION_FORM);
+			set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->id_form), val_SESSION_FORM);
+			if (cntxt->alt_form.nbrows) set_session_statistics(cntxt, &cntxt->sess_data, DYNTAB_TOUL(&cntxt->alt_form), val_SESSION_FORM);
+		}
+	}
 
 	if(chdir(cntxt->rootdir) || chdir("logs")) return;
 	f = fopen(cntxt->logfile, "a");
@@ -907,33 +933,42 @@ int cgi_add_input(					/* return : 0 if Ok, other on error */
 #define ERR_FUNCTION "cgi_read_urlencoded"
 #define ERR_CLEANUP M_FREE(parsed)
 int cgi_read_urlencoded(	/* return : 0 on success, other on error */
-	EVA_context *cntxt		/* in : cntxt->input : CGI input to process
+	EVA_context* cntxt		/* in : cntxt->input : CGI input to process
 							   out : cntxt->cgi : table of read & parsed CGI inputs */
-){
-	char c[2], prevdelim = '&';
-	char *name = "";
+) {
+	char *inp, c[2], prevdelim = '&';
+	char* name = "";
 	int bname;
 	size_t i, len, sz, name_sz = 0;
-	DynBuffer *parsed = NULL;
+	DynBuffer* parsed = NULL;
+	char *enctype = getenv("CONTENT_TYPE");
+	int b_utf8 = !enctype || strstr(enctype, "UTF-8"), brk;
 
 	/* Loop to copy & delimit (null terminate) names & values changing %XX entities */
 	c[1] = 0;
 	if(cntxt->input) for(i = 0; i <= cntxt->input->cnt; i++)
 	{
-		*c = cntxt->input->data[i];
+		inp = cntxt->input->data + i;
+		*c = *inp;
 		switch(*c) {
 
-		/* + stands for space in CGI */
+			/* + stands for space in CGI */
 		case '+':
 			*c = ' ';
 			break;
 
-		/* CGI character codes (%XX) conversion */
+			/* CGI character codes (%XX) conversion */
 		case '%':
-			if(memcmp("%0D%0A", cntxt->input->data + i, 6))
+			if(b_utf8 && (!memcmp("%C2", inp, 3) || !memcmp("%C3", inp, 3)))
 			{
-				/* Convert %XX to ascii value */
-				*c = (char)(TO_HEX(cntxt->input->data[i+1])*16 + TO_HEX(cntxt->input->data[i+2]));
+				/* Convert %XX%YY from UTF-8 to latin1 ISO-8859-1 */
+				*c = (char)((TO_HEX(inp[2]) * 64) | ((TO_HEX(inp[4]) * 16 + TO_HEX(inp[5])) & 0x3F));
+				i += 5;
+			}
+			else if(memcmp("%0D%0A", inp, 6))
+			{
+				/* Convert %XX to ascii */
+				*c = (char)(TO_HEX(inp[1]) * 16 + TO_HEX(inp[2]));
 				i += 2;
 			}
 			else
@@ -944,13 +979,12 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 			}
 			break;
 
-		/* CGI delimiters : check for correct alternance */
+			/* CGI delimiters : check for correct alternance */
 		case '=':
 		case '&':
-			if(!((prevdelim == '&' && *c == '=') || (prevdelim == '=' && *c == '&')))
-				RETURN_ERROR("Syntax error in CGI data - server is probably misconfigured", NULL);
+			brk = *c == '&' || (prevdelim == '&' && *c == '=');
 			prevdelim = *c;
-			*c = 0;
+			if(brk) *c = 0;
 			break;
 		}
 		DYNBUF_ADD(&parsed, c, 1, NO_CONV);
@@ -970,7 +1004,7 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 		else
 		{
 			/* Strip spaces around the value */
-			char *val = parsed->data + i;
+			char* val = parsed->data + i;
 			sz = len;
 			STRIP_SPACES_AROUND(val, sz);
 
@@ -978,6 +1012,29 @@ int cgi_read_urlencoded(	/* return : 0 on success, other on error */
 			if(cgi_add_input(cntxt, NULL, name, name_sz, val, sz)) STACK_ERROR;
 		}
 	}
+
+	RETURN_OK_CLEANUP;
+}
+#undef ERR_FUNCTION
+#undef ERR_CLEANUP
+
+/*********************************************************************
+** Function : cgi_read_json
+** Description : read CGI data in JSON format
+*********************************************************************/
+#define ERR_FUNCTION "cgi_read_json"
+#define ERR_CLEANUP
+int cgi_read_json(			/* return : 0 on success, other on error */
+	EVA_context* cntxt		/* in : cntxt->input : CGI input to process
+							   out : cntxt->ws_query : JSON data as text */
+) {
+
+	/* Check JSON validity */
+	if(!cntxt->input || !cntxt->input->data) RETURN_ERROR("No JSON data", {});
+	if(cntxt->input->data[0] != '{') RETURN_ERROR("Invalid JSON data", {});
+
+	/* Set JSON query in context */
+	cntxt->ws_query = cntxt->input->data;
 
 	RETURN_OK_CLEANUP;
 }
@@ -1005,7 +1062,7 @@ int cgi_read_file(					/* return : 0 if Ok, other on error */
 	char *v0 = *input;
 	char *v1 = strchr(v0, '"');
 	char *v2, *v3;
-	if(!v1) RETURN_ERROR("Bad filename format in CGI data", NULL);
+	if(!v1) RETURN_ERROR("Bad filename format in CGI data", {});
 
 	/* Find next value separator */
 	v2 = *input;
@@ -1388,11 +1445,24 @@ int cgi_read_multipart(		/* return : 0 on success, other on error */
 void cgi_trace_input(EVA_context *cntxt)
 {
 	FILE *f = NULL;
-	if(!cntxt->input || !cntxt->input->cnt || !cntxt->input->data || chdir(cntxt->path)) return;
-	f = fopen("cgi.txt", "wb");
-	if(!f) return;
-	fwrite(cntxt->input->data, cntxt->input->cnt, 1, f);
-	fclose(f);
+	int i = 0;
+	if(chdir(cntxt->path)) return;
+
+	/* Trace environment vars */
+	f = fopen("env.txt", "wb");
+	if(f) {
+		while(cntxt->envp[i]) fprintf(f, "%s\n", cntxt->envp[i++]);
+		fclose(f);
+	}
+
+	/* Trace CGI data */
+	if(cntxt->input && cntxt->input->cnt) {
+		f = fopen("cgi.txt", "wb");
+		if(f) {
+			fwrite(cntxt->input->data, cntxt->input->cnt, 1, f);
+			fclose(f);
+		}
+	}
 }
 
 /*********************************************************************
@@ -1422,11 +1492,6 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 	EVA_context *cntxt		/* in : context data
 							   out :
 								cntxt->cgi : table of read & parsed CGI inputs
-									col 0 : name
-									col 1 : value
-									col 2 : number
-									col 3 : object id
-									col 4 : form id
 								cntxt->session : session id
 								cntxt->id_form : current form id
 								cntxt->cgibtn : index of the first clicked button
@@ -1435,6 +1500,9 @@ int cgi_read_data(			/* return : 0 on success, other on error */
 	char *enctype = getenv("CONTENT_TYPE");
 	char *length = getenv("CONTENT_LENGTH");
 	size_t len = length ? atoi(length) : 0;
+
+	/* Set debug file on local calls */
+	if (cntxt->user_ip && !strcmp(cntxt->user_ip, "127.0.0.1")) cntxt->debug |= DEBUG_CGI_RAW;
 
 	/* Read from stdin if available */
 	if(len)
@@ -1464,13 +1532,13 @@ int cgi_read_data(			/* return : 0 on success, other on error */
             cgi_trace_input(cntxt);
 	}
 
-	/* If debug mode from trace input */
+	/* If debug mode (no user agent) : read CGI data from trace file */
 	else if(!cntxt->user_agent)
 		cgi_read_trace_input(cntxt);
 
 	/* Call CGI read function depending on encoding type */
-	cntxt->urlencoded = enctype ? !strcmp(enctype, "application/x-www-form-urlencoded") : cntxt->input && *cntxt->input->data != '-';
-	if(cntxt->input && (cntxt->urlencoded ? cgi_read_urlencoded : cgi_read_multipart)(cntxt)) STACK_ERROR;
+	if(cntxt->input && ((!enctype || !strncmp(enctype, add_sz_str("application/x-www-form-urlencoded"))) ? cgi_read_urlencoded :
+									!strncmp(enctype, add_sz_str("application/json")) ? cgi_read_json : cgi_read_multipart)(cntxt)) STACK_ERROR;
 
 	RETURN_OK_CLEANUP;
 }

@@ -102,15 +102,6 @@ int ctrl_add_fileupload(			/* return : 0 on success, other on error */
 									"Si vous avez utilisé Parcourir et que vous ne voulez pas transmettre le fichier, effacez le champ à gauche du bouton Parcourir"
 									,0, 0))
 					STACK_ERROR;
-
-				/* Output file description input if applicable */
-				if(*CTRL_ATTR_VAL(INPUT_DESCRIPTION))
-				{
-					CTRL_CGINAMESUBFIELD(&name, NULL, "FILE_DESCRIPTION");
-					if(put_html_text_input(cntxt, name->data, name->cnt, 
-										NULL, 0, 0, 0, 3, 30, 128))
-						STACK_ERROR;
-				}
 			}
 			else
 			{

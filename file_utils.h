@@ -12,6 +12,14 @@
 *********************************************************************/
 
 /*********************************************************************
+** Fonction : file_date
+** Description : return modification date for a file - 0 on error
+*********************************************************************/
+time_t file_date(                /* return : modification date */
+	char *fpath					/* in : file path to read */
+);
+
+/*********************************************************************
 ** Fonction : file_to_dynbuf
 ** Description : read a file in a dynbuffer
 *********************************************************************/

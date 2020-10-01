@@ -36,6 +36,8 @@ typedef struct _DynTableCell
 	unsigned long Num;			/* value index to handle multiple values */
 	unsigned long Line;			/* value index to handle table rows & list options level */
 	unsigned long Lang;			/* language code to handle multiple language values */
+	char DateCr[16];			/* value creation date */
+	unsigned long IdWhoCr;		/* value author account IdObj */
 	unsigned long i_cgi;		/* index in cntxt->cgi (cell holds CGI data) */
 
 	/* Data for tables output */

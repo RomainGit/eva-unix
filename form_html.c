@@ -15,7 +15,7 @@
 
 /*********************************************************************
 ** Function : form_put_html
-** Description : outputs HTML code for the given form
+** Description : outputs HTML code for the current form
 *********************************************************************/
 #define ERR_FUNCTION "form_put_html"
 #define ERR_CLEANUP M_FREE(name); \
@@ -32,6 +32,7 @@ int form_put_html(
 	char *cellwidth;
 	DynBuffer *name = NULL;
 	int rightmenu = *DYNTAB_FIELD_VAL(&cntxt->user_data, MENUPOS) == '1';
+	if (!form || !ctrl) RETURN_OK;
 
 	/* Build default title if applicable */
 	if(!form->html_title && CTRL_ATTR_CELL(AUTO_TITLEBAR))
@@ -216,19 +217,29 @@ int form_put_html(
 ** Description : output encoded form status data
 *********************************************************************/
 #define ERR_FUNCTION "form_status_data"
-#define ERR_CLEANUP 
+#define ERR_CLEANUP M_FREE(img); \
+					M_FREE(imgs); \
+					M_FREE(imgp)
 int form_status_data(				/* return : 0 on success, other on error */
 	EVA_context *cntxt,				/* in/out : execution context data */
 	DynBuffer **html				/* in/out : output buffer */
 ){
 	EVA_form *form = cntxt->form;
+	DynBuffer *img = NULL;
+	DynBuffer *imgs = NULL;
+	char *imgp = NULL;
 
 	DYNBUF_ADD_CELL(html, &form->call_data, 0, 0, NO_CONV);
 	DYNBUF_ADD3_BUF(html, "§", form->title, HTML_NO_QUOTE, "");
 	DYNBUF_ADD3_INT(html, "§", form->step, "");
 	DYNBUF_ADD3_CELL(html, "§", &form->dlg_ctrl, 0, 0, NO_CONV, "");
 	DYNBUF_ADD3_INT(html, "§", (form->step <= HtmlStepEdit && form->step >= HtmlSaveDlg) ? form->b_modified : 0, "");
-
+	if(qry_obj_label(cntxt, NULL, NULL, NULL, NULL, NULL, &img, &imgs, NULL, DYNTAB_TOUL(&form->id_form), &form->objdata, 0)) STACK_ERROR;
+	if(img) imgp = get_image_file(cntxt, img->data, NULL, NULL);
+	DYNBUF_ADD3(html, "§", imgp ? imgp : "", 0, NO_CONV, "");
+	M_FREE(imgp);
+	if(imgs) imgp = get_image_file(cntxt, imgs->data, NULL, NULL);
+	DYNBUF_ADD3(html, "§", imgp ? imgp : "", 0, NO_CONV, "");
 	RETURN_OK_CLEANUP;
 }
 #undef ERR_FUNCTION
@@ -295,7 +306,7 @@ int process_form(					/* return : 0 on success, other on error */
 	DynTable id_obj = { 0 };
 	DynTable data = { 0 };
 
-	/* Handle executable parameters */
+	/* Handle OpenForm query string */
 	if(cntxt->qrystr)
 	{
 		unsigned long idform = 0, idobj = 0;

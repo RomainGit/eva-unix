@@ -109,7 +109,7 @@ int ctrl_add_input_tel(				/* return : 0 on success, other on error */
 						DYNBUF_VAL_SZ(name),
 						DYNBUF_VAL_SZ(buf),
 						0, 0, 1, ctrl->COLUMNS,
-						atoi(CTRL_ATTR_VAL(MAXLENGTH))) ||
+						atoi(CTRL_ATTR_VAL(MAXLENGTH)), NULL) ||
 					ctrl_put_hidden_old(cntxt, ctrl, i, name, DYNBUF_VAL_SZ(buf)))
 				STACK_ERROR;
 			}

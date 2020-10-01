@@ -626,8 +626,11 @@ int ctrl_output_exprval(			/* return : 0 on success, other on error */
 			if(!*valtyp) valtyp = "_EVA_CURRENTOBJ";
 			CTRL_ATTR(srcobj, LISTOBJ);
 			CTRL_ATTR(srcfield, SRCFIELD);
+
+			/* Select evaluation method */
 			if(!strcmp(meth, "_EVA_DB") && !strcmp(valtyp, "_EVA_FILTER") && srcfield.nbrows)
 			{
+				/* Temporary tables : good for large results */
 				char objtbl[16];
 				snprintf(objtbl, sizeof(objtbl), "EV%s", (ctrl->id.cell && ctrl->id.cell->txt) ? ctrl->id.cell->txt : "0");
 				if(qry_add_filter_forms(cntxt, &flt, NULL, &srcobj) || qry_filter_table(cntxt, objtbl, &flt, 0)) STACK_ERROR;
@@ -635,9 +638,7 @@ int ctrl_output_exprval(			/* return : 0 on success, other on error */
 				if(strcmp(m, "MIN") && strcmp(m, "MAX") && strcmp(m, "SUM") && strcmp(m, "AVG"))
 				{
 					if(qry_eval_fieldexpr(cntxt, &ctrl->val, expr ? expr->data : NULL, objtbl, &ctrl->attr)) STACK_ERROR;
-				}
-				else
-				{
+				} else {
 					char qry[64];
 					snprintf(qry, sizeof(qry), "SELECT %s(Val) FROM EVRes", m);
 					if(qry_eval_sql_fieldexpr(cntxt, "EVRes", expr ? expr->data : NULL, objtbl, &ctrl->attr) ||
@@ -650,6 +651,7 @@ int ctrl_output_exprval(			/* return : 0 on success, other on error */
 			}
 			else
 			{
+				/* Brackets evaluation  : 1 query per object !!! handle multiples values with care */
 				if(ctrl_eval_valtyp(cntxt, ctrl, &ctrl->val, valtyp, &srcobj, &srcfield)) CLEAR_ERROR;
 			}
 		}

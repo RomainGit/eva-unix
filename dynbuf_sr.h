@@ -56,6 +56,8 @@ extern ReplaceTable plain_to_xml[];
 *********************************************************************/
 extern ReplaceTable no_tab_cr[];
 #define NO_TABCR no_tab_cr, 1
+extern ReplaceTable no_tab[];
+#define NO_TAB no_tab, 1
 
 /*********************************************************************
 ** Constant : html_tooltip
@@ -153,6 +155,13 @@ extern ReplaceTable crlf_to_lf[];
 #define CRLF_TO_LF crlf_to_lf, 1
 #define LF_TO_CRLF crlf_to_lf, -1
 
+/*********************************************************************
+** Constant : json_quote
+** Description : conversion specifications for JSON strings
+*********************************************************************/
+extern ReplaceTable json_quote[];
+#define FROM_JSON json_quote, -1
+#define TO_JSON json_quote, 1
 
 /*********************************************************************
 ** Macro : NO_CONV

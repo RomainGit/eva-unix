@@ -37,7 +37,7 @@ DynBuffer *dynbuf_init(		/* return : pointer on success, NULL on error */
 int dynbuf_resize(			/* return : 0 on success, other on error */
 	DynBuffer **_buf,		/* in : original DynBuffer pointer (freed by dynbuf_resize)
 							   out : new DynBuffer pointer (alloc-ed by dynbuf_resize) */
-	size_t sz				/* in : desired size of the buffer data */
+	size_t sz				/* in : increase size */
 ){
 	DynBuffer *buf;
 	size_t newsz, oldsz;
@@ -46,7 +46,7 @@ int dynbuf_resize(			/* return : 0 on success, other on error */
 	if(!_buf || !*_buf) return 1;
 	buf = *_buf;
 	oldsz = buf ? buf->sz + sizeof(DynBuffer) + 1 : 0;
-	newsz = (buf->sz + sz +sizeof(DynBuffer)) * 3 / 2;
+	newsz = (buf->sz + sz + sizeof(DynBuffer)) * 3 / 2;
 	buf = mem_realloc(buf, oldsz, newsz - oldsz);
 	if(!buf) return 1;
 	*_buf = buf;
@@ -104,12 +104,12 @@ int dynbuf_add(				/* return : 0 if Ok, other on error */
 		/* Search, replace & add loop */ \
 		for(i = 0, k = (*buf)->cnt; i < sz; i++, k++) \
 		{ \
-			for(j = 0; sr[j].search; j++) \
-				if(!memcmp(txt + i, sr[j].search, sr[j].sz_##search)) break; \
-			if(sr[j].search) \
+			for(j = 0; sr[j].##search; j++) \
+				if(!memcmp(txt + i, sr[j].##search, sr[j].sz_##search)) break; \
+			if(sr[j].##search) \
 			{ \
 				if(k + sr[j].sz_##replace >= (*buf)->sz) if(dynbuf_resize(buf, sz)) return 1; \
-				memcpy((*buf)->data + k, sr[j].replace, sr[j].sz_##replace); \
+				memcpy((*buf)->data + k, sr[j].##replace, sr[j].sz_##replace); \
 				i += sr[j].sz_##search - 1; \
 				k += sr[j].sz_##replace - 1; \
 			} \
@@ -124,9 +124,53 @@ int dynbuf_add(				/* return : 0 if Ok, other on error */
 
 	/* If table search & replace given */
 	if(sr && sz_sr > 0)
-		SR_LOOP(search, replace)
+	{
+		size_t i, k;
+		int j;
+		/* Search, replace & add loop */
+		for(i = 0, k = (*buf)->cnt; i < sz; i++, k++)
+		{
+			for(j = 0; sr[j].search; j++)
+				if(!memcmp(txt + i, sr[j].search, sr[j].sz_search)) break;
+			if(sr[j].search)
+			{
+				if(k + sr[j].sz_replace >= (*buf)->sz) if(dynbuf_resize(buf, sz)) return 1;
+				memcpy((*buf)->data + k, sr[j].replace, sr[j].sz_replace);
+				i += sr[j].sz_search - 1;
+				k += sr[j].sz_replace - 1;
+			}
+			else
+			{
+				if(k + 1 >= (*buf)->sz) if(dynbuf_resize(buf, sz)) return 1;
+				(*buf)->data[k] = txt[i];
+			}
+		}
+		(*buf)->cnt = k;
+	}
 	else if(sr && sz_sr < 0)
-		SR_LOOP(replace, search)
+	{
+		size_t i, k;
+		int j;
+		/* Reverse search, replace & add loop */
+		for(i = 0, k = (*buf)->cnt; i < sz; i++, k++)
+		{
+			for(j = 0; sr[j].replace; j++)
+				if(!memcmp(txt + i, sr[j].replace, sr[j].sz_replace)) break;
+			if(sr[j].replace)
+			{
+				if(k + sr[j].sz_search >= (*buf)->sz) if(dynbuf_resize(buf, sz)) return 1;
+				memcpy((*buf)->data + k, sr[j].search, sr[j].sz_search);
+				i += sr[j].sz_replace - 1;
+				k += sr[j].sz_search - 1;
+			}
+			else
+			{
+				if(k + 1 >= (*buf)->sz) if(dynbuf_resize(buf, sz)) return 1;
+				(*buf)->data[k] = txt[i];
+			}
+		}
+		(*buf)->cnt = k;
+	}
 	else
 	{
 		/* Resize buffer if needed - return on error */
